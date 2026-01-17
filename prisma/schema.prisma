@@ -1,0 +1,476 @@
+// Ivy Platform - Database Schema
+// This schema defines all data models for the Ivy accountability platform
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================
+// USERS & AUTHENTICATION
+// ============================================
+
+model User {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Basic Info
+  email         String  @unique
+  phone         String? @unique
+  firstName     String
+  lastName      String
+  timezone      String  @default("Europe/London")
+  profileImage  String?
+
+  // Subscription & Billing
+  subscriptionTier   SubscriptionTier @default(FREE)
+  subscriptionStatus String           @default("active") // active, paused, cancelled
+  stripeCustomerId   String?          @unique
+  companyId          String?
+
+  // Schedule Preferences
+  morningCallTime String? // HH:MM format (e.g., "07:00")
+  eveningCallTime String? // HH:MM format (e.g., "20:00")
+  callFrequency   Int     @default(2) // calls per week
+  preferredDays   String? // JSON array of days ["monday", "tuesday"]
+
+  // Workout Preferences
+  track       String // "fitness", "meditation", "reading", etc.
+  goal        String // User's primary goal
+  minimumMode String? // The minimum acceptable action
+  giftFrame   String? // Who/what they're doing this for
+
+  // Charity Preferences
+  preferredCharityId String?
+
+  // Calendar Integration (Elite+)
+  googleCalendarConnected    Boolean   @default(false)
+  googleCalendarRefreshToken String?
+  outlookCalendarConnected   Boolean   @default(false)
+  outlookCalendarRefreshToken String?
+
+  // Status
+  isActive       Boolean @default(true)
+  isOnboarded    Boolean @default(false)
+  onboardedAt    DateTime?
+  lastCallAt     DateTime?
+
+  // Relationships
+  company          Company?            @relation(fields: [companyId], references: [id])
+  preferredCharity Charity?            @relation(fields: [preferredCharityId], references: [id])
+  workouts         Workout[]
+  calls            Call[]
+  donations        Donation[]
+  impactWallet     ImpactWallet?
+  streaks          Streak?
+  transformationScores TransformationScore[]
+  lifeMarkers      LifeMarker[]
+  messages         Message[]
+  ivyCircles       IvyCircleMember[]
+
+  @@index([email])
+  @@index([companyId])
+  @@map("users")
+}
+
+enum SubscriptionTier {
+  FREE
+  PRO       // B2C: £99/mo - 2 calls/week
+  ELITE     // B2C: £199/mo - 4 calls/week + calendar
+  CONCIERGE // B2C: £399/mo - daily calls + human review
+  B2B       // Company-sponsored
+}
+
+// ============================================
+// B2B COMPANIES
+// ============================================
+
+model Company {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  name            String
+  contactEmail    String
+  contactName     String
+  stripeCustomerId String? @unique
+
+  // Season Configuration
+  currentSeason   Int      @default(1)
+  seasonStartDate DateTime?
+  seasonEndDate   DateTime?
+  seasonDuration  Int      @default(8) // weeks
+
+  // Pricing
+  platformFeePerUser  Decimal @default(15.00) // £10-18/employee/month
+  impactWalletPerUser Decimal @default(25.00) // £15-30/employee/month
+
+  // Status
+  isActive Boolean @default(true)
+
+  // Relationships
+  users       User[]
+  ivyCircles  IvyCircle[]
+
+  @@index([name])
+  @@map("companies")
+}
+
+// ============================================
+// CHARITIES
+// ============================================
+
+model Charity {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  name              String
+  description       String
+  category          String // "health", "education", "environment", etc.
+  impactMetric      String // e.g., "meals provided", "trees planted"
+  impactPerPound    String // e.g., "2 meals per £1"
+  logoUrl           String?
+  website           String?
+
+  isActive Boolean @default(true)
+
+  // Relationships
+  users     User[]
+  donations Donation[]
+
+  @@index([category])
+  @@map("charities")
+}
+
+// ============================================
+// WORKOUTS & COMMITMENTS
+// ============================================
+
+model Workout {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Plan Details
+  plannedDate DateTime
+  plannedTime String? // HH:MM format
+  activity    String  // "30 min run", "yoga session", etc.
+  duration    Int?    // minutes
+
+  // Completion Status
+  status       WorkoutStatus @default(PLANNED)
+  completedAt  DateTime?
+  skippedReason String?
+
+  // Type
+  isMinimum Boolean @default(false) // Was this the negotiated minimum?
+
+  // Related Call
+  planningCallId String?
+  reviewCallId   String?
+
+  @@index([userId, plannedDate])
+  @@index([status])
+  @@map("workouts")
+}
+
+enum WorkoutStatus {
+  PLANNED
+  COMPLETED
+  PARTIAL   // Did minimum/modified version
+  SKIPPED
+  MISSED    // No show, no communication
+}
+
+// ============================================
+// CALLS
+// ============================================
+
+model Call {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Call Details
+  callType     CallType
+  scheduledAt  DateTime
+  startedAt    DateTime?
+  endedAt      DateTime?
+  duration     Int?       // seconds
+  status       CallStatus @default(SCHEDULED)
+
+  // Retell Integration
+  retellCallId   String? @unique
+  transcript     String? @db.Text
+  recordingUrl   String?
+
+  // Call Outcome
+  outcome     String? // "completed", "no_answer", "voicemail", "error"
+  sentiment   String? // "positive", "neutral", "struggling"
+  needsFollowUp Boolean @default(false)
+
+  // Dynamic Variables (snapshot at call time)
+  contextSnapshot String? @db.Json // JSON of user stats, streak, etc.
+
+  @@index([userId, scheduledAt])
+  @@index([callType, status])
+  @@index([retellCallId])
+  @@map("calls")
+}
+
+enum CallType {
+  MORNING_PLANNING  // Plan today's workout
+  EVENING_REVIEW    // Confirm completion
+  RESCUE            // User-initiated "I'm about to skip"
+  WEEKLY_PLANNING   // Sunday review + plan ahead
+  MONTHLY_CHECKIN   // Transformation tracking
+  ONBOARDING        // First call setup
+}
+
+enum CallStatus {
+  SCHEDULED
+  IN_PROGRESS
+  COMPLETED
+  NO_ANSWER
+  FAILED
+  CANCELLED
+}
+
+// ============================================
+// DONATIONS & IMPACT
+// ============================================
+
+model Donation {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
+
+  userId    String
+  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  charityId String
+  charity   Charity @relation(fields: [charityId], references: [id])
+
+  // Amount
+  amount       Decimal      @db.Decimal(10, 2)
+  currency     String       @default("GBP")
+  donationType DonationType
+
+  // Related Workout (if applicable)
+  workoutId String?
+
+  // Streak Bonus Details
+  streakDays Int? // For streak bonuses, how many days achieved
+
+  @@index([userId, createdAt])
+  @@index([charityId])
+  @@map("donations")
+}
+
+enum DonationType {
+  COMPLETION     // £1-2 per workout completion
+  STREAK_7_DAY   // £3 bonus
+  STREAK_30_DAY  // £10 bonus
+  STREAK_90_DAY  // £25 bonus
+  MANUAL         // Admin-triggered
+}
+
+// ============================================
+// IMPACT WALLET
+// ============================================
+
+model ImpactWallet {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Wallet Limits
+  monthlyLimit Decimal @db.Decimal(10, 2) // £20-50 depending on tier
+  dailyCap     Decimal @db.Decimal(10, 2) // £3-5 depending on tier
+
+  // Current Month Tracking
+  currentMonthSpent Decimal  @db.Decimal(10, 2) @default(0)
+  monthStartDate    DateTime
+
+  // Lifetime Totals
+  lifetimeDonated Decimal @db.Decimal(10, 2) @default(0)
+
+  @@map("impact_wallets")
+}
+
+// ============================================
+// STREAKS
+// ============================================
+
+model Streak {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Current Streak
+  currentStreak     Int      @default(0)
+  currentStreakStart DateTime?
+
+  // Longest Streak
+  longestStreak      Int      @default(0)
+  longestStreakStart DateTime?
+  longestStreakEnd   DateTime?
+
+  // Last Activity
+  lastWorkoutDate DateTime?
+
+  // Streak Bonuses Claimed
+  bonus7DayClaimed  Boolean @default(false)
+  bonus30DayClaimed Boolean @default(false)
+  bonus90DayClaimed Boolean @default(false)
+
+  @@map("streaks")
+}
+
+// ============================================
+// TRANSFORMATION TRACKING
+// ============================================
+
+model TransformationScore {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Scores (1-10)
+  energyScore         Int? // How energetic do you feel?
+  moodScore           Int? // Overall mood
+  healthConfidence    Int? // Confidence in health
+
+  // Context
+  weekNumber Int // Week since user started
+  notes      String? @db.Text
+
+  @@index([userId, createdAt])
+  @@map("transformation_scores")
+}
+
+model LifeMarker {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Qualitative transformation moments
+  marker      String @db.Text // e.g., "I took the stairs without thinking"
+  category    String // "physical", "mental", "social", "professional"
+  significance String // "small", "medium", "major"
+
+  @@index([userId, createdAt])
+  @@map("life_markers")
+}
+
+// ============================================
+// MESSAGING
+// ============================================
+
+model Message {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Message Details
+  channel   MessageChannel
+  direction MessageDirection
+  content   String         @db.Text
+  status    MessageStatus  @default(SENT)
+
+  // External IDs
+  twilioSid   String? @unique
+  whatsappId  String? @unique
+
+  // Context
+  messageType String? // "reminder", "nudge", "rescue_response", "quick_reply"
+  relatedCallId String?
+
+  @@index([userId, createdAt])
+  @@index([channel, status])
+  @@map("messages")
+}
+
+enum MessageChannel {
+  SMS
+  WHATSAPP
+  EMAIL
+}
+
+enum MessageDirection {
+  INBOUND
+  OUTBOUND
+}
+
+enum MessageStatus {
+  SENT
+  DELIVERED
+  READ
+  FAILED
+}
+
+// ============================================
+// IVY CIRCLES (B2B GROUP ACCOUNTABILITY)
+// ============================================
+
+model IvyCircle {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  name        String
+  description String?
+  size        Int     @default(0) // Current member count
+  maxSize     Int     @default(12) // 8-12 people
+
+  // Status
+  isActive Boolean @default(true)
+
+  // Relationships
+  members IvyCircleMember[]
+
+  @@index([companyId])
+  @@map("ivy_circles")
+}
+
+model IvyCircleMember {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
+
+  circleId String
+  circle   IvyCircle @relation(fields: [circleId], references: [id], onDelete: Cascade)
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  role String @default("member") // "member", "facilitator"
+
+  @@unique([circleId, userId])
+  @@index([userId])
+  @@map("ivy_circle_members")
+}
