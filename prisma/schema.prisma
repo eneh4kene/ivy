@@ -36,6 +36,9 @@ model User {
   stripeSubscriptionId String?        @unique
   companyId          String?
 
+  // Communication Style
+  commStyle       CommStyle @default(ADAPTIVE) // CALLS | TEXTS | ADAPTIVE
+
   // Schedule Preferences
   morningCallTime String? // HH:MM format (e.g., "07:00")
   eveningCallTime String? // HH:MM format (e.g., "20:00")
@@ -83,6 +86,12 @@ model User {
   @@index([email])
   @@index([companyId])
   @@map("users")
+}
+
+enum CommStyle {
+  CALLS    // Ivy always calls; text only as fallback
+  TEXTS    // Ivy always texts; asks before calling
+  ADAPTIVE // Ivy reads the moment and decides
 }
 
 enum SubscriptionTier {

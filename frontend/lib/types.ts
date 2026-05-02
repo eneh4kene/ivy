@@ -1,5 +1,6 @@
 // User types
 export type SubscriptionTier = 'FREE' | 'PRO' | 'ELITE' | 'CONCIERGE' | 'B2B'
+export type CommStyle = 'CALLS' | 'TEXTS' | 'ADAPTIVE'
 
 export interface User {
   id: string
@@ -17,6 +18,7 @@ export interface User {
   goal: string
   minimumMode?: string
   giftFrame?: string
+  commStyle: CommStyle
   morningCallTime?: string
   eveningCallTime?: string
   callFrequency: number
@@ -277,6 +279,7 @@ export interface UpdateProfileInput {
   goal?: string
   minimumMode?: string
   giftFrame?: string
+  commStyle?: CommStyle
   morningCallTime?: string
   eveningCallTime?: string
   callFrequency?: number
