@@ -14,7 +14,7 @@ class DonationController {
    * GET /api/donations
    */
   async getUserDonations(
-    req: AuthRequest<{}, {}, {}, GetDonationsQueryInput>,
+    req: AuthRequest,
     res: Response,
     next: NextFunction
   ): Promise<void> {
@@ -23,7 +23,7 @@ class DonationController {
         throw new Error('User not authenticated');
       }
 
-      const result = await donationService.getUserDonations(req.user.id, req.query);
+      const result = await donationService.getUserDonations(req.user.id, req.query as GetDonationsQueryInput);
 
       sendSuccess(res, result.donations, 200, result.meta);
     } catch (error) {
@@ -80,7 +80,7 @@ class DonationController {
    * PATCH /api/donations/impact-wallet
    */
   async updateImpactWallet(
-    req: AuthRequest<{}, {}, UpdateImpactWalletInput>,
+    req: AuthRequest,
     res: Response,
     next: NextFunction
   ): Promise<void> {
@@ -89,7 +89,7 @@ class DonationController {
         throw new Error('User not authenticated');
       }
 
-      const wallet = await donationService.updateImpactWallet(req.user.id, req.body);
+      const wallet = await donationService.updateImpactWallet(req.user.id, req.body as UpdateImpactWalletInput);
 
       sendSuccess(res, wallet);
     } catch (error) {
@@ -120,7 +120,7 @@ class DonationController {
    * GET /api/donations/charities
    */
   async getCharities(
-    req: Request,
+    _req: Request,
     res: Response,
     next: NextFunction
   ): Promise<void> {

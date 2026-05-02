@@ -1,4 +1,5 @@
 import type { User, SubscriptionTier } from './types'
+import { getTierPrice as getPriceFromConfig, getWalletRate, type Currency } from './pricing'
 
 /**
  * Feature flags for tier-based access control
@@ -7,11 +8,13 @@ export type Feature =
   | 'workouts'              // All tiers
   | 'donations'             // All tiers
   | 'basicStats'            // All tiers
-  | 'energyMoodScores'      // PRO+
-  | 'healthConfidence'      // ELITE+
-  | 'lifeMarkers'           // ELITE+
-  | 'calendarSync'          // ELITE+
-  | 'ivyCircle'             // ELITE+
+  | 'energyMoodScores'      // All paid tiers (universal AI feature)
+  | 'healthConfidence'      // All paid tiers (universal AI feature)
+  | 'lifeMarkers'           // All paid tiers (universal AI feature)
+  | 'calendarSync'          // All paid tiers (universal AI feature)
+  | 'streakBonuses'         // All paid tiers (universal — consistency always rewarded)
+  | 'seasonClose'           // All paid tiers (universal — end-of-season arc review)
+  | 'ivyCircle'             // IVY PLUS+ (ELITE+)
   | 'humanReview'           // CONCIERGE only
   | 'strategyCalls'         // CONCIERGE only
   | 'adminDashboard'        // Admin role only
@@ -24,21 +27,25 @@ const TIER_HIERARCHY: Record<SubscriptionTier, number> = {
   PRO: 1,
   ELITE: 2,
   CONCIERGE: 3,
-  B2B: 2, // B2B has ELITE-level features
+  B2B: 2, // B2B has Ivy Plus-level features
 }
 
 /**
- * Feature requirements mapping
+ * Feature requirements mapping.
+ * Per pricing strategy v4: all AI features are universal at every paid tier.
+ * Differentiators are wallet size and human coaching quality.
  */
 const FEATURE_REQUIREMENTS: Record<Feature, { minTier?: SubscriptionTier; requiresRole?: string[] }> = {
   workouts: {},
   donations: {},
   basicStats: {},
-  energyMoodScores: { minTier: 'PRO' },
-  healthConfidence: { minTier: 'ELITE' },
-  lifeMarkers: { minTier: 'ELITE' },
-  calendarSync: { minTier: 'ELITE' },
-  ivyCircle: { minTier: 'ELITE' },
+  energyMoodScores: { minTier: 'PRO' },    // All paid tiers
+  healthConfidence: { minTier: 'PRO' },    // All paid tiers
+  lifeMarkers: { minTier: 'PRO' },         // All paid tiers
+  calendarSync: { minTier: 'PRO' },        // All paid tiers
+  streakBonuses: { minTier: 'PRO' },       // All paid tiers — universal, never gated
+  seasonClose: { minTier: 'PRO' },         // All paid tiers — universal
+  ivyCircle: { minTier: 'ELITE' },         // Ivy Plus and Concierge
   humanReview: { minTier: 'CONCIERGE' },
   strategyCalls: { minTier: 'CONCIERGE' },
   adminDashboard: { requiresRole: ['admin', 'superadmin'] },
@@ -115,12 +122,13 @@ export function getAvailableFeatures(user: User | null): Feature[] {
 
 /**
  * Get user-friendly tier name
+ * PRO = "Ivy", ELITE = "Ivy Plus", CONCIERGE = "Ivy Concierge"
  */
 export function getTierName(tier: SubscriptionTier): string {
   const names: Record<SubscriptionTier, string> = {
-    FREE: 'Free',
-    PRO: 'Ivy Pro',
-    ELITE: 'Ivy Elite',
+    FREE: 'Free Trial',
+    PRO: 'Ivy',
+    ELITE: 'Ivy Plus',
     CONCIERGE: 'Ivy Concierge',
     B2B: 'Ivy Business',
   }
@@ -128,69 +136,70 @@ export function getTierName(tier: SubscriptionTier): string {
 }
 
 /**
- * Get tier pricing
+ * Get tier pricing (currency-aware)
  */
-export function getTierPrice(tier: SubscriptionTier): string {
-  const prices: Record<SubscriptionTier, string> = {
-    FREE: '£0',
-    PRO: '£99/month',
-    ELITE: '£199/month',
-    CONCIERGE: '£399/month',
-    B2B: 'Custom pricing',
-  }
-  return prices[tier]
+export function getTierPrice(tier: SubscriptionTier, currency: Currency = 'GBP'): string {
+  if (tier === 'FREE') return '14-day trial'
+  if (tier === 'B2B') return 'Custom pricing'
+  return getPriceFromConfig(tier, currency)
 }
 
 /**
- * Get features for a specific tier
+ * Get features list for a specific tier (used in pricing cards and locked feature UI)
  */
-export function getTierFeatures(tier: SubscriptionTier): string[] {
+export function getTierFeatures(tier: SubscriptionTier, currency: Currency = 'GBP'): string[] {
   const features: Record<SubscriptionTier, string[]> = {
     FREE: [
-      'Plan and track workouts',
-      'Basic donation tracking',
-      'View your stats',
-      'Limited impact wallet',
+      'Full Ivy experience for 14 days',
+      'Daily morning + evening AI calls',
+      'Rescue calls — negotiate a minimum that counts',
+      'Missed call recovery',
+      'All 4 accountability tracks',
+      'Impact Wallet included',
+      'No card required',
     ],
     PRO: [
-      'Everything in Free',
-      '2 AI calls per week',
-      'Daily WhatsApp nudges',
-      '£20/month impact wallet',
-      'Energy & mood tracking',
-      '£1 per workout donation',
+      'Daily morning + evening AI calls',
+      'Rescue calls & missed call recovery',
+      'All 4 tracks: Fitness, Focus, Sleep, Balance',
+      'WhatsApp nudges & calendar integration',
+      'Full transformation tracking & life markers',
+      'Streak bonuses at 7, 30 & 90-day milestones',
+      'Season Close — end-of-season arc review & AI goal suggestions',
+      getWalletRate('PRO', currency) || '£30/month impact wallet (£1/day)',
+      '2 charity choices',
+      'Impact story: personalised note + photo',
     ],
     ELITE: [
-      'Everything in Pro',
-      '4 AI calls per week',
-      '£30/month impact wallet',
-      '£1.50 per workout donation',
-      'Calendar integration',
-      'Ivy Circle community',
-      'Full transformation tracking',
-      'Life markers',
-      'Missed call recovery',
+      'Everything in Ivy',
+      getWalletRate('ELITE', currency) || '£45/month impact wallet (£1.50/day)',
+      '3 charity choices',
+      'Impact story: note + photo + audio message',
+      'Ivy Circles — peer-facilitated (3× per season)',
+      'Season-end 1-on-1 with peer coach',
+      'Priority support',
     ],
     CONCIERGE: [
-      'Everything in Elite',
-      '5-7 AI calls per week (daily)',
-      '£50/month impact wallet',
-      '£2 per workout donation',
-      'Human coach review',
+      'Everything in Ivy Plus',
+      getWalletRate('CONCIERGE', currency) || '£60/month impact wallet (£2/day)',
+      'All charities',
+      'Impact story: note + photo + personal video',
+      'Ivy Circles — pro/celebrity coach, max 4 (3× per season)',
+      'Season-end 1-on-1 with certified professional',
       'Quarterly strategy calls',
       'Custom escalation rules',
-      'Priority support',
       'White-glove onboarding',
+      'Wallet gifting to others',
     ],
     B2B: [
-      'Team dashboard',
-      'Aggregate analytics',
-      'Company-funded donations',
+      'Full AI experience for all employees',
+      'Company-funded Impact Wallet',
+      'Ivy Impact Stories for every employee',
+      'Team analytics dashboard',
+      'Charity impact report (CSR asset)',
       'Season management',
       'Employee invitations',
       'Privacy-first reporting',
-      'Optional Ivy Circles',
-      'Integration support',
     ],
   }
   return features[tier]

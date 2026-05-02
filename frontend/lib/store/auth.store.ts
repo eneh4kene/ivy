@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import type { User } from '../types'
 import api from '../api'
+import { useCurrencyStore } from './currency.store'
 
 interface AuthState {
   user: User | null
@@ -26,7 +27,10 @@ export const useAuthStore = create<AuthState>()(
       isLoading: false,
       isAuthenticated: false,
 
-      setUser: (user) => set({ user, isAuthenticated: true }),
+      setUser: (user) => {
+        useCurrencyStore.getState().setFromUser(user)
+        set({ user, isAuthenticated: true })
+      },
 
       setToken: (token) => {
         if (typeof window !== 'undefined') {
@@ -57,6 +61,7 @@ export const useAuthStore = create<AuthState>()(
             localStorage.setItem('ivy_user', JSON.stringify(user))
           }
 
+          useCurrencyStore.getState().setFromUser(user)
           set({
             token: accessToken,
             user,
@@ -87,7 +92,9 @@ export const useAuthStore = create<AuthState>()(
 
         set({ isLoading: true })
         try {
-          const user = await api.auth.getCurrentUser()
+          // Use users.getCurrentProfile to get full user data including phone
+          const user = await api.users.getCurrentProfile()
+          useCurrencyStore.getState().setFromUser(user)
           set({ user, isLoading: false })
         } catch (error) {
           set({ isLoading: false })

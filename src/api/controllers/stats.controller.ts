@@ -1,4 +1,4 @@
-import { Request, Response, NextFunction } from 'express';
+import { Response, NextFunction } from 'express';
 import statsService from '../../services/stats.service';
 import { sendSuccess, sendCreated } from '../../utils/response';
 import {
@@ -103,7 +103,7 @@ class StatsController {
    * POST /api/stats/transformation
    */
   async createTransformationScore(
-    req: AuthRequest<{}, {}, CreateTransformationScoreInput>,
+    req: AuthRequest,
     res: Response,
     next: NextFunction
   ): Promise<void> {
@@ -112,7 +112,7 @@ class StatsController {
         throw new Error('User not authenticated');
       }
 
-      const score = await statsService.createTransformationScore(req.user.id, req.body);
+      const score = await statsService.createTransformationScore(req.user.id, req.body as CreateTransformationScoreInput);
 
       sendCreated(res, score);
     } catch (error) {
@@ -125,7 +125,7 @@ class StatsController {
    * GET /api/stats/transformation
    */
   async getTransformationScores(
-    req: AuthRequest<{}, {}, {}, GetTransformationScoresQueryInput>,
+    req: AuthRequest,
     res: Response,
     next: NextFunction
   ): Promise<void> {
@@ -134,7 +134,7 @@ class StatsController {
         throw new Error('User not authenticated');
       }
 
-      const result = await statsService.getTransformationScores(req.user.id, req.query);
+      const result = await statsService.getTransformationScores(req.user.id, req.query as GetTransformationScoresQueryInput);
 
       sendSuccess(res, result);
     } catch (error) {
@@ -169,7 +169,7 @@ class StatsController {
    * POST /api/stats/life-markers
    */
   async createLifeMarker(
-    req: AuthRequest<{}, {}, CreateLifeMarkerInput>,
+    req: AuthRequest,
     res: Response,
     next: NextFunction
   ): Promise<void> {
@@ -178,7 +178,7 @@ class StatsController {
         throw new Error('User not authenticated');
       }
 
-      const marker = await statsService.createLifeMarker(req.user.id, req.body);
+      const marker = await statsService.createLifeMarker(req.user.id, req.body as CreateLifeMarkerInput);
 
       sendCreated(res, marker);
     } catch (error) {
@@ -191,7 +191,7 @@ class StatsController {
    * GET /api/stats/life-markers
    */
   async getLifeMarkers(
-    req: AuthRequest<{}, {}, {}, GetLifeMarkersQueryInput>,
+    req: AuthRequest,
     res: Response,
     next: NextFunction
   ): Promise<void> {
@@ -200,7 +200,7 @@ class StatsController {
         throw new Error('User not authenticated');
       }
 
-      const result = await statsService.getLifeMarkers(req.user.id, req.query);
+      const result = await statsService.getLifeMarkers(req.user.id, req.query as GetLifeMarkersQueryInput);
 
       sendSuccess(res, result.markers, 200, result.meta);
     } catch (error) {

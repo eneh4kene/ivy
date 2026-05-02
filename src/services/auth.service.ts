@@ -6,19 +6,12 @@ import prisma from '../utils/prisma';
 import logger from '../utils/logger';
 import { BadRequestError, UnauthorizedError } from '../utils/errors';
 
-interface MagicLinkToken {
-  email: string;
-  type: 'magic-link';
-  exp: number;
-}
-
 class AuthService {
   private transporter: nodemailer.Transporter;
-  private magicLinkCache: Map<string, { email: string; expiresAt: number }> = new Map();
 
   constructor() {
     // Initialize email transporter
-    this.transporter = nodemailer.createTransporter({
+    this.transporter = nodemailer.createTransport({
       host: config.email.smtp.host,
       port: config.email.smtp.port,
       secure: config.email.smtp.secure,
@@ -38,7 +31,7 @@ class AuthService {
     return jwt.sign(
       { userId, email },
       config.auth.jwtSecret,
-      { expiresIn: config.auth.jwtExpiresIn }
+      { expiresIn: config.auth.jwtExpiresIn } as any
     );
   }
 
@@ -47,6 +40,36 @@ class AuthService {
    */
   generateMagicLinkToken(): string {
     return crypto.randomBytes(32).toString('hex');
+  }
+
+  /**
+   * Generate magic link for development (without sending email)
+   * ONLY USE IN DEVELOPMENT
+   */
+  async getDevMagicLink(email: string): Promise<string> {
+    // Check if user exists
+    const user = await prisma.user.findUnique({
+      where: { email: email.toLowerCase() },
+    });
+
+    if (!user) {
+      throw new BadRequestError('No account found with this email');
+    }
+
+    // Generate magic link token
+    const token = this.generateMagicLinkToken();
+
+    // Store in database
+    await prisma.magicLink.create({
+      data: { token, email: email.toLowerCase(), expiresAt: new Date(Date.now() + 15 * 60 * 1000) }
+    });
+
+    // Return the magic link URL
+    const magicLinkUrl = `${config.frontend.url}/auth/verify?token=${token}`;
+
+    logger.info(`🔗 DEV MAGIC LINK for ${email}: ${magicLinkUrl}`);
+
+    return magicLinkUrl;
   }
 
   /**
@@ -64,13 +87,19 @@ class AuthService {
 
     // Generate magic link token
     const token = this.generateMagicLinkToken();
-    const expiresAt = Date.now() + 15 * 60 * 1000; // 15 minutes
 
-    // Store in cache (in production, use Redis)
-    this.magicLinkCache.set(token, { email: email.toLowerCase(), expiresAt });
+    // Store in database
+    await prisma.magicLink.create({
+      data: { token, email: email.toLowerCase(), expiresAt: new Date(Date.now() + 15 * 60 * 1000) }
+    });
 
     // Create magic link URL
     const magicLinkUrl = `${config.frontend.url}/auth/verify?token=${token}`;
+
+    // In development, log the magic link and skip email if SMTP fails
+    if (process.env.NODE_ENV === 'development') {
+      logger.info(`🔗 MAGIC LINK for ${email}: ${magicLinkUrl}`);
+    }
 
     // Send email
     try {
@@ -102,7 +131,10 @@ class AuthService {
       logger.info(`Magic link sent to ${email}`);
     } catch (error) {
       logger.error('Failed to send magic link email:', error);
-      throw new Error('Failed to send magic link email');
+      // In development, don't fail the request — the link was already logged above
+      if (process.env.NODE_ENV !== 'development') {
+        throw new Error('Failed to send magic link email');
+      }
     }
   }
 
@@ -110,38 +142,44 @@ class AuthService {
    * Verify magic link token and return access token
    */
   async verifyMagicLink(token: string): Promise<{ accessToken: string; user: any }> {
-    // Get token from cache
-    const cached = this.magicLinkCache.get(token);
+    // Get token from database
+    const magicLink = await prisma.magicLink.findUnique({ where: { token } });
 
-    if (!cached) {
+    if (!magicLink || magicLink.usedAt || magicLink.expiresAt < new Date()) {
       throw new UnauthorizedError('Invalid or expired magic link');
     }
 
-    // Check expiration
-    if (Date.now() > cached.expiresAt) {
-      this.magicLinkCache.delete(token);
-      throw new UnauthorizedError('Magic link has expired');
-    }
+    // Mark as used
+    await prisma.magicLink.update({ where: { token }, data: { usedAt: new Date() } });
+
+    // Fire-and-forget cleanup of expired links
+    prisma.magicLink.deleteMany({ where: { expiresAt: { lt: new Date() } } }).catch(() => {});
 
     // Get user
     const user = await prisma.user.findUnique({
-      where: { email: cached.email },
+      where: { email: magicLink.email },
       select: {
         id: true,
         email: true,
+        phone: true,
         firstName: true,
         lastName: true,
+        timezone: true,
         subscriptionTier: true,
+        subscriptionStatus: true,
         isActive: true,
+        isOnboarded: true,
+        track: true,
+        goal: true,
+        morningCallTime: true,
+        eveningCallTime: true,
+        callFrequency: true,
       },
     });
 
     if (!user || !user.isActive) {
       throw new UnauthorizedError('User not found or inactive');
     }
-
-    // Delete token from cache (one-time use)
-    this.magicLinkCache.delete(token);
 
     // Generate access token
     const accessToken = this.generateAccessToken(user.id, user.email);

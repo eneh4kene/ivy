@@ -44,7 +44,7 @@ class DonationService {
     }
 
     // Check monthly limit
-    if (wallet.currentMonthSpent + amount > Number(wallet.monthlyLimit)) {
+    if (Number(wallet.currentMonthSpent) + amount > Number(wallet.monthlyLimit)) {
       return {
         allowed: false,
         reason: `Monthly limit reached (£${wallet.monthlyLimit})`,

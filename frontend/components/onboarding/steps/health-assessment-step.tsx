@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent } from '@/components/ui/card'
+import { statsApi } from '@/lib/api'
 
 const ASSESSMENT_QUESTIONS = [
   {
@@ -76,11 +77,24 @@ const ASSESSMENT_QUESTIONS = [
 export function HealthAssessmentStep() {
   const [answers, setAnswers] = useState<Record<string, number>>({})
 
-  const handleAnswer = (questionId: string, value: number) => {
-    setAnswers(prev => ({ ...prev, [questionId]: value }))
-  }
+  const handleAnswer = async (questionId: string, value: number) => {
+    const newAnswers = { ...answers, [questionId]: value }
+    setAnswers(newAnswers)
 
-  // TODO: Save assessment to API when component unmounts or on next
+    // When all questions answered, save to API
+    if (Object.keys(newAnswers).length === ASSESSMENT_QUESTIONS.length) {
+      try {
+        await statsApi.createTransformationScore({
+          energyScore: newAnswers['current-energy'],
+          moodScore: newAnswers['mental-health'],
+          healthConfidence: newAnswers['physical-activity'],
+          notes: `Sleep: ${newAnswers['sleep-quality']}, Stress: ${newAnswers['stress-level']}, Nutrition: ${newAnswers['nutrition']}`,
+        })
+      } catch (e) {
+        console.error('Failed to save health assessment:', e)
+      }
+    }
+  }
 
   return (
     <div className="space-y-6">

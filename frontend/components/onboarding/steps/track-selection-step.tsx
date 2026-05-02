@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { Card, CardContent } from '@/components/ui/card'
+import { usersApi } from '@/lib/api'
 
 const TRACKS = [
   {
@@ -41,7 +42,14 @@ const TRACKS = [
 export function TrackSelectionStep() {
   const [selectedTrack, setSelectedTrack] = useState<string | null>(null)
 
-  // TODO: Save selection to API when component unmounts or on next
+  const handleTrackSelect = async (trackId: string) => {
+    setSelectedTrack(trackId)
+    try {
+      await usersApi.updateProfile({ track: trackId })
+    } catch (e) {
+      console.error('Failed to save track selection:', e)
+    }
+  }
 
   return (
     <div className="space-y-6">
@@ -60,7 +68,7 @@ export function TrackSelectionStep() {
                 ? 'ring-2 ring-indigo-600 bg-indigo-50'
                 : 'hover:bg-accent/50'
             }`}
-            onClick={() => setSelectedTrack(track.id)}
+            onClick={() => handleTrackSelect(track.id)}
           >
             <CardContent className="p-6">
               <div className="flex items-start gap-4">

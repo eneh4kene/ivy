@@ -2,7 +2,7 @@ import prisma from '../utils/prisma';
 import { CreateWorkoutInput, UpdateWorkoutInput, CompleteWorkoutInput, GetWorkoutsQueryInput } from '../types/workout.schema';
 import { NotFoundError, BadRequestError } from '../utils/errors';
 import logger from '../utils/logger';
-import { startOfDay, endOfDay, differenceInDays, parseISO } from 'date-fns';
+import { startOfDay, differenceInDays } from 'date-fns';
 
 class WorkoutService {
   /**
@@ -153,9 +153,28 @@ class WorkoutService {
     // Update streak if completed or partial
     if (data.status === 'COMPLETED' || data.status === 'PARTIAL') {
       await this.updateStreak(userId, new Date(workout.plannedDate));
+
+      // Award bonus grace day for double-completion (non-minimum workout on a day already completed)
+      if (data.status === 'COMPLETED' && !workout.isMinimum) {
+        const todayStart = startOfDay(new Date());
+        const todayCompletions = await prisma.workout.count({
+          where: {
+            userId,
+            status: 'COMPLETED',
+            completedAt: { gte: todayStart },
+            id: { not: workoutId }, // exclude the one we just marked
+          },
+        });
+        if (todayCompletions >= 1) {
+          await this.awardGraceDays(userId, 1, 'Double-completion bonus');
+        }
+      }
     } else if (data.status === 'SKIPPED') {
-      // Reset streak on skip
-      await this.resetStreak(userId);
+      // Attempt to use a grace day before breaking streak
+      const preserved = await this.tryUseGraceDay(userId);
+      if (!preserved) {
+        await this.resetStreak(userId);
+      }
     }
 
     logger.info(`Workout completed: ${workoutId} with status ${data.status}`);
@@ -275,6 +294,8 @@ class WorkoutService {
         where: { userId },
         data: { bonus7DayClaimed: true },
       });
+      // Award grace day for 7-day milestone
+      await this.awardGraceDays(userId, 1, '7-day streak bonus');
     }
 
     // 30-day streak bonus
@@ -284,6 +305,8 @@ class WorkoutService {
         where: { userId },
         data: { bonus30DayClaimed: true },
       });
+      // Award grace days for 30-day milestone
+      await this.awardGraceDays(userId, 2, '30-day streak bonus');
     }
 
     // 90-day streak bonus
@@ -293,7 +316,53 @@ class WorkoutService {
         where: { userId },
         data: { bonus90DayClaimed: true },
       });
+      // Award grace days for 90-day milestone
+      await this.awardGraceDays(userId, 3, '90-day streak bonus');
     }
+  }
+
+  /**
+   * Award grace days to user
+   */
+  private async awardGraceDays(userId: string, days: number, reason: string) {
+    const streak = await prisma.streak.findUnique({ where: { userId } });
+    if (!streak) return;
+
+    const log = JSON.parse(streak.graceDayLog || '[]');
+    log.push({ date: new Date().toISOString(), reason, earned: days });
+
+    await prisma.streak.update({
+      where: { userId },
+      data: {
+        graceDaysBalance: { increment: days },
+        graceDayLog: JSON.stringify(log),
+      },
+    });
+
+    logger.info(`Grace days awarded: ${days} for user ${userId} (${reason})`);
+  }
+
+  /**
+   * Try to use a grace day to preserve streak. Returns true if a grace day was consumed.
+   */
+  private async tryUseGraceDay(userId: string): Promise<boolean> {
+    const streak = await prisma.streak.findUnique({ where: { userId } });
+    if (!streak || streak.graceDaysBalance <= 0 || streak.currentStreak === 0) return false;
+
+    const log = JSON.parse(streak.graceDayLog || '[]');
+    log.push({ date: new Date().toISOString(), reason: 'Grace day used — streak preserved', used: 1 });
+
+    await prisma.streak.update({
+      where: { userId },
+      data: {
+        graceDaysBalance: { decrement: 1 },
+        graceDaysUsed: { increment: 1 },
+        graceDayLog: JSON.stringify(log),
+      },
+    });
+
+    logger.info(`Grace day consumed for user ${userId} — streak preserved at ${streak.currentStreak}`);
+    return true;
   }
 
   /**

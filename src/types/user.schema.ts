@@ -7,6 +7,8 @@ export const createUserSchema = z.object({
     firstName: z.string().min(1, 'First name is required'),
     lastName: z.string().min(1, 'Last name is required'),
     timezone: z.string().default('Europe/London'),
+    region: z.enum(['GB', 'US']).default('GB'),
+    currency: z.enum(['GBP', 'USD']).default('GBP'),
     track: z.string().min(1, 'Track is required'), // fitness, meditation, etc.
     goal: z.string().min(1, 'Goal is required'),
     preferredCharityId: z.string().uuid().optional(),

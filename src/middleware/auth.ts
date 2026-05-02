@@ -4,17 +4,24 @@ import { config } from '../config';
 import { UnauthorizedError } from '../utils/errors';
 import prisma from '../utils/prisma';
 
-export interface AuthRequest extends Request {
+export interface AuthRequest<
+  P = any,
+  ResBody = any,
+  ReqBody = any,
+  ReqQuery = any
+> extends Request<P, ResBody, ReqBody, ReqQuery> {
   user?: {
     id: string;
     email: string;
     subscriptionTier: string;
+    subscriptionStatus: string;
+    stripeSubscriptionId: string | null;
   };
 }
 
 export const authenticate = async (
   req: AuthRequest,
-  res: Response,
+  _res: Response,
   next: NextFunction
 ): Promise<void> => {
   try {
@@ -39,6 +46,8 @@ export const authenticate = async (
         id: true,
         email: true,
         subscriptionTier: true,
+        subscriptionStatus: true,
+        stripeSubscriptionId: true,
         isActive: true,
       },
     });
@@ -52,6 +61,8 @@ export const authenticate = async (
       id: user.id,
       email: user.email,
       subscriptionTier: user.subscriptionTier,
+      subscriptionStatus: user.subscriptionStatus,
+      stripeSubscriptionId: user.stripeSubscriptionId,
     };
 
     next();
@@ -65,7 +76,7 @@ export const authenticate = async (
 };
 
 export const requireTier = (...tiers: string[]) => {
-  return (req: AuthRequest, res: Response, next: NextFunction): void => {
+  return (req: AuthRequest, _res: Response, next: NextFunction): void => {
     if (!req.user) {
       throw new UnauthorizedError('Authentication required');
     }

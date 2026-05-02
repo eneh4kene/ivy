@@ -20,6 +20,17 @@ router.post(
 );
 
 /**
+ * @route   POST /api/auth/dev-magic-link
+ * @desc    Get magic link URL directly (DEV ONLY - no email sent)
+ * @access  Public (Development only)
+ */
+router.post(
+  '/dev-magic-link',
+  validate(sendMagicLinkSchema),
+  authController.getDevMagicLink
+);
+
+/**
  * @route   POST /api/auth/verify
  * @desc    Verify magic link token and get access token
  * @access  Public

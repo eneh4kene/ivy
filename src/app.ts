@@ -14,6 +14,10 @@ import workoutRoutes from './api/routes/workout.routes';
 import donationRoutes from './api/routes/donation.routes';
 import statsRoutes from './api/routes/stats.routes';
 import webhookRoutes from './api/routes/webhook.routes';
+import paymentRoutes from './api/routes/payment.routes';
+import seasonsRoutes from './api/routes/seasons.routes';
+import callsRoutes from './api/routes/calls.routes';
+import buddyRoutes from './api/routes/buddy.routes';
 
 const app: Application = express();
 
@@ -68,6 +72,10 @@ app.use('/api/users', userRoutes);
 app.use('/api/workouts', workoutRoutes);
 app.use('/api/donations', donationRoutes);
 app.use('/api/stats', statsRoutes);
+app.use('/api/payments', paymentRoutes);
+app.use('/api/seasons', seasonsRoutes);
+app.use('/api/calls', callsRoutes);
+app.use('/api/buddy', buddyRoutes);
 app.use('/webhooks', webhookRoutes);
 
 // 404 handler

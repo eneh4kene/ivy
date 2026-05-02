@@ -1,7 +1,7 @@
-import axios from 'axios';
+// import axios from 'axios'; // Commented out - only used in commented placeholder methods
 import prisma from '../utils/prisma';
 import { messageQueue } from '../config/queues';
-import { config } from '../config';
+// import { config } from '../config'; // Commented out - only used in commented placeholder methods
 import logger from '../utils/logger';
 import { NotFoundError } from '../utils/errors';
 
@@ -233,59 +233,61 @@ class MessagingService {
   /**
    * Actual WhatsApp API integration (placeholder)
    * In production, this would call WhatsApp Business API
+   * Currently commented out as it's not being used
    */
-  private async sendWhatsAppAPI(phone: string, content: string): Promise<string> {
-    if (!config.whatsapp.accessToken) {
-      logger.warn('WhatsApp not configured, simulating send');
-      return `sim_${Date.now()}`;
-    }
+  // private async sendWhatsAppAPI(phone: string, content: string): Promise<string> {
+  //   if (!config.whatsapp.accessToken) {
+  //     logger.warn('WhatsApp not configured, simulating send');
+  //     return `sim_${Date.now()}`;
+  //   }
 
-    try {
-      const response = await axios.post(
-        `https://graph.facebook.com/v18.0/${config.whatsapp.phoneNumberId}/messages`,
-        {
-          messaging_product: 'whatsapp',
-          to: phone,
-          type: 'text',
-          text: { body: content },
-        },
-        {
-          headers: {
-            Authorization: `Bearer ${config.whatsapp.accessToken}`,
-            'Content-Type': 'application/json',
-          },
-        }
-      );
+  //   try {
+  //     const response = await axios.post(
+  //       `https://graph.facebook.com/v18.0/${config.whatsapp.phoneNumberId}/messages`,
+  //       {
+  //         messaging_product: 'whatsapp',
+  //         to: phone,
+  //         type: 'text',
+  //         text: { body: content },
+  //       },
+  //       {
+  //         headers: {
+  //           Authorization: `Bearer ${config.whatsapp.accessToken}`,
+  //           'Content-Type': 'application/json',
+  //         },
+  //       }
+  //     );
 
-      return response.data.messages[0].id;
-    } catch (error) {
-      logger.error('WhatsApp API error:', error);
-      throw error;
-    }
-  }
+  //     return response.data.messages[0].id;
+  //   } catch (error) {
+  //     logger.error('WhatsApp API error:', error);
+  //     throw error;
+  //   }
+  // }
 
   /**
    * Actual SMS API integration via Twilio (placeholder)
+   * Currently commented out as it's not being used
    */
-  private async sendSMSAPI(phone: string, content: string): Promise<string> {
-    if (!config.twilio.accountSid) {
-      logger.warn('Twilio not configured, simulating send');
-      return `sim_${Date.now()}`;
-    }
+  // private async sendSMSAPI(phone: string, content: string): Promise<string> {
+  //   if (!config.twilio.accountSid) {
+  //     logger.warn('Twilio not configured, simulating send');
+  //     return `sim_${Date.now()}`;
+  //   }
 
-    // TODO: Implement Twilio SMS sending
-    // const twilio = require('twilio');
-    // const client = twilio(config.twilio.accountSid, config.twilio.authToken);
-    // const message = await client.messages.create({
-    //   body: content,
-    //   from: config.twilio.phoneNumber,
-    //   to: phone,
-    // });
-    // return message.sid;
+  //   // TODO: Implement Twilio SMS sending
+  //   // const twilio = require('twilio');
+  //   // const client = twilio(config.twilio.accountSid, config.twilio.authToken);
+  //   // const message = await client.messages.create({
+  //   //   body: content,
+  //   //   from: config.twilio.phoneNumber,
+  //   //   to: phone,
+  //   // });
+  //   // return message.sid;
 
-    logger.info(`[SIMULATED] Sending SMS to ${phone}: ${content}`);
-    return `sim_sms_${Date.now()}`;
-  }
+  //   logger.info(`[SIMULATED] Sending SMS to ${phone}: ${content}`);
+  //   return `sim_sms_${Date.now()}`;
+  // }
 }
 
 export default new MessagingService();

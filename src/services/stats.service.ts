@@ -7,7 +7,7 @@ import {
 } from '../types/stats.schema';
 import { NotFoundError } from '../utils/errors';
 import logger from '../utils/logger';
-import { startOfWeek, startOfMonth, differenceInWeeks, differenceInMonths } from 'date-fns';
+import { startOfWeek, startOfMonth, differenceInWeeks } from 'date-fns';
 
 class StatsService {
   /**
@@ -33,6 +33,11 @@ class StatsService {
         sevenDayClaimed: streak.bonus7DayClaimed,
         thirtyDayClaimed: streak.bonus30DayClaimed,
         ninetyDayClaimed: streak.bonus90DayClaimed,
+      },
+      graceDays: {
+        balance: streak.graceDaysBalance,
+        used: streak.graceDaysUsed,
+        log: JSON.parse(streak.graceDayLog || '[]').slice(-5),
       },
     };
   }

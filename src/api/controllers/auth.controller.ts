@@ -1,4 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
+import { AuthRequest } from '../../middleware/auth';
 import authService from '../../services/auth.service';
 import { sendSuccess } from '../../utils/response';
 import { SendMagicLinkInput, VerifyMagicLinkInput } from '../../types/auth.schema';
@@ -64,6 +65,35 @@ class AuthController {
 
       sendSuccess(res, {
         message: 'Magic link sent to your email',
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * Development-only endpoint to get magic link URL without email
+   * ONLY WORKS IN DEVELOPMENT MODE
+   */
+  async getDevMagicLink(
+    req: Request<{}, {}, SendMagicLinkInput>,
+    res: Response,
+    next: NextFunction
+  ): Promise<void> {
+    try {
+      // Only allow in development
+      if (process.env.NODE_ENV !== 'development') {
+        sendSuccess(res, { message: 'This endpoint is only available in development mode' });
+        return;
+      }
+
+      const { email } = req.body;
+      const magicLinkUrl = await authService.getDevMagicLink(email);
+
+      sendSuccess(res, {
+        message: 'Magic link generated (dev mode)',
+        magicLink: magicLinkUrl,
+        instructions: 'Copy this URL and paste it in your browser to login'
       });
     } catch (error) {
       next(error);
@@ -163,7 +193,7 @@ class AuthController {
    *             schema:
    *               $ref: '#/components/schemas/Error'
    */
-  async getCurrentUser(req: Request, res: Response, next: NextFunction): Promise<void> {
+  async getCurrentUser(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
     try {
       // User is already attached by auth middleware
       sendSuccess(res, req.user);

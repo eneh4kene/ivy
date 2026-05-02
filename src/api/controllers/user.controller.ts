@@ -89,7 +89,7 @@ class UserController {
    * PATCH /api/users/me
    */
   async updateCurrentUserProfile(
-    req: AuthRequest<{}, {}, UpdateUserInput>,
+    req: AuthRequest,
     res: Response,
     next: NextFunction
   ): Promise<void> {
@@ -98,7 +98,7 @@ class UserController {
         throw new Error('User not authenticated');
       }
 
-      const user = await userService.updateUser(req.user.id, req.body);
+      const user = await userService.updateUser(req.user.id, req.body as UpdateUserInput);
 
       sendSuccess(res, user);
     } catch (error) {
@@ -111,7 +111,7 @@ class UserController {
    * POST /api/users/:id/onboard
    */
   async markAsOnboarded(
-    req: AuthRequest<GetUserByIdInput>,
+    req: AuthRequest,
     res: Response,
     next: NextFunction
   ): Promise<void> {

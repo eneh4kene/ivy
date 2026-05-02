@@ -59,12 +59,12 @@ const FREE_PRO_STEPS: OnboardingStep[] = [
   },
 ]
 
-// ELITE users get enhanced 30-minute onboarding with calendar integration
+// ELITE (Ivy Plus) users get enhanced 30-minute onboarding with calendar integration
 const ELITE_STEPS: OnboardingStep[] = [
   {
     id: 'welcome',
-    title: 'Welcome to Ivy Elite',
-    description: 'Experience premium wellness coaching',
+    title: 'Welcome to Ivy Plus',
+    description: 'More impact, more coaching',
     component: 'welcome',
     required: true,
     estimatedMinutes: 2,
@@ -120,19 +120,19 @@ const ELITE_STEPS: OnboardingStep[] = [
   {
     id: 'complete',
     title: 'You\'re All Set!',
-    description: 'Start your Elite journey',
+    description: 'Start your Ivy Plus journey',
     component: 'complete',
     required: true,
     estimatedMinutes: 2,
   },
 ]
 
-// CONCIERGE users get comprehensive 45-minute onboarding with human touchpoints
+// CONCIERGE (Ivy Concierge) users get comprehensive 45-minute onboarding with human touchpoints
 const CONCIERGE_STEPS: OnboardingStep[] = [
   {
     id: 'welcome',
     title: 'Welcome to Ivy Concierge',
-    description: 'Your personalized wellness transformation begins',
+    description: 'Your white-glove accountability experience begins',
     component: 'welcome',
     required: true,
     estimatedMinutes: 2,

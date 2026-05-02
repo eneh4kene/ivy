@@ -5,13 +5,24 @@ const prisma = new PrismaClient();
 async function main() {
   console.log('🌱 Starting database seed...');
 
+  // Delete existing data (for clean slate)
+  console.log('Cleaning existing data...');
+  await prisma.donation.deleteMany({});
+  await prisma.impactWallet.deleteMany({});
+  await prisma.streak.deleteMany({});
+  await prisma.sprint.deleteMany({});
+  await prisma.season.deleteMany({});
+  await prisma.impactStory.deleteMany({});
+  await prisma.magicLink.deleteMany({});
+  await prisma.user.deleteMany({});
+  await prisma.company.deleteMany({});
+  await prisma.charity.deleteMany({});
+
   // Create charities
   console.log('Creating charities...');
   const charities = await Promise.all([
-    prisma.charity.upsert({
-      where: { name: 'Against Malaria Foundation' },
-      update: {},
-      create: {
+    prisma.charity.create({
+      data: {
         name: 'Against Malaria Foundation',
         description: 'Providing insecticide-treated nets to protect families from malaria',
         category: 'health',
@@ -22,10 +33,8 @@ async function main() {
         isActive: true,
       },
     }),
-    prisma.charity.upsert({
-      where: { name: 'GiveDirectly' },
-      update: {},
-      create: {
+    prisma.charity.create({
+      data: {
         name: 'GiveDirectly',
         description: 'Direct cash transfers to people living in extreme poverty',
         category: 'poverty',
@@ -36,10 +45,8 @@ async function main() {
         isActive: true,
       },
     }),
-    prisma.charity.upsert({
-      where: { name: 'The Ocean Cleanup' },
-      update: {},
-      create: {
+    prisma.charity.create({
+      data: {
         name: 'The Ocean Cleanup',
         description: 'Developing advanced technologies to rid the oceans of plastic',
         category: 'environment',
@@ -50,10 +57,8 @@ async function main() {
         isActive: true,
       },
     }),
-    prisma.charity.upsert({
-      where: { name: 'Room to Read' },
-      update: {},
-      create: {
+    prisma.charity.create({
+      data: {
         name: 'Room to Read',
         description: 'Improving literacy and gender equality in education',
         category: 'education',
@@ -64,10 +69,8 @@ async function main() {
         isActive: true,
       },
     }),
-    prisma.charity.upsert({
-      where: { name: 'Mind (Mental Health)' },
-      update: {},
-      create: {
+    prisma.charity.create({
+      data: {
         name: 'Mind (Mental Health)',
         description: 'Providing advice and support to empower anyone experiencing a mental health problem',
         category: 'health',
@@ -78,6 +81,50 @@ async function main() {
         isActive: true,
       },
     }),
+    prisma.charity.create({
+      data: {
+        name: 'Feeding America',
+        description: 'Network of food banks fighting hunger across the United States',
+        category: 'poverty',
+        impactMetric: 'Meals provided',
+        impactPerPound: '10 meals per $1',
+        website: 'https://www.feedingamerica.org',
+        isActive: true,
+      },
+    }),
+    prisma.charity.create({
+      data: {
+        name: 'St. Jude Children\'s Research Hospital',
+        description: 'Leading research and treatment for childhood cancer and other life-threatening diseases',
+        category: 'health',
+        impactMetric: 'Children treated',
+        impactPerPound: 'Funds research & free treatment',
+        website: 'https://www.stjude.org',
+        isActive: true,
+      },
+    }),
+    prisma.charity.create({
+      data: {
+        name: 'American Cancer Society',
+        description: 'Saving lives and creating a world with less cancer',
+        category: 'health',
+        impactMetric: 'Research funded',
+        impactPerPound: 'Funds cancer research & patient support',
+        website: 'https://www.cancer.org',
+        isActive: true,
+      },
+    }),
+    prisma.charity.create({
+      data: {
+        name: 'Charity: Water',
+        description: 'Bringing clean, safe drinking water to people in developing countries',
+        category: 'environment',
+        impactMetric: 'People with clean water',
+        impactPerPound: '1 person gets clean water for $30',
+        website: 'https://www.charitywater.org',
+        isActive: true,
+      },
+    }),
   ]);
 
   console.log(`✅ Created ${charities.length} charities`);
@@ -85,10 +132,8 @@ async function main() {
   // Create test users
   console.log('Creating test users...');
 
-  const testUser1 = await prisma.user.upsert({
-    where: { email: 'alice@example.com' },
-    update: {},
-    create: {
+  const testUser1 = await prisma.user.create({
+    data: {
       email: 'alice@example.com',
       phone: '+447700900001',
       firstName: 'Alice',
@@ -111,10 +156,8 @@ async function main() {
     },
   });
 
-  const testUser2 = await prisma.user.upsert({
-    where: { email: 'bob@example.com' },
-    update: {},
-    create: {
+  const testUser2 = await prisma.user.create({
+    data: {
       email: 'bob@example.com',
       phone: '+447700900002',
       firstName: 'Bob',
@@ -122,7 +165,7 @@ async function main() {
       timezone: 'Europe/London',
       subscriptionTier: 'ELITE',
       subscriptionStatus: 'active',
-      track: 'meditation',
+      track: 'focus',
       goal: 'Meditate daily for 20 minutes',
       minimumMode: '5 minutes breathing',
       giftFrame: 'My mental health',
@@ -138,10 +181,8 @@ async function main() {
     },
   });
 
-  const testUser3 = await prisma.user.upsert({
-    where: { email: 'charlie@example.com' },
-    update: {},
-    create: {
+  const testUser3 = await prisma.user.create({
+    data: {
       email: 'charlie@example.com',
       phone: '+447700900003',
       firstName: 'Charlie',
@@ -149,7 +190,7 @@ async function main() {
       timezone: 'Europe/London',
       subscriptionTier: 'FREE',
       subscriptionStatus: 'active',
-      track: 'reading',
+      track: 'balance',
       goal: 'Read 30 minutes before bed',
       minimumMode: '10 minutes reading',
       giftFrame: 'Personal growth',
@@ -165,14 +206,36 @@ async function main() {
 
   console.log(`✅ Created 3 test users`);
 
+  // Create Season + Sprints for testUser1
+  console.log('Creating Season and Sprints for testUser1...');
+
+  const season1 = await prisma.season.create({
+    data: {
+      userId: testUser1.id,
+      number: 1,
+      title: 'Operation Ironman',
+      goal: 'Run 5K without stopping',
+      startDate: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000), // started 30 days ago
+      endDate: new Date(Date.now() + 54 * 24 * 60 * 60 * 1000),   // ends in 54 days
+      status: 'ACTIVE',
+    }
+  });
+
+  // Sprint 1 (completed)
+  await prisma.sprint.create({ data: { seasonId: season1.id, number: 1, startDate: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000), endDate: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000), status: 'COMPLETED', completedAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000) } });
+  // Sprint 2 (active)
+  await prisma.sprint.create({ data: { seasonId: season1.id, number: 2, startDate: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000), endDate: new Date(Date.now() + 27 * 24 * 60 * 60 * 1000), status: 'ACTIVE' } });
+  // Sprint 3 (future)
+  await prisma.sprint.create({ data: { seasonId: season1.id, number: 3, startDate: new Date(Date.now() + 28 * 24 * 60 * 60 * 1000), endDate: new Date(Date.now() + 56 * 24 * 60 * 60 * 1000), status: 'ACTIVE' } });
+
+  console.log(`✅ Created Season 1 with 3 Sprints for testUser1`);
+
   // Create Impact Wallets for test users
   console.log('Creating Impact Wallets...');
 
   await Promise.all([
-    prisma.impactWallet.upsert({
-      where: { userId: testUser1.id },
-      update: {},
-      create: {
+    prisma.impactWallet.create({
+      data: {
         userId: testUser1.id,
         monthlyLimit: 20,
         dailyCap: 3,
@@ -181,10 +244,8 @@ async function main() {
         lifetimeDonated: 45.75,
       },
     }),
-    prisma.impactWallet.upsert({
-      where: { userId: testUser2.id },
-      update: {},
-      create: {
+    prisma.impactWallet.create({
+      data: {
         userId: testUser2.id,
         monthlyLimit: 30,
         dailyCap: 4,
@@ -193,10 +254,8 @@ async function main() {
         lifetimeDonated: 98.50,
       },
     }),
-    prisma.impactWallet.upsert({
-      where: { userId: testUser3.id },
-      update: {},
-      create: {
+    prisma.impactWallet.create({
+      data: {
         userId: testUser3.id,
         monthlyLimit: 20,
         dailyCap: 3,
@@ -213,10 +272,8 @@ async function main() {
   console.log('Creating Streaks...');
 
   await Promise.all([
-    prisma.streak.upsert({
-      where: { userId: testUser1.id },
-      update: {},
-      create: {
+    prisma.streak.create({
+      data: {
         userId: testUser1.id,
         currentStreak: 5,
         currentStreakStart: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000),
@@ -229,10 +286,8 @@ async function main() {
         bonus90DayClaimed: false,
       },
     }),
-    prisma.streak.upsert({
-      where: { userId: testUser2.id },
-      update: {},
-      create: {
+    prisma.streak.create({
+      data: {
         userId: testUser2.id,
         currentStreak: 12,
         currentStreakStart: new Date(Date.now() - 12 * 24 * 60 * 60 * 1000),
@@ -245,10 +300,8 @@ async function main() {
         bonus90DayClaimed: false,
       },
     }),
-    prisma.streak.upsert({
-      where: { userId: testUser3.id },
-      update: {},
-      create: {
+    prisma.streak.create({
+      data: {
         userId: testUser3.id,
         currentStreak: 0,
         longestStreak: 0,
@@ -264,10 +317,8 @@ async function main() {
   // Create a test company for B2B
   console.log('Creating test company...');
 
-  const testCompany = await prisma.company.upsert({
-    where: { name: 'Acme Corp' },
-    update: {},
-    create: {
+  const testCompany = await prisma.company.create({
+    data: {
       name: 'Acme Corp',
       contactEmail: 'hr@acmecorp.com',
       contactName: 'Jane Smith',

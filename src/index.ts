@@ -2,6 +2,8 @@ import app from './app';
 import { config } from './config';
 import logger from './utils/logger';
 import prisma from './utils/prisma';
+import cron from 'node-cron';
+import buddyService from './services/buddy.service';
 
 const PORT = config.server.port;
 
@@ -10,6 +12,12 @@ const server = app.listen(PORT, () => {
   logger.info(`🚀 Ivy Backend API running on port ${PORT}`);
   logger.info(`📝 Environment: ${config.server.env}`);
   logger.info(`🔗 Base URL: ${config.server.baseUrl}`);
+});
+
+// Every Sunday at 9am UTC — send weekly accountability buddy digests
+cron.schedule('0 9 * * 0', async () => {
+  logger.info('Running weekly buddy digest...');
+  await buddyService.sendWeeklyDigests();
 });
 
 // Graceful shutdown

@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent } from '@/components/ui/card'
+import { usersApi } from '@/lib/api'
 
 const CALL_TIMES = [
   { id: 'morning', label: 'Morning', time: '7:00 AM - 9:00 AM', icon: '🌅' },
@@ -18,6 +19,13 @@ const NOTIFICATION_PREFERENCES = [
   { id: 'donation-updates', label: 'Donation updates', description: 'See your charitable impact' },
 ]
 
+const CALL_TIME_MAP: Record<string, { morning: string; evening: string }> = {
+  morning: { morning: '07:00', evening: '09:00' },
+  midday: { morning: '12:00', evening: '14:00' },
+  afternoon: { morning: '16:00', evening: '18:00' },
+  evening: { morning: '19:00', evening: '21:00' },
+}
+
 export function PreferencesStep() {
   const [preferredCallTime, setPreferredCallTime] = useState<string | null>(null)
   const [notifications, setNotifications] = useState<string[]>(['workout-reminders', 'call-reminders', 'weekly-summary'])
@@ -30,7 +38,20 @@ export function PreferencesStep() {
     )
   }
 
-  // TODO: Save preferences to API when component unmounts or on next
+  const handleCallTimeSelect = async (timeId: string) => {
+    setPreferredCallTime(timeId)
+    const times = CALL_TIME_MAP[timeId]
+    if (times) {
+      try {
+        await usersApi.updateProfile({
+          morningCallTime: times.morning,
+          eveningCallTime: times.evening,
+        })
+      } catch (e) {
+        console.error('Failed to save preferences:', e)
+      }
+    }
+  }
 
   return (
     <div className="space-y-8">
@@ -50,7 +71,7 @@ export function PreferencesStep() {
                   ? 'ring-2 ring-indigo-600 bg-indigo-50'
                   : 'hover:bg-accent/50'
               }`}
-              onClick={() => setPreferredCallTime(timeSlot.id)}
+              onClick={() => handleCallTimeSelect(timeSlot.id)}
             >
               <CardContent className="p-4">
                 <div className="flex items-center gap-3">

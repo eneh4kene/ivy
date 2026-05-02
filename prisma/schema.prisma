@@ -25,12 +25,15 @@ model User {
   firstName     String
   lastName      String
   timezone      String  @default("Europe/London")
+  region        String  @default("GB") // "GB" or "US"
+  currency      String  @default("GBP") // "GBP" or "USD"
   profileImage  String?
 
   // Subscription & Billing
   subscriptionTier   SubscriptionTier @default(FREE)
   subscriptionStatus String           @default("active") // active, paused, cancelled
   stripeCustomerId   String?          @unique
+  stripeSubscriptionId String?        @unique
   companyId          String?
 
   // Schedule Preferences
@@ -72,6 +75,9 @@ model User {
   lifeMarkers      LifeMarker[]
   messages         Message[]
   ivyCircles       IvyCircleMember[]
+  seasons          Season[]
+  impactStories    ImpactStory[]
+  accountabilityBuddy AccountabilityBuddy?
 
   @@index([email])
   @@index([companyId])
@@ -80,9 +86,9 @@ model User {
 
 enum SubscriptionTier {
   FREE
-  PRO       // B2C: £99/mo - 2 calls/week
-  ELITE     // B2C: £199/mo - 4 calls/week + calendar
-  CONCIERGE // B2C: £399/mo - daily calls + human review
+  PRO       // B2C: £70/mo - "Ivy" - daily AI calls
+  ELITE     // B2C: £99/mo - "Ivy Plus" - + Circles
+  CONCIERGE // B2C: £149/mo - "Ivy Concierge" - + pro coaches
   B2B       // Company-sponsored
 }
 
@@ -222,7 +228,7 @@ model Call {
   needsFollowUp Boolean @default(false)
 
   // Dynamic Variables (snapshot at call time)
-  contextSnapshot String? @db.Json // JSON of user stats, streak, etc.
+  contextSnapshot Json? // JSON of user stats, streak, etc.
 
   @@index([userId, scheduledAt])
   @@index([callType, status])
@@ -237,6 +243,7 @@ enum CallType {
   WEEKLY_PLANNING   // Sunday review + plan ahead
   MONTHLY_CHECKIN   // Transformation tracking
   ONBOARDING        // First call setup
+  SEASON_CLOSE      // Ceremonial end-of-season call
 }
 
 enum CallStatus {
@@ -339,6 +346,11 @@ model Streak {
   bonus7DayClaimed  Boolean @default(false)
   bonus30DayClaimed Boolean @default(false)
   bonus90DayClaimed Boolean @default(false)
+
+  // Grace Days (Streak Insurance)
+  graceDaysBalance Int     @default(0)
+  graceDaysUsed    Int     @default(0)
+  graceDayLog      String? @db.Text // JSON: [{date: "ISO", reason: "7-day streak bonus"}]
 
   @@map("streaks")
 }
@@ -473,4 +485,164 @@ model IvyCircleMember {
   @@unique([circleId, userId])
   @@index([userId])
   @@map("ivy_circle_members")
+}
+
+// ============================================
+// MAGIC LINKS
+// ============================================
+
+model MagicLink {
+  id        String   @id @default(uuid())
+  token     String   @unique
+  email     String
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime @default(now())
+
+  @@index([token])
+  @@index([email])
+  @@map("magic_links")
+}
+
+// ============================================
+// SEASONS & SPRINTS
+// ============================================
+
+model Season {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  number      Int      // Season 1, 2, 3...
+  title       String?  // "Operation Ironman", user-defined
+  goal        String   // Overarching 12-week goal
+  startDate   DateTime
+  endDate     DateTime // startDate + 12 weeks
+
+  status      SeasonStatus @default(ACTIVE)
+  closedAt    DateTime?
+  closingCallId String?    // Call ID of the Season Close ceremony
+
+  // Season Close output
+  arcSummary  String? @db.Text // AI-generated arc review
+  nextGoalSuggestions String? @db.Text // JSON array of AI suggestions
+
+  sprints     Sprint[]
+
+  @@index([userId, status])
+  @@map("seasons")
+}
+
+enum SeasonStatus {
+  ACTIVE
+  CLOSING  // Season Close ceremony scheduled/in-progress
+  CLOSED
+}
+
+model Sprint {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  seasonId  String
+  season    Season   @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+
+  number    Int      // Sprint 1, 2, 3 within the season
+  startDate DateTime
+  endDate   DateTime // startDate + 4 weeks
+
+  status    SprintStatus @default(ACTIVE)
+  completedAt DateTime?
+
+  // Sprint Close
+  ivyCircleSessionId String? // CircleSprintSession that closed this sprint
+
+  @@index([seasonId])
+  @@map("sprints")
+}
+
+enum SprintStatus {
+  ACTIVE
+  COMPLETED
+}
+
+// ============================================
+// IMPACT STORIES
+// ============================================
+
+model ImpactStory {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
+
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Content (tier-gated)
+  textNote    String  @db.Text
+  photoUrl    String?    // PRO+
+  audioUrl    String?    // ELITE+
+  videoUrl    String?    // CONCIERGE only
+
+  // Context
+  charityName  String
+  totalDonated Decimal @db.Decimal(10, 2)
+  season       Int?    // Which season number
+
+  @@index([userId])
+  @@map("impact_stories")
+}
+
+// ============================================
+// ACCOUNTABILITY BUDDIES
+// ============================================
+
+model AccountabilityBuddy {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  userId    String   @unique
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  buddyName  String
+  buddyEmail String?
+  buddyPhone String? // WhatsApp number with country code
+
+  isActive     Boolean   @default(true)
+  lastDigestAt DateTime?
+
+  @@map("accountability_buddies")
+}
+
+// ============================================
+// CIRCLE SPRINT SESSIONS
+// ============================================
+
+model CircleSprintSession {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Who facilitated
+  facilitatorType String // "peer", "pro_coach", "celebrity_coach"
+  facilitatorName String?
+
+  // Session details
+  scheduledAt  DateTime
+  conductedAt  DateTime?
+  durationMins Int?
+
+  status       String @default("scheduled") // "scheduled", "completed", "cancelled"
+
+  // Participants (JSON array of user IDs)
+  participantUserIds String @db.Text // JSON
+
+  // Linked sprint
+  sprintId String?
+
+  @@index([sprintId])
+  @@map("circle_sprint_sessions")
 }

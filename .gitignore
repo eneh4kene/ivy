@@ -34,8 +34,16 @@ logs/
 tmp/
 temp/
 
+# Next.js build output
+frontend/.next/
+frontend/out/
+
 # Prisma
 prisma/migrations/*_migration/
 
 # Redis
 dump.rdb
+.ngrok-url
+
+# Specstory auto-generated history
+.specstory/

@@ -18,6 +18,12 @@ import type {
   CreateTransformationScoreInput,
   CreateLifeMarkerInput,
   ApiResponse,
+  Call,
+  Season,
+  Sprint,
+  ImpactStory,
+  CreateSeasonInput,
+  AccountabilityBuddy,
 } from '../types'
 
 // Auth API
@@ -165,6 +171,93 @@ export const statsApi = {
   },
 }
 
+// Payments API
+export const paymentsApi = {
+  createCheckoutSession: async (tier: string) => {
+    const response = await client.post<ApiResponse<{ sessionId: string; url: string }>>('/api/payments/checkout', { tier })
+    return response.data.data!
+  },
+
+  createPortalSession: async () => {
+    const response = await client.post<ApiResponse<{ url: string }>>('/api/payments/portal')
+    return response.data.data!
+  },
+
+  getSubscription: async () => {
+    const response = await client.get<ApiResponse>('/api/payments/subscription')
+    return response.data.data!
+  },
+
+  cancelSubscription: async () => {
+    const response = await client.post<ApiResponse>('/api/payments/cancel')
+    return response.data
+  },
+}
+
+// Calls API
+export const callsApi = {
+  getAll: async (params?: { limit?: number; offset?: number }) => {
+    const response = await client.get<ApiResponse<Call[]>>('/api/calls', { params })
+    return response.data.data!
+  },
+
+  getUpcoming: async () => {
+    const response = await client.get<ApiResponse<Call[]>>('/api/calls/upcoming')
+    return response.data.data!
+  },
+
+  requestRescueCall: async () => {
+    const response = await client.post<ApiResponse<Call>>('/api/calls/rescue')
+    return response.data.data!
+  },
+}
+
+// Seasons API
+export const seasonsApi = {
+  getAll: async () => {
+    const response = await client.get<ApiResponse<Season[]>>('/api/seasons')
+    return response.data.data!
+  },
+
+  getActive: async () => {
+    const response = await client.get<ApiResponse<Season>>('/api/seasons/active')
+    return response.data.data!
+  },
+
+  getCurrentSprint: async () => {
+    const response = await client.get<ApiResponse<Sprint>>('/api/seasons/current-sprint')
+    return response.data.data!
+  },
+
+  create: async (data: CreateSeasonInput) => {
+    const response = await client.post<ApiResponse<Season>>('/api/seasons', data)
+    return response.data.data!
+  },
+
+  closeSeason: async (id: string) => {
+    const response = await client.post<ApiResponse<Season>>(`/api/seasons/${id}/close`)
+    return response.data.data!
+  },
+}
+
+// Accountability Buddy API
+export const buddyApi = {
+  get: async () => {
+    const response = await client.get<ApiResponse<AccountabilityBuddy>>('/api/buddy')
+    return response.data.data
+  },
+
+  set: async (data: { buddyName: string; buddyEmail?: string; buddyPhone?: string }) => {
+    const response = await client.post<ApiResponse<AccountabilityBuddy>>('/api/buddy', data)
+    return response.data.data!
+  },
+
+  remove: async () => {
+    const response = await client.delete<ApiResponse>('/api/buddy')
+    return response.data
+  },
+}
+
 // Export all APIs
 export const api = {
   auth: authApi,
@@ -172,6 +265,10 @@ export const api = {
   workouts: workoutsApi,
   donations: donationsApi,
   stats: statsApi,
+  payments: paymentsApi,
+  calls: callsApi,
+  seasons: seasonsApi,
+  buddy: buddyApi,
 }
 
 export default api

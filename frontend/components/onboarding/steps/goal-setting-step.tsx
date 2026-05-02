@@ -4,13 +4,25 @@ import { useState } from 'react'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
+import { usersApi } from '@/lib/api'
 
 export function GoalSettingStep() {
   const [primaryGoal, setPrimaryGoal] = useState('')
   const [whyItMatters, setWhyItMatters] = useState('')
   const [successLooksLike, setSuccessLooksLike] = useState('')
 
-  // TODO: Save goals to API when component unmounts or on next
+  const saveGoals = async () => {
+    if (!primaryGoal.trim()) return
+    try {
+      await usersApi.updateProfile({
+        goal: primaryGoal,
+        minimumMode: whyItMatters || undefined,
+        giftFrame: successLooksLike || undefined,
+      })
+    } catch (e) {
+      console.error('Failed to save goals:', e)
+    }
+  }
 
   return (
     <div className="space-y-6">
@@ -33,6 +45,7 @@ export function GoalSettingStep() {
             placeholder="e.g., Exercise 4 times per week consistently"
             value={primaryGoal}
             onChange={(e) => setPrimaryGoal(e.target.value)}
+            onBlur={saveGoals}
             className="text-base"
           />
         </div>

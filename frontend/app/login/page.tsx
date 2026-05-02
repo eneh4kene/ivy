@@ -1,16 +1,13 @@
 'use client'
 
 import { useState } from 'react'
-import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { useAuthStore } from '@/lib/store/auth.store'
+import { Leaf, ArrowRight, Mail, AlertCircle, CheckCircle2 } from 'lucide-react'
 
 export default function LoginPage() {
-  const router = useRouter()
   const login = useAuthStore((state) => state.login)
   const [email, setEmail] = useState('')
   const [isLoading, setIsLoading] = useState(false)
@@ -21,7 +18,6 @@ export default function LoginPage() {
     e.preventDefault()
     setError('')
     setIsLoading(true)
-
     try {
       await login(email)
       setEmailSent(true)
@@ -33,93 +29,114 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-b from-indigo-50 to-white p-4">
-      <div className="w-full max-w-md">
+    <div className="min-h-screen bg-background mesh-bg flex items-center justify-center p-4">
+      {/* Background glow */}
+      <div className="absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-primary/8 rounded-full blur-3xl pointer-events-none" />
+
+      <div className="w-full max-w-sm relative animate-fade-in">
         {/* Logo */}
-        <div className="flex items-center justify-center gap-2 mb-8">
-          <div className="w-10 h-10 bg-primary rounded-lg"></div>
-          <span className="text-2xl font-bold">Ivy</span>
+        <div className="flex items-center justify-center gap-2.5 mb-10">
+          <div className="w-10 h-10 rounded-xl bg-primary/15 border border-primary/30 flex items-center justify-center glow-sm">
+            <Leaf className="w-5 h-5 text-primary" />
+          </div>
+          <span className="text-2xl font-bold tracking-tight text-gradient">Ivy</span>
         </div>
 
-        <Card>
-          <CardHeader className="space-y-1">
-            <CardTitle className="text-2xl text-center">Welcome back</CardTitle>
-            <CardDescription className="text-center">
-              {emailSent
-                ? 'Check your email for the magic link'
-                : 'Enter your email to sign in to your account'}
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            {!emailSent ? (
+        {/* Card */}
+        <div className="bg-card border border-border rounded-2xl p-8 shadow-2xl shadow-black/30">
+          {!emailSent ? (
+            <>
+              <div className="mb-8">
+                <h1 className="text-2xl font-bold tracking-tight mb-1.5">Welcome back</h1>
+                <p className="text-sm text-muted-foreground">Enter your email to receive a sign-in link</p>
+              </div>
+
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div className="space-y-2">
-                  <Label htmlFor="email">Email</Label>
-                  <Input
-                    id="email"
-                    type="email"
-                    placeholder="you@example.com"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    required
-                    disabled={isLoading}
-                  />
+                  <label htmlFor="email" className="text-sm font-medium text-foreground/80">
+                    Email address
+                  </label>
+                  <div className="relative">
+                    <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                    <Input
+                      id="email"
+                      type="email"
+                      placeholder="you@example.com"
+                      className="pl-10"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      required
+                      disabled={isLoading}
+                      autoComplete="email"
+                    />
+                  </div>
                 </div>
 
                 {error && (
-                  <div className="text-sm text-destructive bg-destructive/10 p-3 rounded-md">
-                    {error}
+                  <div className="flex items-start gap-2.5 p-3.5 rounded-lg bg-destructive/8 border border-destructive/20 text-sm text-destructive">
+                    <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                    <span>{error}</span>
                   </div>
                 )}
 
-                <Button type="submit" className="w-full" disabled={isLoading}>
-                  {isLoading ? 'Sending...' : 'Send Magic Link'}
-                </Button>
-
-                <p className="text-sm text-muted-foreground text-center">
-                  Don&apos;t have an account?{' '}
-                  <Link href="/login" className="text-primary hover:underline">
-                    Sign up
-                  </Link>
-                </p>
-              </form>
-            ) : (
-              <div className="space-y-4">
-                <div className="bg-green-50 text-green-900 p-4 rounded-md text-center">
-                  <div className="flex justify-center mb-2">
-                    <svg className="w-12 h-12 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 19v-8.93a2 2 0 01.89-1.664l7-4.666a2 2 0 012.22 0l7 4.666A2 2 0 0121 10.07V19M3 19a2 2 0 002 2h14a2 2 0 002-2M3 19l6.75-4.5M21 19l-6.75-4.5M3 10l6.75 4.5M21 10l-6.75 4.5m0 0l-1.14.76a2 2 0 01-2.22 0l-1.14-.76" />
-                    </svg>
-                  </div>
-                  <p className="font-medium mb-1">Email sent!</p>
-                  <p className="text-sm">
-                    We&apos;ve sent a magic link to <strong>{email}</strong>
-                  </p>
-                </div>
-
-                <div className="text-sm text-muted-foreground text-center space-y-2">
-                  <p>Click the link in your email to sign in</p>
-                  <p>The link will expire in 15 minutes</p>
-                </div>
-
                 <Button
-                  variant="outline"
-                  className="w-full"
-                  onClick={() => {
-                    setEmailSent(false)
-                    setEmail('')
-                  }}
+                  type="submit"
+                  className="w-full mt-2"
+                  size="lg"
+                  disabled={isLoading || !email}
                 >
-                  Use a different email
+                  {isLoading ? (
+                    <span className="flex items-center gap-2">
+                      <span className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                      Sending link…
+                    </span>
+                  ) : (
+                    <span className="flex items-center gap-2">
+                      Send magic link
+                      <ArrowRight className="w-4 h-4" />
+                    </span>
+                  )}
                 </Button>
-              </div>
-            )}
-          </CardContent>
-        </Card>
+              </form>
 
-        <p className="text-center text-sm text-muted-foreground mt-4">
-          <Link href="/" className="hover:underline">
-            Back to home
+              <p className="text-center text-sm text-muted-foreground mt-6">
+                Don&apos;t have an account?{' '}
+                <Link href="/login" className="text-primary hover:underline font-medium">
+                  Sign up free
+                </Link>
+              </p>
+            </>
+          ) : (
+            <div className="text-center">
+              <div className="w-16 h-16 rounded-2xl bg-primary/15 border border-primary/25 flex items-center justify-center mx-auto mb-6">
+                <CheckCircle2 className="w-8 h-8 text-primary" />
+              </div>
+              <h2 className="text-xl font-bold tracking-tight mb-2">Check your inbox</h2>
+              <p className="text-sm text-muted-foreground mb-1">
+                We sent a sign-in link to
+              </p>
+              <p className="text-sm font-semibold text-foreground mb-6 break-all">{email}</p>
+
+              <div className="p-4 rounded-xl bg-muted/50 border border-border text-xs text-muted-foreground space-y-1.5 mb-6 text-left">
+                <p>✓ Click the link in your email to sign in</p>
+                <p>✓ The link expires in 15 minutes</p>
+                <p>✓ Check your spam if you don't see it</p>
+              </div>
+
+              <Button
+                variant="outline"
+                className="w-full"
+                onClick={() => { setEmailSent(false); setEmail('') }}
+              >
+                Use a different email
+              </Button>
+            </div>
+          )}
+        </div>
+
+        <p className="text-center text-sm text-muted-foreground mt-6">
+          <Link href="/" className="hover:text-foreground transition-colors">
+            ← Back to home
           </Link>
         </p>
       </div>

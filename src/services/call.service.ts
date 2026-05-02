@@ -2,9 +2,9 @@ import prisma from '../utils/prisma';
 import { callScheduleQueue } from '../config/queues';
 import logger from '../utils/logger';
 import { NotFoundError } from '../utils/errors';
-import { parseISO, addMinutes, isBefore } from 'date-fns';
+import { addMinutes, isBefore } from 'date-fns';
 
-export type CallType = 'MORNING_PLANNING' | 'EVENING_REVIEW' | 'RESCUE' | 'WEEKLY_PLANNING' | 'MONTHLY_CHECKIN' | 'ONBOARDING';
+export type CallType = 'MORNING_PLANNING' | 'EVENING_REVIEW' | 'RESCUE' | 'WEEKLY_PLANNING' | 'MONTHLY_CHECKIN' | 'ONBOARDING' | 'SEASON_CLOSE';
 
 class CallService {
   /**
@@ -42,7 +42,7 @@ class CallService {
         callType,
         scheduledAt,
         status: 'SCHEDULED',
-        contextSnapshot: contextData ? JSON.stringify(contextData) : null,
+        contextSnapshot: contextData ? JSON.stringify(contextData) : undefined,
       },
     });
 
@@ -276,6 +276,40 @@ class CallService {
       orderBy: { scheduledAt: 'desc' },
       take: limit,
     });
+  }
+
+  /**
+   * Get calls for user with pagination
+   */
+  async getCallsForUser(userId: string, limit = 20, offset = 0) {
+    return prisma.call.findMany({
+      where: { userId },
+      orderBy: { scheduledAt: 'desc' },
+      take: limit,
+      skip: offset,
+    });
+  }
+
+  /**
+   * Get upcoming scheduled calls for a specific user
+   */
+  async getUpcomingCallsForUser(userId: string) {
+    return prisma.call.findMany({
+      where: {
+        userId,
+        status: 'SCHEDULED',
+        scheduledAt: { gte: new Date() },
+      },
+      orderBy: { scheduledAt: 'asc' },
+    });
+  }
+
+  /**
+   * Schedule a rescue call for user (in 2 minutes)
+   */
+  async scheduleRescueCall(userId: string) {
+    const scheduledAt = new Date(Date.now() + 2 * 60 * 1000);
+    return this.scheduleCall(userId, 'RESCUE', scheduledAt);
   }
 
   /**

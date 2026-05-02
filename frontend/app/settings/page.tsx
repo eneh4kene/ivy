@@ -3,19 +3,78 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
 import { useAuthStore } from '@/lib/store/auth.store'
-import { getTierName, getTierPrice, getTierFeatures } from '@/lib/permissions'
-import api from '@/lib/api'
-import type { UpdateProfileInput, Charity } from '@/lib/types'
+import { getTierName, getTierPrice } from '@/lib/permissions'
+import { useCurrencyStore } from '@/lib/store/currency.store'
+import api, { buddyApi } from '@/lib/api'
+import type { UpdateProfileInput, AccountabilityBuddy } from '@/lib/types'
+import { User, Phone, Clock, Target, CreditCard, Trash2, Download, CheckCircle2, AlertCircle, ChevronRight, Users } from 'lucide-react'
+
+function SectionCard({ title, description, icon: Icon, children }: {
+  title: string
+  description?: string
+  icon: React.ElementType
+  children: React.ReactNode
+}) {
+  return (
+    <div className="bg-card border border-border rounded-xl overflow-hidden">
+      <div className="p-5 border-b border-border flex items-center gap-3">
+        <div className="w-9 h-9 rounded-lg bg-muted flex items-center justify-center">
+          <Icon className="w-4.5 h-4.5 text-muted-foreground" />
+        </div>
+        <div>
+          <h2 className="font-semibold">{title}</h2>
+          {description && <p className="text-xs text-muted-foreground mt-0.5">{description}</p>}
+        </div>
+      </div>
+      <div className="p-5">{children}</div>
+    </div>
+  )
+}
+
+function Toast({ message, type }: { message: string; type: 'success' | 'error' }) {
+  return (
+    <div className={`fixed bottom-6 right-6 flex items-center gap-3 px-4 py-3 rounded-xl border shadow-2xl z-50 animate-fade-in ${
+      type === 'success'
+        ? 'bg-primary/10 border-primary/25 text-primary'
+        : 'bg-destructive/10 border-destructive/25 text-destructive'
+    }`}>
+      {type === 'success'
+        ? <CheckCircle2 className="w-4 h-4 flex-shrink-0" />
+        : <AlertCircle className="w-4 h-4 flex-shrink-0" />}
+      <span className="text-sm font-medium">{message}</span>
+    </div>
+  )
+}
+
+const selectClass = "flex h-11 w-full rounded-lg border border-input bg-input px-4 py-2 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring transition-colors"
+
+const tierColors: Record<string, string> = {
+  FREE: 'text-muted-foreground',
+  PRO: 'text-primary',
+  ELITE: 'text-blue-400',
+  CONCIERGE: 'text-amber-400',
+  B2B: 'text-primary',
+}
 
 export default function SettingsPage() {
   const { user, setUser } = useAuthStore()
-  const [charities, setCharities] = useState<Charity[]>([])
+  const currency = useCurrencyStore((state) => state.currency)
+  const [, setCharities] = useState<unknown[]>([])
   const [isLoading, setIsLoading] = useState(false)
-  const [successMessage, setSuccessMessage] = useState('')
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null)
+
+  // Accountability Buddy state
+  const [buddy, setBuddy] = useState<AccountabilityBuddy | null>(null)
+  const [buddyLoading, setBuddyLoading] = useState(true)
+  const [buddyForm, setBuddyForm] = useState({ buddyName: '', buddyEmail: '', buddyPhone: '' })
+  const [buddySaving, setBuddySaving] = useState(false)
+
+  const showToast = (message: string, type: 'success' | 'error' = 'success') => {
+    setToast({ message, type })
+    setTimeout(() => setToast(null), 3000)
+  }
 
   const [profileData, setProfileData] = useState<UpdateProfileInput>({
     firstName: user?.firstName || '',
@@ -33,354 +92,366 @@ export default function SettingsPage() {
   })
 
   useEffect(() => {
-    fetchCharities()
+    api.donations.getCharities().then(setCharities).catch(console.error)
+    buddyApi.get().then((b) => setBuddy(b ?? null)).catch(console.error).finally(() => setBuddyLoading(false))
   }, [])
 
-  const fetchCharities = async () => {
-    try {
-      const data = await api.donations.getCharities()
-      setCharities(data)
-    } catch (error) {
-      console.error('Failed to fetch charities:', error)
+  useEffect(() => {
+    if (user) {
+      setProfileData({
+        firstName: user.firstName || '',
+        lastName: user.lastName || '',
+        phone: user.phone || '',
+        timezone: user.timezone || 'Europe/London',
+      })
+      setPreferencesData({
+        morningCallTime: user.morningCallTime || '07:00',
+        eveningCallTime: user.eveningCallTime || '20:00',
+        callFrequency: user.callFrequency || 7,
+        track: user.track || 'fitness',
+        goal: user.goal || '',
+      })
     }
-  }
+  }, [user])
 
   const handleProfileUpdate = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsLoading(true)
-    setSuccessMessage('')
-
     try {
-      const updatedUser = await api.users.updateProfile(profileData)
-      setUser(updatedUser)
-      setSuccessMessage('Profile updated successfully!')
-
-      setTimeout(() => setSuccessMessage(''), 3000)
-    } catch (error: any) {
-      console.error('Failed to update profile:', error)
-      alert(error.message || 'Failed to update profile')
-    } finally {
-      setIsLoading(false)
-    }
+      const updated = await api.users.updateProfile(profileData)
+      setUser(updated)
+      showToast('Profile updated successfully')
+    } catch (err: any) {
+      showToast(err.message || 'Failed to update profile', 'error')
+    } finally { setIsLoading(false) }
   }
 
   const handlePreferencesUpdate = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsLoading(true)
-    setSuccessMessage('')
-
     try {
-      const updatedUser = await api.users.updateProfile(preferencesData)
-      setUser(updatedUser)
-      setSuccessMessage('Preferences updated successfully!')
+      const updated = await api.users.updateProfile(preferencesData)
+      setUser(updated)
+      showToast('Preferences saved')
+    } catch (err: any) {
+      showToast(err.message || 'Failed to update preferences', 'error')
+    } finally { setIsLoading(false) }
+  }
 
-      setTimeout(() => setSuccessMessage(''), 3000)
-    } catch (error: any) {
-      console.error('Failed to update preferences:', error)
-      alert(error.message || 'Failed to update preferences')
-    } finally {
-      setIsLoading(false)
+  const handleBuddySet = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!buddyForm.buddyName || (!buddyForm.buddyEmail && !buddyForm.buddyPhone)) {
+      showToast('Name and at least one contact method are required', 'error')
+      return
     }
+    setBuddySaving(true)
+    try {
+      const saved = await buddyApi.set({
+        buddyName: buddyForm.buddyName,
+        buddyEmail: buddyForm.buddyEmail || undefined,
+        buddyPhone: buddyForm.buddyPhone || undefined,
+      })
+      setBuddy(saved)
+      showToast('Accountability buddy saved')
+    } catch (err: any) {
+      showToast(err.message || 'Failed to save buddy', 'error')
+    } finally { setBuddySaving(false) }
+  }
+
+  const handleBuddyRemove = async () => {
+    setBuddySaving(true)
+    try {
+      await buddyApi.remove()
+      setBuddy(null)
+      setBuddyForm({ buddyName: '', buddyEmail: '', buddyPhone: '' })
+      showToast('Accountability buddy removed')
+    } catch (err: any) {
+      showToast(err.message || 'Failed to remove buddy', 'error')
+    } finally { setBuddySaving(false) }
   }
 
   return (
-    <div className="p-8">
+    <div className="p-6 sm:p-8 max-w-3xl mx-auto">
       {/* Header */}
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold mb-2">Settings</h1>
-        <p className="text-muted-foreground">
-          Manage your account and preferences
-        </p>
+      <div className="mb-8 animate-fade-in">
+        <h1 className="text-2xl sm:text-3xl font-bold tracking-tight mb-1">Settings</h1>
+        <p className="text-muted-foreground text-sm">Manage your account and preferences</p>
       </div>
 
-      {/* Success Message */}
-      {successMessage && (
-        <div className="mb-6 p-4 bg-green-50 text-green-900 rounded-lg border border-green-200">
-          {successMessage}
-        </div>
-      )}
-
-      <div className="grid gap-6 max-w-4xl">
-        {/* Profile Settings */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Profile Information</CardTitle>
-            <CardDescription>
-              Update your personal details
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <form onSubmit={handleProfileUpdate} className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="firstName">First Name</Label>
-                  <Input
-                    id="firstName"
-                    value={profileData.firstName}
-                    onChange={(e) => setProfileData({ ...profileData, firstName: e.target.value })}
-                    required
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="lastName">Last Name</Label>
-                  <Input
-                    id="lastName"
-                    value={profileData.lastName}
-                    onChange={(e) => setProfileData({ ...profileData, lastName: e.target.value })}
-                    required
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="phone">Phone Number</Label>
+      <div className="space-y-4">
+        {/* Profile */}
+        <SectionCard title="Profile" description="Your personal information" icon={User}>
+          <form onSubmit={handleProfileUpdate} className="space-y-4">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium">First Name</label>
                 <Input
-                  id="phone"
-                  type="tel"
-                  placeholder="+44 20 1234 5678"
-                  value={profileData.phone}
-                  onChange={(e) => setProfileData({ ...profileData, phone: e.target.value })}
+                  value={profileData.firstName}
+                  onChange={(e) => setProfileData({ ...profileData, firstName: e.target.value })}
+                  required
                 />
               </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="timezone">Timezone</Label>
-                <select
-                  id="timezone"
-                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                  value={profileData.timezone}
-                  onChange={(e) => setProfileData({ ...profileData, timezone: e.target.value })}
-                >
-                  <option value="Europe/London">London (GMT)</option>
-                  <option value="Europe/Paris">Paris (CET)</option>
-                  <option value="America/New_York">New York (EST)</option>
-                  <option value="America/Los_Angeles">Los Angeles (PST)</option>
-                  <option value="Asia/Tokyo">Tokyo (JST)</option>
-                </select>
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium">Last Name</label>
+                <Input
+                  value={profileData.lastName}
+                  onChange={(e) => setProfileData({ ...profileData, lastName: e.target.value })}
+                  required
+                />
               </div>
-
-              <Button type="submit" disabled={isLoading}>
-                {isLoading ? 'Saving...' : 'Save Profile'}
-              </Button>
-            </form>
-          </CardContent>
-        </Card>
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium flex items-center gap-1.5">
+                <Phone className="w-3.5 h-3.5 text-muted-foreground" />
+                Phone Number
+              </label>
+              <Input
+                type="tel"
+                placeholder="+44 20 1234 5678"
+                value={profileData.phone}
+                onChange={(e) => setProfileData({ ...profileData, phone: e.target.value })}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium">Timezone</label>
+              <select className={selectClass} value={profileData.timezone} onChange={(e) => setProfileData({ ...profileData, timezone: e.target.value })}>
+                <option value="Europe/London">London (GMT)</option>
+                <option value="Europe/Paris">Paris (CET)</option>
+                <option value="America/New_York">New York (EST)</option>
+                <option value="America/Los_Angeles">Los Angeles (PST)</option>
+                <option value="Asia/Tokyo">Tokyo (JST)</option>
+              </select>
+            </div>
+            <Button type="submit" disabled={isLoading} size="sm">
+              {isLoading ? 'Saving…' : 'Save Profile'}
+            </Button>
+          </form>
+        </SectionCard>
 
         {/* Call Schedule */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Call Schedule</CardTitle>
-            <CardDescription>
-              Configure your daily accountability calls
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <form onSubmit={handlePreferencesUpdate} className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="morningCallTime">Morning Call Time</Label>
-                  <Input
-                    id="morningCallTime"
-                    type="time"
-                    value={preferencesData.morningCallTime}
-                    onChange={(e) => setPreferencesData({ ...preferencesData, morningCallTime: e.target.value })}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="eveningCallTime">Evening Call Time</Label>
-                  <Input
-                    id="eveningCallTime"
-                    type="time"
-                    value={preferencesData.eveningCallTime}
-                    onChange={(e) => setPreferencesData({ ...preferencesData, eveningCallTime: e.target.value })}
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="callFrequency">Calls per Week</Label>
-                <select
-                  id="callFrequency"
-                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                  value={preferencesData.callFrequency}
-                  onChange={(e) => setPreferencesData({ ...preferencesData, callFrequency: parseInt(e.target.value) })}
-                >
-                  <option value="7">Daily (7 days)</option>
-                  <option value="5">Weekdays (5 days)</option>
-                  <option value="3">3 days per week</option>
-                  <option value="1">Once per week</option>
-                </select>
-              </div>
-
-              <Button type="submit" disabled={isLoading}>
-                {isLoading ? 'Saving...' : 'Save Schedule'}
-              </Button>
-            </form>
-          </CardContent>
-        </Card>
-
-        {/* Goals & Track */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Goals & Track</CardTitle>
-            <CardDescription>
-              Define your fitness journey
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <form onSubmit={handlePreferencesUpdate} className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="track">Track</Label>
-                <select
-                  id="track"
-                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                  value={preferencesData.track}
-                  onChange={(e) => setPreferencesData({ ...preferencesData, track: e.target.value })}
-                >
-                  <option value="fitness">Fitness</option>
-                  <option value="weight_loss">Weight Loss</option>
-                  <option value="muscle_gain">Muscle Gain</option>
-                  <option value="endurance">Endurance</option>
-                  <option value="general_health">General Health</option>
-                </select>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="goal">Your Goal</Label>
-                <textarea
-                  id="goal"
-                  className="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                  placeholder="e.g., Run a marathon by end of year"
-                  value={preferencesData.goal}
-                  onChange={(e) => setPreferencesData({ ...preferencesData, goal: e.target.value })}
+        <SectionCard title="Call Schedule" description="Configure your daily AI accountability calls" icon={Clock}>
+          <form onSubmit={handlePreferencesUpdate} className="space-y-4">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium">Morning Call</label>
+                <Input
+                  type="time"
+                  value={preferencesData.morningCallTime}
+                  onChange={(e) => setPreferencesData({ ...preferencesData, morningCallTime: e.target.value })}
                 />
               </div>
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium">Evening Call</label>
+                <Input
+                  type="time"
+                  value={preferencesData.eveningCallTime}
+                  onChange={(e) => setPreferencesData({ ...preferencesData, eveningCallTime: e.target.value })}
+                />
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium">Calls per Week</label>
+              <select className={selectClass} value={preferencesData.callFrequency} onChange={(e) => setPreferencesData({ ...preferencesData, callFrequency: parseInt(e.target.value) })}>
+                <option value="7">Daily (7 days)</option>
+                <option value="5">Weekdays (5 days)</option>
+                <option value="3">3 days per week</option>
+                <option value="1">Once per week</option>
+              </select>
+            </div>
+            <Button type="submit" disabled={isLoading} size="sm">
+              {isLoading ? 'Saving…' : 'Save Schedule'}
+            </Button>
+          </form>
+        </SectionCard>
 
-              <Button type="submit" disabled={isLoading}>
-                {isLoading ? 'Saving...' : 'Save Goals'}
-              </Button>
-            </form>
-          </CardContent>
-        </Card>
+        {/* Goals & Track */}
+        <SectionCard title="Goals & Track" description="Define your wellness journey" icon={Target}>
+          <form onSubmit={handlePreferencesUpdate} className="space-y-4">
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium">Accountability Track</label>
+              <select className={selectClass} value={preferencesData.track} onChange={(e) => setPreferencesData({ ...preferencesData, track: e.target.value })}>
+                <option value="fitness">Fitness — movement, exercise, physical consistency</option>
+                <option value="focus">Focus — deep work, learning, cognitive habits</option>
+                <option value="sleep">Sleep — sleep hygiene, bedtime routines, recovery</option>
+                <option value="balance">Balance — meditation, journaling, broader wellness</option>
+              </select>
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium">Your Goal</label>
+              <textarea
+                className="flex min-h-[80px] w-full rounded-lg border border-input bg-input px-4 py-2.5 text-sm text-foreground placeholder:text-muted-foreground/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring transition-colors"
+                placeholder="e.g., Run a marathon by end of year"
+                value={preferencesData.goal}
+                onChange={(e) => setPreferencesData({ ...preferencesData, goal: e.target.value })}
+              />
+            </div>
+            <Button type="submit" disabled={isLoading} size="sm">
+              {isLoading ? 'Saving…' : 'Save Goals'}
+            </Button>
+          </form>
+        </SectionCard>
 
         {/* Subscription */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Subscription</CardTitle>
-            <CardDescription>
-              Manage your plan and billing
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              <div className="flex items-center justify-between p-4 border rounded-lg bg-gradient-to-r from-primary/5 to-purple/5">
-                <div className="flex-1">
-                  <p className="text-sm text-muted-foreground mb-1">Current Plan</p>
-                  <p className="text-xl font-bold">
-                    {user && getTierName(user.subscriptionTier)}
-                  </p>
-                  <p className="text-sm text-muted-foreground capitalize mt-1">
-                    {user?.subscriptionStatus}
-                  </p>
-                </div>
-                <div className="text-right">
-                  <p className="text-2xl font-bold text-primary">
-                    {user && getTierPrice(user.subscriptionTier)}
-                  </p>
-                  <Link href="/pricing" className="mt-2 block">
-                    <Button variant="outline" size="sm">
-                      {user?.subscriptionTier === 'FREE' || user?.subscriptionTier === 'PRO'
-                        ? 'Upgrade Plan'
-                        : 'View Plans'}
-                    </Button>
-                  </Link>
-                </div>
+        <SectionCard title="Subscription" description="Manage your plan and billing" icon={CreditCard}>
+          <div className="space-y-4">
+            <div className="flex items-center justify-between p-4 rounded-xl bg-muted/40 border border-border">
+              <div>
+                <p className="text-xs text-muted-foreground mb-1">Current Plan</p>
+                <p className={`text-xl font-bold tracking-tight ${user ? tierColors[user.subscriptionTier] : ''}`}>
+                  {user && getTierName(user.subscriptionTier)}
+                </p>
+                <p className="text-xs text-muted-foreground capitalize mt-0.5">{user?.subscriptionStatus}</p>
               </div>
-
-              {user && (user.subscriptionTier === 'FREE' || user.subscriptionTier === 'PRO') && (
-                <div className="p-4 bg-gradient-to-br from-primary/10 to-purple/10 rounded-lg border border-primary/20">
-                  <p className="font-semibold mb-3">
-                    {user.subscriptionTier === 'FREE'
-                      ? 'Upgrade to Ivy Pro or higher to unlock:'
-                      : 'Upgrade to Ivy Elite for:'}
-                  </p>
-                  <ul className="space-y-2 text-sm mb-4">
-                    {user.subscriptionTier === 'FREE' && (
-                      <>
-                        <li className="flex items-start gap-2">
-                          <svg className="w-5 h-5 text-primary flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                          </svg>
-                          <span>2 AI calls per week</span>
-                        </li>
-                        <li className="flex items-start gap-2">
-                          <svg className="w-5 h-5 text-primary flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                          </svg>
-                          <span>£20/month impact wallet</span>
-                        </li>
-                        <li className="flex items-start gap-2">
-                          <svg className="w-5 h-5 text-primary flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                          </svg>
-                          <span>Energy & mood tracking</span>
-                        </li>
-                      </>
-                    )}
-                    {user.subscriptionTier === 'PRO' && (
-                      <>
-                        <li className="flex items-start gap-2">
-                          <svg className="w-5 h-5 text-purple-600 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                          </svg>
-                          <span>4 AI calls per week (vs 2)</span>
-                        </li>
-                        <li className="flex items-start gap-2">
-                          <svg className="w-5 h-5 text-purple-600 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                          </svg>
-                          <span>Full transformation tracking with life markers</span>
-                        </li>
-                        <li className="flex items-start gap-2">
-                          <svg className="w-5 h-5 text-purple-600 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                          </svg>
-                          <span>Calendar integration & Ivy Circle community</span>
-                        </li>
-                      </>
-                    )}
-                  </ul>
-                  <Link href="/pricing" className="block">
-                    <Button className="w-full">
-                      {user.subscriptionTier === 'FREE' ? 'Upgrade to Pro' : 'Upgrade to Elite'}
-                    </Button>
-                  </Link>
-                </div>
-              )}
+              <div className="text-right">
+                <p className="text-2xl font-bold tabular-nums tracking-tight">
+                  {user && getTierPrice(user.subscriptionTier, currency)}
+                </p>
+                <Link href="/pricing">
+                  <Button variant="outline" size="sm" className="mt-2">
+                    {user?.subscriptionTier === 'CONCIERGE' ? 'View Plans' : 'Upgrade'}
+                    <ChevronRight className="w-3.5 h-3.5 ml-1" />
+                  </Button>
+                </Link>
+              </div>
             </div>
-          </CardContent>
-        </Card>
+
+            {user && (user.subscriptionTier === 'FREE' || user.subscriptionTier === 'PRO') && (
+              <div className="p-4 rounded-xl border border-primary/20 bg-primary/5">
+                <p className="text-sm font-semibold mb-2.5">
+                  {user.subscriptionTier === 'FREE' ? 'Choose a plan to continue after your trial:' : 'Upgrade to Ivy Plus for:'}
+                </p>
+                <ul className="space-y-1.5 text-sm text-muted-foreground mb-4">
+                  {(user.subscriptionTier === 'FREE'
+                    ? [`${getTierPrice('PRO', currency)} — complete AI experience`, `Impact wallet included`, '14-day free trial, no card required']
+                    : [`Larger impact wallet (${currency === 'USD' ? '$55' : '£45'}/month)`, 'Ivy Circles — peer group coaching sessions', 'Quarterly 1-on-1 with peer coach']
+                  ).map(f => (
+                    <li key={f} className="flex items-center gap-2">
+                      <CheckCircle2 className="w-3.5 h-3.5 text-primary flex-shrink-0" />
+                      {f}
+                    </li>
+                  ))}
+                </ul>
+                <Link href="/pricing">
+                  <Button className="w-full" size="sm">
+                    {user.subscriptionTier === 'FREE' ? 'Choose a plan' : 'Upgrade to Ivy Plus'}
+                    <ChevronRight className="w-3.5 h-3.5 ml-1.5" />
+                  </Button>
+                </Link>
+              </div>
+            )}
+          </div>
+        </SectionCard>
+
+        {/* Accountability Buddy */}
+        <div id="buddy" className="rounded-xl border border-border bg-card overflow-hidden">
+          <div className="p-5 border-b border-border flex items-center gap-3">
+            <div className="w-9 h-9 rounded-lg bg-muted flex items-center justify-center">
+              <Users className="w-4.5 h-4.5 text-muted-foreground" />
+            </div>
+            <div>
+              <h2 className="font-semibold">Accountability Buddy</h2>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Someone who gets a weekly digest of your progress — no login needed
+              </p>
+            </div>
+          </div>
+          <div className="p-5">
+            {buddyLoading ? (
+              <div className="space-y-2">
+                <div className="skeleton h-4 w-40" />
+                <div className="skeleton h-4 w-56" />
+              </div>
+            ) : buddy && buddy.isActive ? (
+              <div className="space-y-4">
+                <div className="p-4 rounded-xl bg-muted/40 border border-border space-y-2">
+                  <div className="flex items-center justify-between">
+                    <p className="font-medium text-sm">{buddy.buddyName}</p>
+                    <span className="text-[11px] px-2 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20">Active</span>
+                  </div>
+                  {buddy.buddyEmail && (
+                    <p className="text-xs text-muted-foreground">{buddy.buddyEmail}</p>
+                  )}
+                  {buddy.buddyPhone && (
+                    <p className="text-xs text-muted-foreground">WhatsApp: {buddy.buddyPhone}</p>
+                  )}
+                  {buddy.lastDigestAt && (
+                    <p className="text-xs text-muted-foreground">
+                      Last digest: {new Date(buddy.lastDigestAt).toLocaleDateString('en-GB', { weekday: 'short', month: 'short', day: 'numeric' })}
+                    </p>
+                  )}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Every Sunday at 9am, {buddy.buddyName} receives your streak, workouts, donations, and any highlights.
+                </p>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="text-destructive hover:text-destructive hover:border-destructive/30 hover:bg-destructive/5"
+                  onClick={handleBuddyRemove}
+                  disabled={buddySaving}
+                >
+                  <Trash2 className="w-3.5 h-3.5 mr-2" />
+                  {buddySaving ? 'Removing…' : 'Remove buddy'}
+                </Button>
+              </div>
+            ) : (
+              <form onSubmit={handleBuddySet} className="space-y-4">
+                <p className="text-sm text-muted-foreground">
+                  Nominate someone to receive a weekly digest of your progress.
+                  Social accountability without surveillance.
+                </p>
+                <div className="space-y-1.5">
+                  <label className="text-sm font-medium">Their Name</label>
+                  <Input
+                    placeholder="e.g., Alex Smith"
+                    value={buddyForm.buddyName}
+                    onChange={(e) => setBuddyForm({ ...buddyForm, buddyName: e.target.value })}
+                    required
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-sm font-medium">Their Email <span className="text-muted-foreground font-normal">(optional)</span></label>
+                  <Input
+                    type="email"
+                    placeholder="alex@example.com"
+                    value={buddyForm.buddyEmail}
+                    onChange={(e) => setBuddyForm({ ...buddyForm, buddyEmail: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-sm font-medium">Their WhatsApp <span className="text-muted-foreground font-normal">(optional)</span></label>
+                  <Input
+                    type="tel"
+                    placeholder="+44 7700 900000"
+                    value={buddyForm.buddyPhone}
+                    onChange={(e) => setBuddyForm({ ...buddyForm, buddyPhone: e.target.value })}
+                  />
+                </div>
+                <p className="text-xs text-muted-foreground">At least one of email or WhatsApp is required.</p>
+                <Button type="submit" size="sm" disabled={buddySaving}>
+                  {buddySaving ? 'Saving…' : 'Add accountability buddy'}
+                </Button>
+              </form>
+            )}
+          </div>
+        </div>
 
         {/* Account Actions */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Account</CardTitle>
-            <CardDescription>
-              Manage your account settings
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-3">
-              <Button variant="outline" className="w-full justify-start" disabled>
-                Export My Data
-              </Button>
-              <Button variant="outline" className="w-full justify-start text-destructive hover:text-destructive" disabled>
-                Delete Account
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
+        <SectionCard title="Account" icon={Trash2}>
+          <div className="space-y-2.5">
+            <Button variant="outline" className="w-full justify-start" size="sm" disabled>
+              <Download className="w-4 h-4 mr-2 text-muted-foreground" />
+              Export My Data
+            </Button>
+            <Button variant="outline" className="w-full justify-start text-destructive hover:text-destructive hover:border-destructive/30 hover:bg-destructive/5" size="sm" disabled>
+              <Trash2 className="w-4 h-4 mr-2" />
+              Delete Account
+            </Button>
+          </div>
+        </SectionCard>
       </div>
+
+      {toast && <Toast message={toast.message} type={toast.type} />}
     </div>
   )
 }

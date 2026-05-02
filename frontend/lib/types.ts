@@ -8,6 +8,8 @@ export interface User {
   firstName: string
   lastName: string
   timezone: string
+  region: string      // "GB" | "US"
+  currency: string    // "GBP" | "USD"
   profileImage?: string
   subscriptionTier: SubscriptionTier
   subscriptionStatus: string
@@ -122,6 +124,11 @@ export interface Streak {
     sevenDayClaimed: boolean
     thirtyDayClaimed: boolean
     ninetyDayClaimed: boolean
+  }
+  graceDays: {
+    balance: number
+    used: number
+    log: Array<{ date: string; reason: string; earned?: number; used?: number }>
   }
 }
 
@@ -287,4 +294,88 @@ export interface CreateLifeMarkerInput {
   marker: string
   category: 'physical' | 'mental' | 'social' | 'professional'
   significance: 'small' | 'medium' | 'major'
+}
+
+// Season & Sprint types
+export type SeasonStatus = 'ACTIVE' | 'CLOSING' | 'CLOSED'
+export type SprintStatus = 'ACTIVE' | 'COMPLETED'
+
+export interface Sprint {
+  id: string
+  seasonId: string
+  number: number
+  startDate: string
+  endDate: string
+  status: SprintStatus
+  completedAt?: string
+}
+
+export interface Season {
+  id: string
+  userId: string
+  number: number
+  title?: string
+  goal: string
+  startDate: string
+  endDate: string
+  status: SeasonStatus
+  closedAt?: string
+  arcSummary?: string
+  nextGoalSuggestions?: string
+  sprints: Sprint[]
+  createdAt: string
+  updatedAt: string
+}
+
+// Call types
+export type CallStatus = 'SCHEDULED' | 'IN_PROGRESS' | 'COMPLETED' | 'NO_ANSWER' | 'FAILED' | 'CANCELLED'
+export type CallType = 'MORNING_PLANNING' | 'EVENING_REVIEW' | 'RESCUE' | 'WEEKLY_PLANNING' | 'MONTHLY_CHECKIN' | 'ONBOARDING' | 'SEASON_CLOSE'
+
+export interface Call {
+  id: string
+  userId: string
+  callType: CallType
+  scheduledAt: string
+  startedAt?: string
+  endedAt?: string
+  duration?: number
+  status: CallStatus
+  retellCallId?: string
+  transcript?: string
+  outcome?: string
+  sentiment?: string
+  createdAt: string
+}
+
+// Impact Story types
+export interface ImpactStory {
+  id: string
+  userId: string
+  textNote: string
+  photoUrl?: string
+  audioUrl?: string
+  videoUrl?: string
+  charityName: string
+  totalDonated: number
+  season?: number
+  createdAt: string
+}
+
+// Input types
+export interface CreateSeasonInput {
+  goal: string
+  title?: string
+  startDate?: string
+}
+
+export interface AccountabilityBuddy {
+  id: string
+  userId: string
+  buddyName: string
+  buddyEmail?: string
+  buddyPhone?: string
+  isActive: boolean
+  lastDigestAt?: string
+  createdAt: string
+  updatedAt: string
 }

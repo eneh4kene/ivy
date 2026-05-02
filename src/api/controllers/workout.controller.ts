@@ -1,11 +1,10 @@
-import { Request, Response, NextFunction } from 'express';
+import { Response, NextFunction } from 'express';
 import workoutService from '../../services/workout.service';
 import { sendSuccess, sendCreated } from '../../utils/response';
 import {
   CreateWorkoutInput,
   UpdateWorkoutInput,
   CompleteWorkoutInput,
-  GetWorkoutByIdInput,
   GetWorkoutsQueryInput,
 } from '../../types/workout.schema';
 import { AuthRequest } from '../../middleware/auth';
@@ -16,7 +15,7 @@ class WorkoutController {
    * POST /api/workouts
    */
   async createWorkout(
-    req: AuthRequest<{}, {}, CreateWorkoutInput>,
+    req: AuthRequest,
     res: Response,
     next: NextFunction
   ): Promise<void> {
@@ -25,7 +24,7 @@ class WorkoutController {
         throw new Error('User not authenticated');
       }
 
-      const workout = await workoutService.createWorkout(req.user.id, req.body);
+      const workout = await workoutService.createWorkout(req.user.id, req.body as CreateWorkoutInput);
 
       sendCreated(res, workout);
     } catch (error) {
@@ -38,7 +37,7 @@ class WorkoutController {
    * GET /api/workouts/:id
    */
   async getWorkoutById(
-    req: AuthRequest<GetWorkoutByIdInput>,
+    req: AuthRequest,
     res: Response,
     next: NextFunction
   ): Promise<void> {
@@ -60,7 +59,7 @@ class WorkoutController {
    * GET /api/workouts
    */
   async getUserWorkouts(
-    req: AuthRequest<{}, {}, {}, GetWorkoutsQueryInput>,
+    req: AuthRequest,
     res: Response,
     next: NextFunction
   ): Promise<void> {
@@ -69,7 +68,7 @@ class WorkoutController {
         throw new Error('User not authenticated');
       }
 
-      const result = await workoutService.getUserWorkouts(req.user.id, req.query);
+      const result = await workoutService.getUserWorkouts(req.user.id, req.query as GetWorkoutsQueryInput);
 
       sendSuccess(res, result.workouts, 200, result.meta);
     } catch (error) {
@@ -82,7 +81,7 @@ class WorkoutController {
    * PATCH /api/workouts/:id
    */
   async updateWorkout(
-    req: AuthRequest<GetWorkoutByIdInput, {}, UpdateWorkoutInput>,
+    req: AuthRequest,
     res: Response,
     next: NextFunction
   ): Promise<void> {
@@ -91,7 +90,7 @@ class WorkoutController {
         throw new Error('User not authenticated');
       }
 
-      const workout = await workoutService.updateWorkout(req.params.id, req.user.id, req.body);
+      const workout = await workoutService.updateWorkout(req.params.id, req.user.id, req.body as UpdateWorkoutInput);
 
       sendSuccess(res, workout);
     } catch (error) {
@@ -104,7 +103,7 @@ class WorkoutController {
    * POST /api/workouts/:id/complete
    */
   async completeWorkout(
-    req: AuthRequest<GetWorkoutByIdInput, {}, CompleteWorkoutInput>,
+    req: AuthRequest,
     res: Response,
     next: NextFunction
   ): Promise<void> {
@@ -113,7 +112,7 @@ class WorkoutController {
         throw new Error('User not authenticated');
       }
 
-      const workout = await workoutService.completeWorkout(req.params.id, req.user.id, req.body);
+      const workout = await workoutService.completeWorkout(req.params.id, req.user.id, req.body as CompleteWorkoutInput);
 
       sendSuccess(res, workout);
     } catch (error) {
@@ -126,7 +125,7 @@ class WorkoutController {
    * DELETE /api/workouts/:id
    */
   async deleteWorkout(
-    req: AuthRequest<GetWorkoutByIdInput>,
+    req: AuthRequest,
     res: Response,
     next: NextFunction
   ): Promise<void> {

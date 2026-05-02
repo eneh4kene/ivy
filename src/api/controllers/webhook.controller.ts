@@ -1,9 +1,10 @@
 import { Request, Response, NextFunction } from 'express';
+import Stripe from 'stripe';
 import callService from '../../services/call.service';
 import messagingService from '../../services/messaging.service';
+import paymentService from '../../services/payment.service';
 import { sendSuccess } from '../../utils/response';
 import logger from '../../utils/logger';
-import crypto from 'crypto';
 import { config } from '../../config';
 
 class WebhookController {
@@ -153,17 +154,18 @@ class WebhookController {
     next: NextFunction
   ): Promise<void> {
     try {
-      const sig = req.headers['stripe-signature'] as string;
+      let event = req.body;
 
-      // Verify webhook signature
-      if (config.stripe.webhookSecret) {
+      // Verify webhook signature if secret is configured
+      if (config.stripe.webhookSecret && config.stripe.secretKey) {
+        const sig = req.headers['stripe-signature'] as string;
+        if (!sig) {
+          res.status(400).send('Missing stripe-signature header');
+          return;
+        }
         try {
-          // In production, you would verify the signature:
-          // const event = stripe.webhooks.constructEvent(
-          //   req.body,
-          //   sig,
-          //   config.stripe.webhookSecret
-          // );
+          const stripe = new Stripe(config.stripe.secretKey, { apiVersion: '2023-10-16' });
+          event = stripe.webhooks.constructEvent(req.body, sig, config.stripe.webhookSecret);
         } catch (err) {
           logger.error('Stripe webhook signature verification failed:', err);
           res.status(400).send('Webhook signature verification failed');
@@ -171,38 +173,32 @@ class WebhookController {
         }
       }
 
-      const event = req.body;
-
       logger.info(`Stripe webhook received: ${event.type}`);
 
       switch (event.type) {
         case 'customer.subscription.created':
           // Handle new subscription
-          logger.info('New subscription created:', event.data.object.id);
-          // Update user's subscription tier in database
+          await paymentService.handleSubscriptionCreated(event.data.object);
           break;
 
         case 'customer.subscription.updated':
           // Handle subscription update (e.g., plan change)
-          logger.info('Subscription updated:', event.data.object.id);
+          await paymentService.handleSubscriptionUpdated(event.data.object);
           break;
 
         case 'customer.subscription.deleted':
           // Handle subscription cancellation
-          logger.info('Subscription cancelled:', event.data.object.id);
-          // Update user's subscription status
+          await paymentService.handleSubscriptionDeleted(event.data.object);
           break;
 
         case 'invoice.payment_succeeded':
           // Handle successful payment
-          logger.info('Payment succeeded:', event.data.object.id);
-          // Could trigger welcome message or renewal confirmation
+          await paymentService.handlePaymentSucceeded(event.data.object);
           break;
 
         case 'invoice.payment_failed':
           // Handle failed payment
-          logger.error('Payment failed:', event.data.object.id);
-          // Send notification to user about payment failure
+          await paymentService.handlePaymentFailed(event.data.object);
           break;
 
         default:

@@ -1,10 +1,13 @@
 'use client'
 
+import { useState } from 'react'
+import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { SubscriptionTier } from '@/lib/types'
 import { getTierName } from '@/lib/permissions'
+import { usersApi } from '@/lib/api'
 
 interface CompleteStepProps {
   tier: SubscriptionTier
@@ -13,6 +16,20 @@ interface CompleteStepProps {
 export function CompleteStep({ tier }: CompleteStepProps) {
   const tierName = getTierName(tier)
   const isBusiness = tier === 'B2B'
+  const router = useRouter()
+  const [loading, setLoading] = useState(false)
+
+  const handleGetStarted = async () => {
+    setLoading(true)
+    try {
+      await usersApi.markAsOnboarded()
+    } catch (e) {
+      console.error('Failed to mark as onboarded:', e)
+    } finally {
+      setLoading(false)
+      router.push(isBusiness ? '/admin' : '/dashboard')
+    }
+  }
 
   return (
     <div className="space-y-6">
@@ -159,14 +176,12 @@ export function CompleteStep({ tier }: CompleteStepProps) {
             : 'Go to your dashboard to see this week\'s workouts, schedule your first AI call, and start your journey.'
           }
         </p>
-        <Link href={isBusiness ? '/admin' : '/dashboard'}>
-          <Button size="lg" className="w-full md:w-auto">
-            {isBusiness ? 'View Admin Dashboard' : 'Go to My Dashboard'}
-            <svg className="w-4 h-4 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
-            </svg>
-          </Button>
-        </Link>
+        <Button size="lg" className="w-full md:w-auto" onClick={handleGetStarted} disabled={loading}>
+          {loading ? 'Setting up...' : (isBusiness ? 'View Admin Dashboard' : 'Go to My Dashboard')}
+          <svg className="w-4 h-4 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+          </svg>
+        </Button>
       </div>
 
       {!isBusiness && (
@@ -182,6 +197,16 @@ export function CompleteStep({ tier }: CompleteStepProps) {
               </p>
             </div>
           </div>
+        </div>
+      )}
+
+      {!isBusiness && (
+        <div className="mt-6 p-4 rounded-xl border border-border bg-muted/20 text-center">
+          <p className="text-sm font-medium mb-1">Want someone in your corner?</p>
+          <p className="text-xs text-muted-foreground mb-3">Add an accountability buddy — they'll get a weekly update on your progress.</p>
+          <Link href="/settings#buddy">
+            <Button variant="outline" size="sm">Add a buddy later</Button>
+          </Link>
         </div>
       )}
     </div>
