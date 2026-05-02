@@ -9,7 +9,8 @@ import { getTierName, getTierPrice } from '@/lib/permissions'
 import { useCurrencyStore } from '@/lib/store/currency.store'
 import api, { buddyApi } from '@/lib/api'
 import type { UpdateProfileInput, AccountabilityBuddy } from '@/lib/types'
-import { User, Phone, Clock, Target, CreditCard, Trash2, Download, CheckCircle2, AlertCircle, ChevronRight, Users } from 'lucide-react'
+import { User, Phone, Clock, Target, CreditCard, Trash2, Download, CheckCircle2, AlertCircle, ChevronRight, Users, Bell, BellOff } from 'lucide-react'
+import { usePushNotifications } from '@/hooks/usePushNotifications'
 
 function SectionCard({ title, description, icon: Icon, children }: {
   title: string
@@ -64,6 +65,8 @@ export default function SettingsPage() {
   const [, setCharities] = useState<unknown[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null)
+
+  const { permission, isSubscribed, isLoading: pushLoading, subscribe, unsubscribe } = usePushNotifications()
 
   // Accountability Buddy state
   const [buddy, setBuddy] = useState<AccountabilityBuddy | null>(null)
@@ -435,6 +438,45 @@ export default function SettingsPage() {
             )}
           </div>
         </div>
+
+        {/* Push Notifications */}
+        {permission !== 'unsupported' && (
+          <SectionCard
+            title="Notifications"
+            description="Push alerts on this device — streak warnings, missed calls, baton drops"
+            icon={Bell}
+          >
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-foreground">
+                  {isSubscribed ? 'Notifications on' : 'Notifications off'}
+                </p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  {permission === 'denied'
+                    ? 'Blocked in browser — enable in your device settings'
+                    : isSubscribed
+                    ? 'You\'ll be notified on this device'
+                    : 'Enable to get streak warnings and call reminders'}
+                </p>
+              </div>
+              <Button
+                size="sm"
+                variant={isSubscribed ? 'outline' : 'default'}
+                onClick={isSubscribed ? unsubscribe : subscribe}
+                disabled={pushLoading || permission === 'denied'}
+                className={isSubscribed ? '' : 'bg-emerald-500 hover:bg-emerald-600 text-black'}
+              >
+                {pushLoading ? (
+                  <span className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                ) : isSubscribed ? (
+                  <><BellOff className="w-3.5 h-3.5 mr-1.5" />Turn off</>
+                ) : (
+                  <><Bell className="w-3.5 h-3.5 mr-1.5" />Turn on</>
+                )}
+              </Button>
+            </div>
+          </SectionCard>
+        )}
 
         {/* Account Actions */}
         <SectionCard title="Account" icon={Trash2}>

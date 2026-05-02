@@ -258,6 +258,19 @@ export const buddyApi = {
   },
 }
 
+// Push notifications API
+export const pushApi = {
+  subscribe: async (subscription: any) => {
+    const response = await client.post<ApiResponse>('/api/push/subscribe', { subscription })
+    return response.data
+  },
+
+  unsubscribe: async (data: { endpoint: string }) => {
+    const response = await client.post<ApiResponse>('/api/push/unsubscribe', data)
+    return response.data
+  },
+}
+
 // Export all APIs
 export const api = {
   auth: authApi,
@@ -269,6 +282,7 @@ export const api = {
   calls: callsApi,
   seasons: seasonsApi,
   buddy: buddyApi,
+  push: pushApi,
 }
 
 export default api

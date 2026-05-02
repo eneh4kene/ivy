@@ -78,6 +78,7 @@ model User {
   seasons          Season[]
   impactStories    ImpactStory[]
   accountabilityBuddy AccountabilityBuddy?
+  pushSubscriptions   PushSubscription[]
 
   @@index([email])
   @@index([companyId])
@@ -615,6 +616,30 @@ model AccountabilityBuddy {
   lastDigestAt DateTime?
 
   @@map("accountability_buddies")
+}
+
+// ============================================
+// PUSH NOTIFICATIONS
+// ============================================
+
+model PushSubscription {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  userId   String
+  user     User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  endpoint  String  @unique
+  p256dh    String  // Public key
+  auth      String  // Auth secret
+  userAgent String? // Device hint for display
+
+  isActive  Boolean  @default(true)
+  lastUsed  DateTime?
+
+  @@index([userId])
+  @@map("push_subscriptions")
 }
 
 // ============================================
