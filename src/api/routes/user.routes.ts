@@ -52,6 +52,28 @@ router.post(
 );
 
 /**
+ * @route   GET /api/users/me/export
+ * @desc    GDPR data export — returns all user data as JSON
+ * @access  Private
+ */
+router.get(
+  '/me/export',
+  authenticate,
+  userController.exportMyData
+);
+
+/**
+ * @route   DELETE /api/users/me
+ * @desc    GDPR hard delete — permanently erases account and all data
+ * @access  Private
+ */
+router.delete(
+  '/me',
+  authenticate,
+  userController.deleteMyAccount
+);
+
+/**
  * @route   GET /api/users/:id
  * @desc    Get user by ID
  * @access  Private

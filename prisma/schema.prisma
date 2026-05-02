@@ -680,3 +680,24 @@ model CircleSprintSession {
   @@index([sprintId])
   @@map("circle_sprint_sessions")
 }
+
+// ============================================
+// API USAGE TRACKING
+// ============================================
+
+model ApiUsageLog {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
+
+  userId    String?
+  service   String  // "retell" | "twilio" | "sendgrid" | "whatsapp"
+  operation String  // "call" | "sms" | "email" | "whatsapp_message"
+  units     Float   // seconds for calls, count for messages
+  costGbp   Float   // estimated cost in GBP
+  metadata  String? @db.Text // JSON — call ID, message ID, etc.
+
+  @@index([userId])
+  @@index([service, createdAt])
+  @@index([createdAt])
+  @@map("api_usage_logs")
+}

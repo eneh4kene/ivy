@@ -1,8 +1,11 @@
 import { Request, Response, NextFunction } from 'express';
 import Stripe from 'stripe';
+import crypto from 'crypto';
 import callService from '../../services/call.service';
 import messagingService from '../../services/messaging.service';
 import paymentService from '../../services/payment.service';
+import { logUsage } from '../../services/usage.service';
+import { serverAnalytics } from '../../lib/analytics';
 import { sendSuccess } from '../../utils/response';
 import logger from '../../utils/logger';
 import { config } from '../../config';
@@ -18,6 +21,25 @@ class WebhookController {
     next: NextFunction
   ): Promise<void> {
     try {
+      // Verify Retell webhook signature
+      const secret = process.env.RETELL_WEBHOOK_SECRET
+      if (secret) {
+        const signature = req.headers['x-retell-signature'] as string
+        const timestamp = req.headers['x-retell-timestamp'] as string
+        if (!signature || !timestamp) {
+          res.status(401).send('Missing Retell signature headers')
+          return
+        }
+        const expected = crypto
+          .createHmac('sha256', secret)
+          .update(`${timestamp}.${JSON.stringify(req.body)}`)
+          .digest('hex')
+        if (!crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expected))) {
+          res.status(401).send('Invalid Retell signature')
+          return
+        }
+      }
+
       const { event, call } = req.body;
 
       logger.info(`Retell webhook received: ${event}`, { callId: call?.call_id });
@@ -45,17 +67,30 @@ class WebhookController {
           break;
 
         case 'call_analyzed':
-          // Update call with transcript and sentiment
           if (call.metadata?.callId) {
+            const durationSecs = call.call_analysis?.call_duration ?? 0
+            const outcome = call.call_analysis?.user_sentiment ?? 'neutral'
+
             await callService.updateCallStatus(call.metadata.callId, 'COMPLETED', {
               transcript: call.transcript || '',
-              sentiment: call.call_analysis?.user_sentiment || 'neutral',
-            });
+              sentiment: outcome,
+            })
 
-            // Process call insights (e.g., if user mentioned skipping)
-            if (call.transcript?.toLowerCase().includes('skip')) {
-              logger.info(`User mentioned skipping in call ${call.metadata.callId}`);
-              // Could trigger rescue flow here
+            // Log Retell usage cost
+            const durationMins = durationSecs / 60
+            await logUsage('retell', 'call', durationMins, call.metadata?.userId, {
+              callId: call.call_id,
+              callType: call.metadata?.callType,
+            })
+
+            // Server-side analytics
+            if (call.metadata?.userId) {
+              serverAnalytics.callCompleted(
+                call.metadata.userId,
+                call.metadata?.callType ?? 'unknown',
+                durationSecs,
+                outcome
+              )
             }
           }
           break;

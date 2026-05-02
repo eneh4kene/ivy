@@ -1182,3 +1182,30 @@ Full interpersonal commitment product. Concierge-first. See Concept C in Section
 
 
 Ivy · AI4E1 Ltd · Bristol, UK · Confidential
+
+
+
+
+## what do you think about this? and will it come in handy for b2b settings as well?
+
+Right now seasons are individual: one user, one goal, one arc. But a Circle is already a group with shared identity, shared sprint sessions, and shared wallet stakes in  
+    some activities. The logical next step is letting them own their season collectively.                                                                                     
+                                                                                                                                                                              
+    What Circle-level season customisation could look like:                                                                                                                   
+
+    Shared season goal — the Circle sets a collective arc alongside individual ones. "We are all training for a 10k together" sits above each member's personal goal. Ivy
+    references both in every call.
+
+    Custom season name — "Operation Ironman", "The January Push", whatever the group decides to call it. Shows up in the Season Close, in Impact Stories, on the Season Card.
+    Creates shared identity and something worth posting.
+
+    Custom sprint themes — each of the three sprints gets a focus the group agrees on. Sprint 1: build the base. Sprint 2: push the pace. Sprint 3: peak. The Pace Setter in
+    the Relay Season mechanic already does this partially.
+
+    Custom Circle rituals — the group decides what their Circle session looks like. Maybe they always start with a specific question. Maybe they have a tradition. Ivy learns
+    it and references it.
+
+    Custom wallet cause — the Circle votes on a shared charity for the season alongside individual choices. Creates a collective impact number at Season Close.
+
+    The key design constraint: individual customisation should never be overridden by the group. Personal goals, personal streaks, personal wallet choices remain the member's
+     own. The Circle layer sits on top, not instead of.

@@ -47,3 +47,8 @@ dump.rdb
 
 # Specstory auto-generated history
 .specstory/
+
+# Local dev files — not for repo
+ngrok.yml
+pricing_strategy.md
+recap.md
