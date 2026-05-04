@@ -4,7 +4,6 @@ import { useState, useEffect } from 'react'
 import { useAuthStore } from '@/lib/store/auth.store'
 import { useCurrencyStore } from '@/lib/store/currency.store'
 import { donationsApi } from '@/lib/api'
-import { usersApi } from '@/lib/api'
 import { Search, CheckCircle2, ExternalLink } from 'lucide-react'
 
 interface Charity {
@@ -83,10 +82,10 @@ export function CharitySelectionStep() {
       }
     }
     setSelected(next)
+    if (next.length === 0) return
     setSaving(true)
     try {
-      // Save the primary (first) charity
-      await usersApi.updateProfile({ preferredCharityId: next[0] ?? null } as any)
+      await donationsApi.setUserCharities(next)
     } catch (e) {
       console.error(e)
     } finally {

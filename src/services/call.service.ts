@@ -2,7 +2,8 @@ import prisma from '../utils/prisma';
 import { callScheduleQueue } from '../config/queues';
 import logger from '../utils/logger';
 import { NotFoundError } from '../utils/errors';
-import { addMinutes, isBefore } from 'date-fns';
+import { addMinutes, isBefore, differenceInDays } from 'date-fns';
+import seasonService from './season.service';
 
 export type CallType = 'MORNING_PLANNING' | 'EVENING_REVIEW' | 'RESCUE' | 'WEEKLY_PLANNING' | 'MONTHLY_CHECKIN' | 'ONBOARDING' | 'SEASON_CLOSE';
 
@@ -166,6 +167,16 @@ class CallService {
       }),
     ]);
 
+    const [activeSeason, currentSprint] = await Promise.all([
+      seasonService.getActiveSeason(userId),
+      seasonService.getCurrentSprint(userId),
+    ]);
+
+    const now = new Date();
+    const daysLeftInSprint = currentSprint
+      ? Math.max(0, differenceInDays(currentSprint.endDate, now))
+      : null;
+
     return {
       name: user?.firstName,
       track: user?.track,
@@ -178,6 +189,10 @@ class CallService {
       totalDonated: Number(donations._sum.amount || 0),
       charity: user?.preferredCharity?.name,
       charityImpact: user?.preferredCharity?.impactMetric,
+      seasonNumber: activeSeason?.number ?? null,
+      seasonGoal: activeSeason?.goal ?? null,
+      sprintNumber: currentSprint?.number ?? null,
+      daysLeftInSprint,
     };
   }
 

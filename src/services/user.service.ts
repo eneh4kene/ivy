@@ -3,6 +3,8 @@ import { CreateUserInput, UpdateUserInput } from '../types/user.schema';
 import { ConflictError, NotFoundError } from '../utils/errors';
 import logger from '../utils/logger';
 import { IMPACT_WALLET_MONTHLY } from '../config/pricing';
+import seasonService from './season.service';
+import callService from './call.service';
 
 class UserService {
   /**
@@ -154,18 +156,28 @@ class UserService {
    * Mark user as onboarded
    */
   async markUserAsOnboarded(userId: string) {
+    const fullUser = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, goal: true, morningCallTime: true, eveningCallTime: true },
+    });
+
     const user = await prisma.user.update({
       where: { id: userId },
-      data: {
-        isOnboarded: true,
-        onboardedAt: new Date(),
-      },
-      select: {
-        id: true,
-        isOnboarded: true,
-        onboardedAt: true,
-      },
+      data: { isOnboarded: true, onboardedAt: new Date() },
+      select: { id: true, isOnboarded: true, onboardedAt: true },
     });
+
+    // Create Season 1 from the user's goal (non-blocking)
+    if (fullUser?.goal) {
+      seasonService.createSeason(userId, { goal: fullUser.goal, title: 'Season 1' })
+        .catch((err) => logger.warn(`Failed to create Season 1 for ${userId}:`, err));
+    }
+
+    // Schedule today's calls if call times are set (non-blocking)
+    if (fullUser?.morningCallTime || fullUser?.eveningCallTime) {
+      callService.scheduleDailyCalls(userId, new Date())
+        .catch((err) => logger.warn(`Failed to schedule first calls for ${userId}:`, err));
+    }
 
     logger.info(`User onboarded: ${user.id}`);
 

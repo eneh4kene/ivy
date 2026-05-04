@@ -20,6 +20,10 @@ router.get('/charities', authenticate, donationController.getCharities);
 router.get('/charities/search', authenticate, donationController.searchCharities);
 router.get('/charities/:id', authenticate, donationController.getCharityById);
 
+// User charity selections (multi-charity wallet split)
+router.get('/user-charities', authenticate, donationController.getUserCharities);
+router.post('/user-charities', authenticate, donationController.setUserCharities);
+
 // All routes below require authentication
 router.use(authenticate);
 

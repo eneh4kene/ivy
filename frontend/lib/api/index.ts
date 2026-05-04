@@ -112,6 +112,16 @@ export const donationsApi = {
     return response.data.data ?? []
   },
 
+  setUserCharities: async (charityIds: string[]) => {
+    const response = await client.post<ApiResponse>('/api/donations/user-charities', { charityIds })
+    return response.data
+  },
+
+  getUserCharities: async () => {
+    const response = await client.get<ApiResponse<any[]>>('/api/donations/user-charities')
+    return response.data.data ?? []
+  },
+
   getAll: async (params?: any) => {
     const response = await client.get<ApiResponse<Donation[]>>('/api/donations', { params })
     return response.data.data!

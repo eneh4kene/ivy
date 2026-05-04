@@ -8,6 +8,9 @@ import prisma from './utils/prisma';
 import cron from 'node-cron';
 import buddyService from './services/buddy.service';
 import { dispatchPendingDonations } from './services/every-org.service';
+import callService from './services/call.service';
+import seasonService from './services/season.service';
+import './workers/call.processor'; // start Bull worker
 
 const PORT = config.server.port;
 
@@ -24,10 +27,36 @@ cron.schedule('0 9 * * 0', async () => {
   await buddyService.sendWeeklyDigests();
 });
 
-// 1st of every month at 2am UTC — dispatch accumulated wallet donations to charities via Every.org
+// 1st of every month at 2am UTC — dispatch accumulated wallet donations to charities
 cron.schedule('0 2 1 * *', async () => {
   logger.info('Running monthly charity donation dispatch...');
   await dispatchPendingDonations();
+});
+
+// Every day at midnight UTC — schedule today's calls for all active users
+cron.schedule('0 0 * * *', async () => {
+  logger.info('Scheduling daily calls...');
+  const users = await prisma.user.findMany({
+    where: { isActive: true, isOnboarded: true, subscriptionTier: { not: 'FREE' } },
+    select: { id: true },
+  });
+  const today = new Date();
+  let scheduled = 0;
+  for (const user of users) {
+    try {
+      await callService.scheduleDailyCalls(user.id, today);
+      scheduled++;
+    } catch (err) {
+      logger.warn(`Failed to schedule calls for ${user.id}:`, err);
+    }
+  }
+  logger.info(`Scheduled calls for ${scheduled}/${users.length} users`);
+});
+
+// Every day at 1am UTC — advance sprint and season statuses based on current date
+cron.schedule('0 1 * * *', async () => {
+  logger.info('Advancing sprint and season statuses...');
+  await seasonService.advanceStatuses();
 });
 
 // Graceful shutdown

@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import donationService from '../../services/donation.service';
 import { searchNonprofit } from '../../services/every-org.service';
+import prisma from '../../utils/prisma';
 import { sendSuccess, sendCreated } from '../../utils/response';
 import {
   GetDonationsQueryInput,
@@ -151,6 +152,39 @@ class DonationController {
     } catch (error) {
       next(error)
     }
+  }
+
+  async getUserCharities(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const charities = await prisma.userCharity.findMany({
+        where: { userId: req.user!.id },
+        include: { charity: true },
+        orderBy: { priority: 'asc' },
+      })
+      sendSuccess(res, charities)
+    } catch (error) { next(error) }
+  }
+
+  async setUserCharities(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { charityIds } = req.body as { charityIds: string[] }
+      if (!Array.isArray(charityIds) || charityIds.length === 0) {
+        res.status(400).json({ success: false, error: 'charityIds array required' }); return
+      }
+      const userId = req.user!.id
+
+      // Replace all existing selections atomically
+      await prisma.$transaction([
+        prisma.userCharity.deleteMany({ where: { userId } }),
+        ...charityIds.map((charityId, i) =>
+          prisma.userCharity.create({ data: { userId, charityId, priority: i } })
+        ),
+        // Keep preferredCharityId in sync with the primary selection
+        prisma.user.update({ where: { id: userId }, data: { preferredCharityId: charityIds[0] } }),
+      ])
+
+      sendSuccess(res, { message: 'Charities updated' })
+    } catch (error) { next(error) }
   }
 
   /**

@@ -82,6 +82,7 @@ model User {
   impactStories    ImpactStory[]
   accountabilityBuddy AccountabilityBuddy?
   pushSubscriptions   PushSubscription[]
+  charities           UserCharity[]
 
   @@index([email])
   @@index([companyId])
@@ -163,11 +164,27 @@ model Charity {
   isActive Boolean @default(true)
 
   // Relationships
-  users     User[]
-  donations Donation[]
+  users        User[]
+  donations    Donation[]
+  userCharities UserCharity[]
 
   @@index([category])
   @@map("charities")
+}
+
+model UserCharity {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
+
+  userId    String
+  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  charityId String
+  charity   Charity @relation(fields: [charityId], references: [id])
+  priority  Int     @default(0) // lower number = higher priority; wallet splits equally
+
+  @@unique([userId, charityId])
+  @@index([userId])
+  @@map("user_charities")
 }
 
 // ============================================
@@ -588,6 +605,7 @@ model Sprint {
 }
 
 enum SprintStatus {
+  UPCOMING
   ACTIVE
   COMPLETED
 }

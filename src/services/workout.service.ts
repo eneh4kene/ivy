@@ -157,21 +157,31 @@ class WorkoutService {
 
       // Fire donation — non-blocking, failure never breaks the completion flow
       try {
-        const user = await prisma.user.findUnique({
-          where: { id: userId },
-          select: { preferredCharityId: true },
+        const userCharities = await prisma.userCharity.findMany({
+          where: { userId },
+          orderBy: { priority: 'asc' },
+          select: { charityId: true },
         })
-        if (user?.preferredCharityId) {
-          const amount = await donationService.calculateDonationAmount(userId)
-          const canDonate = await donationService.canMakeDonation(userId, amount)
-          if (canDonate.allowed) {
-            await donationService.createDonation(
-              userId,
-              user.preferredCharityId,
-              amount,
-              'COMPLETION',
-              workoutId
-            )
+
+        // Fall back to preferredCharityId if no UserCharity rows yet
+        let charityIds = userCharities.map((uc) => uc.charityId)
+        if (charityIds.length === 0) {
+          const user = await prisma.user.findUnique({
+            where: { id: userId },
+            select: { preferredCharityId: true },
+          })
+          if (user?.preferredCharityId) charityIds = [user.preferredCharityId]
+        }
+
+        if (charityIds.length > 0) {
+          const totalAmount = await donationService.calculateDonationAmount(userId)
+          const perCharity = Math.round((totalAmount / charityIds.length) * 100) / 100
+
+          for (const charityId of charityIds) {
+            const canDonate = await donationService.canMakeDonation(userId, perCharity)
+            if (canDonate.allowed) {
+              await donationService.createDonation(userId, charityId, perCharity, 'COMPLETION', workoutId)
+            }
           }
         }
       } catch (donationErr) {
