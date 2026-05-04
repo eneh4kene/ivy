@@ -29,9 +29,9 @@ interface EveryOrgResult {
 }
 
 const TIER_LIMITS: Record<string, number> = {
-  FREE: 1,
-  PRO: 1,
-  ELITE: 2,
+  FREE: 2,
+  PRO: 2,
+  ELITE: 3,
   CONCIERGE: 999,
 }
 
@@ -77,8 +77,7 @@ export function CharitySelectionStep() {
       next = selected.filter((id) => id !== charityId)
     } else {
       if (selected.length >= limit) {
-        // Replace last selection if at limit (for single-pick tiers)
-        next = limit === 1 ? [charityId] : selected
+        next = selected // at limit, do nothing
       } else {
         next = [...selected, charityId]
       }
@@ -131,9 +130,10 @@ export function CharitySelectionStep() {
       <div>
         <p className="text-sm text-muted-foreground leading-relaxed">
           Every time you follow through, {walletRate} from your wallet goes to the cause you choose.
-          {!isElitePlus && ' You can change this any time in settings.'}
-          {isElitePlus && limit < 999 && ` You can choose up to ${limit} charities.`}
-          {isConcierge && ' On Concierge you can choose any registered charity.'}
+            {limit < 999
+            ? ` Choose up to ${limit} — your wallet splits equally between them.`
+            : ' Choose as many as you like — your wallet splits equally between them.'
+          }
         </p>
       </div>
 
@@ -175,10 +175,10 @@ export function CharitySelectionStep() {
       </div>
 
       {/* Every.org search — Concierge only */}
-      {isConcierge && (
+      {true && (
         <div className="border-t border-border pt-6">
           <p className="text-xs text-muted-foreground mb-3">
-            Don't see your cause? Search any registered charity.
+            Don't see your cause? Search 1M+ registered charities.
           </p>
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />

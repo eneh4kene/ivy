@@ -141,11 +141,6 @@ class DonationController {
     next: NextFunction
   ): Promise<void> {
     try {
-      const tier = req.user?.subscriptionTier
-      if (tier !== 'CONCIERGE') {
-        res.status(403).json({ success: false, error: 'Charity search is available on Ivy Concierge' })
-        return
-      }
       const q = req.query.q as string
       if (!q || q.trim().length < 2) {
         res.status(400).json({ success: false, error: 'Search query required (min 2 characters)' })
