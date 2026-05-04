@@ -148,12 +148,17 @@ model Charity {
 
   name              String
   description       String
-  category          String  // "health", "education", "environment", etc.
-  impactMetric      String  // e.g., "meals provided", "trees planted"
-  impactPerPound    String  // e.g., "2 meals per £1"
+  category          String   // "health", "education", "environment", "poverty", "animals"
+  impactMetric      String   // e.g., "meals provided", "trees planted"
+  impactPerPound    String   // e.g., "2 meals per £1"
   logoUrl           String?
   website           String?
-  everyOrgSlug      String? // Every.org nonprofit slug for payment dispatch
+  everyOrgSlug      String?  // Every.org nonprofit slug for payment dispatch
+
+  // Filtering
+  regions  String @default("[\"global\"]") @db.Text // JSON: ["GB","US","global"]
+  tracks   String @default("[]")           @db.Text // JSON: ["fitness","focus","sleep","balance"]
+  featured Boolean @default(false) // pinned to top of curated list
 
   isActive Boolean @default(true)
 

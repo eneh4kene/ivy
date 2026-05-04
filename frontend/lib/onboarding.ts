@@ -42,6 +42,14 @@ const FREE_PRO_STEPS: OnboardingStep[] = [
     estimatedMinutes: 5,
   },
   {
+    id: 'charity',
+    title: 'Choose Your Cause',
+    description: 'Your follow-through funds real-world change',
+    component: 'charity-selection',
+    required: true,
+    estimatedMinutes: 2,
+  },
+  {
     id: 'preferences',
     title: 'Preferences',
     description: 'Customize your experience',
@@ -92,6 +100,14 @@ const ELITE_STEPS: OnboardingStep[] = [
     component: 'goal-setting',
     required: true,
     estimatedMinutes: 5,
+  },
+  {
+    id: 'charity',
+    title: 'Choose Your Cause',
+    description: 'Your follow-through funds real-world change',
+    component: 'charity-selection',
+    required: true,
+    estimatedMinutes: 2,
   },
   {
     id: 'calendar',
@@ -160,6 +176,14 @@ const CONCIERGE_STEPS: OnboardingStep[] = [
     component: 'goal-setting',
     required: true,
     estimatedMinutes: 7,
+  },
+  {
+    id: 'charity',
+    title: 'Choose Your Cause',
+    description: 'Your follow-through funds real-world change',
+    component: 'charity-selection',
+    required: true,
+    estimatedMinutes: 2,
   },
   {
     id: 'life-markers',

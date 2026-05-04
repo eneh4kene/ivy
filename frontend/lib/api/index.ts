@@ -102,9 +102,14 @@ export const workoutsApi = {
 
 // Donations API
 export const donationsApi = {
-  getCharities: async () => {
-    const response = await client.get<ApiResponse<Charity[]>>('/api/donations/charities')
+  getCharities: async (params?: { region?: string; track?: string }) => {
+    const response = await client.get<ApiResponse<Charity[]>>('/api/donations/charities', { params })
     return response.data.data!
+  },
+
+  searchCharities: async (q: string) => {
+    const response = await client.get<ApiResponse<any[]>>('/api/donations/charities/search', { params: { q } })
+    return response.data.data ?? []
   },
 
   getAll: async (params?: any) => {

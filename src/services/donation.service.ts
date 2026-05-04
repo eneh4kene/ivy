@@ -434,6 +434,35 @@ class DonationService {
     });
   }
 
+  async getCharitiesForUser(region: string, track?: string) {
+    const all = await prisma.charity.findMany({
+      where: { isActive: true },
+      orderBy: [{ featured: 'desc' }, { name: 'asc' }],
+    })
+
+    // Filter by region — include global charities and region-specific ones
+    const filtered = all.filter((c) => {
+      const regions: string[] = JSON.parse(c.regions)
+      return regions.includes('global') || regions.includes(region)
+    })
+
+    // Sort by track relevance if a track is provided
+    if (track) {
+      filtered.sort((a, b) => {
+        const aRelevant = (JSON.parse(a.tracks) as string[]).includes(track)
+        const bRelevant = (JSON.parse(b.tracks) as string[]).includes(track)
+        if (aRelevant && !bRelevant) return -1
+        if (!aRelevant && bRelevant) return 1
+        // Featured first within each relevance group
+        if (a.featured && !b.featured) return -1
+        if (!a.featured && b.featured) return 1
+        return 0
+      })
+    }
+
+    return filtered
+  }
+
   /**
    * Get charity by ID
    */

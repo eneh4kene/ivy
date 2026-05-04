@@ -15,14 +15,10 @@ const router = Router();
  * @desc    Get all active charities
  * @access  Public
  */
-router.get('/charities', donationController.getCharities);
-
-/**
- * @route   GET /api/donations/charities/:id
- * @desc    Get charity by ID
- * @access  Public
- */
-router.get('/charities/:id', donationController.getCharityById);
+// authenticate first so region/tier are available for filtering
+router.get('/charities', authenticate, donationController.getCharities);
+router.get('/charities/search', authenticate, donationController.searchCharities);
+router.get('/charities/:id', authenticate, donationController.getCharityById);
 
 // All routes below require authentication
 router.use(authenticate);

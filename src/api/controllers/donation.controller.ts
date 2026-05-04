@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import donationService from '../../services/donation.service';
+import { searchNonprofit } from '../../services/every-org.service';
 import { sendSuccess, sendCreated } from '../../utils/response';
 import {
   GetDonationsQueryInput,
@@ -120,16 +121,40 @@ class DonationController {
    * GET /api/donations/charities
    */
   async getCharities(
-    _req: Request,
+    req: AuthRequest,
     res: Response,
     next: NextFunction
   ): Promise<void> {
     try {
-      const charities = await donationService.getCharities();
-
-      sendSuccess(res, charities);
+      const region = (req.query.region as string) || 'GB'
+      const track = req.query.track as string | undefined
+      const charities = await donationService.getCharitiesForUser(region, track)
+      sendSuccess(res, charities)
     } catch (error) {
-      next(error);
+      next(error)
+    }
+  }
+
+  async searchCharities(
+    req: AuthRequest,
+    res: Response,
+    next: NextFunction
+  ): Promise<void> {
+    try {
+      const tier = req.user?.subscriptionTier
+      if (tier !== 'CONCIERGE') {
+        res.status(403).json({ success: false, error: 'Charity search is available on Ivy Concierge' })
+        return
+      }
+      const q = req.query.q as string
+      if (!q || q.trim().length < 2) {
+        res.status(400).json({ success: false, error: 'Search query required (min 2 characters)' })
+        return
+      }
+      const results = await searchNonprofit(q.trim())
+      sendSuccess(res, results)
+    } catch (error) {
+      next(error)
     }
   }
 

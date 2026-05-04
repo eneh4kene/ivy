@@ -23,6 +23,7 @@ import { SeasonSetupStep } from '@/components/onboarding/steps/season-setup-step
 import { EmployeeInvitesStep } from '@/components/onboarding/steps/employee-invites-step'
 import { IntegrationsSetupStep } from '@/components/onboarding/steps/integrations-setup-step'
 import { AdminSetupStep } from '@/components/onboarding/steps/admin-setup-step'
+import { CharitySelectionStep } from '@/components/onboarding/steps/charity-selection-step'
 
 export default function OnboardingStepPage() {
   const router = useRouter()
@@ -68,6 +69,8 @@ export default function OnboardingStepPage() {
         return <TrackSelectionStep />
       case 'goal-setting':
         return <GoalSettingStep />
+      case 'charity-selection':
+        return <CharitySelectionStep />
       case 'preferences':
         return <PreferencesStep />
       case 'complete':
