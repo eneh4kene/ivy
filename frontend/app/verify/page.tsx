@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { useAuthStore } from '@/lib/store/auth.store'
+import { paymentsApi } from '@/lib/api'
 import { Leaf, CheckCircle2, XCircle, ArrowRight } from 'lucide-react'
 
 function VerifyContent() {
@@ -22,10 +23,28 @@ function VerifyContent() {
       setError('No verification token found in URL')
       return
     }
+    const promo = searchParams.get('promo')
+    const plan = searchParams.get('plan')
     verifyMagicLink(token)
-      .then(() => {
+      .then(async () => {
         setStatus('success')
-        setTimeout(() => router.push('/dashboard'), 2000)
+        const authUser = useAuthStore.getState().user
+        if (authUser?.isOnboarded) {
+          setTimeout(() => router.push('/dashboard'), 2000)
+          return
+        }
+        // Pre-selected plan (e.g. pilot link) — skip pricing page, go straight to Stripe
+        if (plan) {
+          try {
+            const session = await paymentsApi.createCheckoutSession(plan, promo ?? undefined)
+            window.location.href = session.url
+          } catch {
+            // Fall back to pricing page if checkout creation fails
+            router.push(promo ? `/pricing?promo=${promo}` : '/pricing')
+          }
+          return
+        }
+        setTimeout(() => router.push(promo ? `/pricing?promo=${promo}` : '/pricing'), 2000)
       })
       .catch((err: any) => {
         setStatus('error')
@@ -70,7 +89,9 @@ function VerifyContent() {
               )}
               <p className="text-sm text-muted-foreground flex items-center justify-center gap-1.5 mt-3">
                 <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
-                Redirecting to dashboard…
+                {searchParams.get('plan') && !useAuthStore.getState().user?.isOnboarded
+                  ? 'Taking you to checkout…'
+                  : 'Redirecting you now…'}
               </p>
             </>
           )}

@@ -14,6 +14,7 @@ type Region = 'GB' | 'US'
 function SignupForm() {
   const searchParams = useSearchParams()
   const promoCode = searchParams.get('promo') ?? undefined
+  const plan = searchParams.get('plan') ?? undefined
 
   const [firstName, setFirstName] = useState('')
   const [lastName, setLastName] = useState('')
@@ -47,14 +48,14 @@ function SignupForm() {
         region,
         currency,
       })
-      // Send magic link with promo code if present
-      await authApi.sendMagicLink({ email, promoCode })
+      // Send magic link with promo code and plan if present
+      await authApi.sendMagicLink({ email, promoCode, plan })
       setEmailSent(true)
     } catch (err: any) {
       // If user already exists (conflict), just send a magic link
       if (err?.response?.status === 409 || err?.message?.toLowerCase().includes('already exists')) {
         try {
-          await authApi.sendMagicLink({ email, promoCode })
+          await authApi.sendMagicLink({ email, promoCode, plan })
           setEmailSent(true)
           return
         } catch (linkErr: any) {

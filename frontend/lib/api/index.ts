@@ -28,7 +28,7 @@ import type {
 
 // Auth API
 export const authApi = {
-  sendMagicLink: async (data: LoginInput & { promoCode?: string }) => {
+  sendMagicLink: async (data: LoginInput & { promoCode?: string; plan?: string }) => {
     const response = await client.post<ApiResponse>('/api/auth/magic-link', data)
     return response.data
   },

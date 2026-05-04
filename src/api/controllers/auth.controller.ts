@@ -59,9 +59,9 @@ class AuthController {
     next: NextFunction
   ): Promise<void> {
     try {
-      const { email, promoCode } = req.body as { email: string; promoCode?: string };
+      const { email, promoCode, plan } = req.body as { email: string; promoCode?: string; plan?: string };
 
-      await authService.sendMagicLink(email, promoCode);
+      await authService.sendMagicLink(email, promoCode, plan);
 
       sendSuccess(res, {
         message: 'Magic link sent to your email',

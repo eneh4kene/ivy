@@ -75,7 +75,7 @@ class AuthService {
   /**
    * Send magic link email
    */
-  async sendMagicLink(email: string): Promise<void> {
+  async sendMagicLink(email: string, promoCode?: string, plan?: string): Promise<void> {
     // Check if user exists
     const user = await prisma.user.findUnique({
       where: { email: email.toLowerCase() },
@@ -93,8 +93,9 @@ class AuthService {
       data: { token, email: email.toLowerCase(), expiresAt: new Date(Date.now() + 15 * 60 * 1000) }
     });
 
-    // Create magic link URL
-    const magicLinkUrl = `${config.frontend.url}/auth/verify?token=${token}`;
+    const promoParam = promoCode ? `&promo=${encodeURIComponent(promoCode)}` : ''
+    const planParam = plan ? `&plan=${encodeURIComponent(plan)}` : ''
+    const magicLinkUrl = `${config.frontend.url}/auth/verify?token=${token}${promoParam}${planParam}`;
 
     // In development, log the magic link and skip email if SMTP fails
     if (process.env.NODE_ENV === 'development') {
