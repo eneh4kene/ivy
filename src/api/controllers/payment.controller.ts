@@ -24,7 +24,7 @@ class PaymentController {
         return;
       }
 
-      const { tier, currency: bodyCurrency } = req.body;
+      const { tier, currency: bodyCurrency, promoCode } = req.body;
 
       if (!tier || !['PRO', 'ELITE', 'CONCIERGE', 'B2B'].includes(tier)) {
         sendError(res, 'Invalid subscription tier', 400);
@@ -51,7 +51,8 @@ class PaymentController {
         tier as SubscriptionTier,
         successUrl,
         cancelUrl,
-        currency
+        currency,
+        promoCode
       );
 
       sendSuccess(res, session);

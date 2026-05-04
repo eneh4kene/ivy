@@ -112,11 +112,23 @@ export default function PricingPage() {
     return 'GBP'
   })
 
+  const [promoCode, setPromoCode] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return new URLSearchParams(window.location.search).get('promo') || ''
+    }
+    return ''
+  })
+  const [promoApplied, setPromoApplied] = useState(false)
+
   const handleUpgrade = async (tier: SubscriptionTier) => {
-    if (!user) { window.location.href = '/signup'; return }
+    if (!user) {
+      const promoParam = promoCode ? `?promo=${promoCode}` : ''
+      window.location.href = `/signup${promoParam}`
+      return
+    }
     try {
       setLoading(tier)
-      const { url } = await paymentsApi.createCheckoutSession(tier)
+      const { url } = await paymentsApi.createCheckoutSession(tier, promoCode || undefined)
       window.location.href = url
     } catch (error) {
       console.error(error)
@@ -279,6 +291,28 @@ export default function PricingPage() {
         <p className="text-center text-xs text-muted-foreground mt-4">
           All plans include a 14-day free trial · No card required · Cancel anytime
         </p>
+
+        {/* Promo code */}
+        <div className="flex items-center justify-center gap-2 mt-5">
+          <div className="flex items-center gap-2 bg-muted/40 border border-border rounded-xl px-3 py-2">
+            <input
+              type="text"
+              placeholder="Promo code"
+              value={promoCode}
+              onChange={(e) => { setPromoCode(e.target.value.toUpperCase()); setPromoApplied(false) }}
+              className="bg-transparent text-sm w-32 focus:outline-none placeholder:text-muted-foreground"
+            />
+            <button
+              onClick={() => setPromoApplied(true)}
+              className="text-xs font-medium text-emerald-400 hover:text-emerald-300 transition-colors"
+            >
+              Apply
+            </button>
+          </div>
+          {promoApplied && promoCode && (
+            <span className="text-xs text-emerald-400">✓ Code saved — applies at checkout</span>
+          )}
+        </div>
       </section>
 
       {/* What Everyone Gets */}
