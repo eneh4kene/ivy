@@ -71,7 +71,8 @@ class PaymentService {
     tier: SubscriptionTier,
     successUrl: string,
     cancelUrl: string,
-    currency: Currency = 'GBP'
+    currency: Currency = 'GBP',
+    promoCode?: string
   ) {
     if (!this.stripe) {
       throw new BadRequestError('Payment service not configured');
@@ -113,32 +114,42 @@ class PaymentService {
       });
     }
 
-    // Create checkout session
+    // Resolve promo code to Stripe promotion_code ID if provided
+    let stripeDiscounts: { promotion_code: string }[] | undefined
+    if (promoCode && this.stripe) {
+      try {
+        const promoCodes = await this.stripe.promotionCodes.list({
+          code: promoCode,
+          active: true,
+          limit: 1,
+        })
+        if (promoCodes.data.length > 0) {
+          stripeDiscounts = [{ promotion_code: promoCodes.data[0].id }]
+          logger.info(`Promo code applied: ${promoCode}`)
+        } else {
+          logger.warn(`Promo code not found or inactive: ${promoCode}`)
+        }
+      } catch (err) {
+        logger.warn(`Promo code lookup failed: ${promoCode}`, err)
+      }
+    }
+
     const session = await this.stripe.checkout.sessions.create({
       customer: customerId,
       mode: 'subscription',
       payment_method_types: ['card'],
       currency: currency.toLowerCase(),
-      line_items: [
-        {
-          price: priceId,
-          quantity: 1,
-        },
-      ],
+      line_items: [{ price: priceId, quantity: 1 }],
+      // Allow user-entered promo codes at checkout unless one was pre-applied
+      allow_promotion_codes: !stripeDiscounts,
+      ...(stripeDiscounts && { discounts: stripeDiscounts }),
+      subscription_data: {
+        trial_period_days: 14,
+        metadata: { userId: user.id, tier, currency },
+      },
       success_url: successUrl,
       cancel_url: cancelUrl,
-      metadata: {
-        userId: user.id,
-        tier: tier,
-        currency: currency,
-      },
-      subscription_data: {
-        metadata: {
-          userId: user.id,
-          tier: tier,
-          currency: currency,
-        },
-      },
+      metadata: { userId: user.id, tier, currency },
     });
 
     logger.info(`Checkout session created for user ${userId} - tier ${tier}`);
@@ -398,12 +409,26 @@ class PaymentService {
     });
 
     if (user) {
+      const amountPaid = typeof invoice.amount_paid === 'number' ? invoice.amount_paid : 0;
+      const isFirstRealPayment = amountPaid > 0 && !user.hasPaid;
+
       await prisma.user.update({
         where: { id: user.id },
-        data: { subscriptionStatus: 'ACTIVE' },
+        data: {
+          subscriptionStatus: 'ACTIVE',
+          ...(isFirstRealPayment ? { hasPaid: true } : {}),
+        },
       });
 
-      logger.info(`Payment succeeded for user ${user.id} - invoice ${invoice.id}`);
+      // Dispatch all accumulated pilot donations on first real payment
+      if (isFirstRealPayment) {
+        const { dispatchPendingDonationsForUser } = await import('./every-org.service');
+        dispatchPendingDonationsForUser(user.id).catch((err) =>
+          logger.error(`Failed to dispatch pilot donations for ${user.id}:`, err)
+        );
+      }
+
+      logger.info(`Payment succeeded for user ${user.id} - invoice ${invoice.id} - amount: ${amountPaid}`);
     }
   }
 

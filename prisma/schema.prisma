@@ -66,6 +66,7 @@ model User {
   // Status
   isActive       Boolean @default(true)
   isOnboarded    Boolean @default(false)
+  hasPaid        Boolean @default(false)
   onboardedAt    DateTime?
   lastCallAt     DateTime?
 

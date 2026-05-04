@@ -99,29 +99,17 @@ export async function dispatchDonation(params: {
  * Monthly batch: dispatch all PENDING donations grouped by user + charity.
  * Called by cron on the 1st of each month.
  */
-export async function dispatchPendingDonations(): Promise<void> {
-  const pending = await prisma.donation.findMany({
-    where: { dispatchStatus: 'PENDING' },
-    include: {
-      user: { select: { firstName: true, lastName: true, email: true, currency: true } },
-      charity: { select: { name: true, everyOrgSlug: true } },
-    },
-  })
+type DonationWithRelations = Awaited<ReturnType<typeof prisma.donation.findMany<{
+  include: { user: { select: { firstName: true; lastName: true; email: true; currency: true } }; charity: { select: { name: true; everyOrgSlug: true } } }
+}>>>[number]
 
-  if (pending.length === 0) {
-    logger.info('Every.org dispatch: no pending donations')
-    return
-  }
-
-  // Group by user + charity for a single API call each
-  const groups = new Map<string, typeof pending>()
+async function _dispatchDonationList(pending: DonationWithRelations[]): Promise<void> {
+  const groups = new Map<string, DonationWithRelations[]>()
   for (const d of pending) {
     const key = `${d.userId}:${d.charityId}`
     if (!groups.has(key)) groups.set(key, [])
     groups.get(key)!.push(d)
   }
-
-  logger.info(`Every.org dispatch: ${groups.size} groups, ${pending.length} donations`)
 
   for (const [, donations] of groups) {
     const first = donations[0]
@@ -131,7 +119,6 @@ export async function dispatchPendingDonations(): Promise<void> {
     }
 
     const totalGbp = donations.reduce((sum, d) => sum + Number(d.amount), 0)
-    // Every.org uses USD — convert at a fixed rate for now; in production use live FX
     const totalUsd = first.user.currency === 'USD' ? totalGbp : totalGbp * 1.27
 
     const result = await dispatchDonation({
@@ -159,6 +146,47 @@ export async function dispatchPendingDonations(): Promise<void> {
       logger.error(`Dispatch failed for ${first.charity.name}: ${result.error}`)
     }
   }
+}
+
+/**
+ * Dispatch all pending donations for a single user.
+ * Called when a user makes their first real payment.
+ */
+export async function dispatchPendingDonationsForUser(userId: string): Promise<void> {
+  const pending = await prisma.donation.findMany({
+    where: { userId, dispatchStatus: 'PENDING' },
+    include: {
+      user: { select: { firstName: true, lastName: true, email: true, currency: true } },
+      charity: { select: { name: true, everyOrgSlug: true } },
+    },
+  })
+  if (pending.length > 0) {
+    await _dispatchDonationList(pending)
+    logger.info(`Dispatched ${pending.length} accumulated donations for user ${userId} on first payment`)
+  }
+}
+
+/**
+ * Monthly batch: dispatch all PENDING donations for paying users only.
+ * Pilot/free users (hasPaid = false) are skipped — their donations accumulate
+ * and are dispatched via dispatchPendingDonationsForUser on first real payment.
+ */
+export async function dispatchPendingDonations(): Promise<void> {
+  const pending = await prisma.donation.findMany({
+    where: { dispatchStatus: 'PENDING', user: { hasPaid: true } },
+    include: {
+      user: { select: { firstName: true, lastName: true, email: true, currency: true } },
+      charity: { select: { name: true, everyOrgSlug: true } },
+    },
+  })
+
+  if (pending.length === 0) {
+    logger.info('Every.org dispatch: no pending donations')
+    return
+  }
+
+  logger.info(`Every.org dispatch: ${pending.length} donations for paying users`)
+  await _dispatchDonationList(pending)
 }
 
 export interface EveryOrgNonprofit {
