@@ -1,4 +1,6 @@
 import prisma from '../utils/prisma';
+import logger from '../utils/logger';
+import { sendPushToUser, pushTemplates } from './push.service';
 
 class SeasonService {
   async getActiveSeason(userId: string) {
@@ -109,10 +111,94 @@ class SeasonService {
       });
     }
 
-    // Close seasons whose end date has passed and still ACTIVE
-    await prisma.season.updateMany({
+    // Sprint end events — trigger for newly completed sprints
+    if (completedSprints.length > 0) {
+      for (const sprint of completedSprints) {
+        const season = await prisma.season.findUnique({
+          where: { id: sprint.seasonId },
+          select: { userId: true, number: true },
+        });
+        if (season) {
+          await this.onSprintEnd(season.userId, sprint.seasonId, sprint.id).catch((err) =>
+            logger.warn(`Sprint-end events failed for sprint ${sprint.id}:`, err)
+          );
+        }
+      }
+    }
+
+    // Close seasons whose end date has passed
+    const closingSeasons = await prisma.season.findMany({
       where: { status: 'ACTIVE', endDate: { lt: now } },
-      data: { status: 'CLOSING' },
+      select: { id: true, userId: true },
+    });
+
+    if (closingSeasons.length > 0) {
+      await prisma.season.updateMany({
+        where: { id: { in: closingSeasons.map((s) => s.id) } },
+        data: { status: 'CLOSING' },
+      });
+
+      // Schedule Season Close call for each user
+      for (const season of closingSeasons) {
+        await this.onSeasonEnd(season.userId, season.id).catch((err) =>
+          logger.warn(`Season Close scheduling failed for ${season.userId}:`, err)
+        );
+      }
+    }
+  }
+
+  private async onSprintEnd(userId: string, _seasonId: string, sprintId: string): Promise<void> {
+    // Push notification — sprint complete
+    await sendPushToUser(userId, pushTemplates.seasonClose()).catch(() => {});
+
+    // Dispatch Impact Story notification (story content created separately by ops)
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { preferredCharity: { select: { name: true } }, subscriptionTier: true },
+    });
+    if (user?.preferredCharity) {
+      await sendPushToUser(userId, pushTemplates.impactStory(user.preferredCharity.name)).catch(() => {});
+    }
+
+    logger.info(`Sprint-end events fired for user ${userId}, sprint ${sprintId}`);
+  }
+
+  private async onSeasonEnd(userId: string, seasonId: string): Promise<void> {
+    // Lazy-import to avoid circular dependency
+    const callService = (await import('./call.service')).default;
+
+    // Schedule Season Close call in 1 hour (gives user time to prepare)
+    const scheduledAt = new Date(Date.now() + 60 * 60 * 1000);
+    await callService.scheduleCall(userId, 'SEASON_CLOSE', scheduledAt, { seasonId });
+
+    // Push notification
+    await sendPushToUser(userId, pushTemplates.seasonClose()).catch(() => {});
+
+    logger.info(`Season Close call scheduled for user ${userId}, season ${seasonId}`);
+  }
+
+  async startNextSeason(userId: string): Promise<any> {
+    const lastSeason = await prisma.season.findFirst({
+      where: { userId },
+      orderBy: { number: 'desc' },
+    });
+
+    // Mark current as CLOSED
+    if (lastSeason && lastSeason.status === 'CLOSING') {
+      await prisma.season.update({
+        where: { id: lastSeason.id },
+        data: { status: 'CLOSED' },
+      });
+    }
+
+    // New season starts where the last one ended (or now)
+    const startDate = lastSeason?.endDate
+      ? new Date(lastSeason.endDate.getTime() + 24 * 60 * 60 * 1000)
+      : new Date();
+
+    return this.createSeason(userId, {
+      goal: '', // User sets the goal during Season 2 onboarding / Season Close call
+      startDate,
     });
   }
 }

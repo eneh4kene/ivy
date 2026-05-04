@@ -10,7 +10,8 @@ import buddyService from './services/buddy.service';
 import { dispatchPendingDonations } from './services/every-org.service';
 import callService from './services/call.service';
 import seasonService from './services/season.service';
-import './workers/call.processor'; // start Bull worker
+import './workers/call.processor';    // start call Bull worker
+import './workers/message.processor'; // start message Bull worker
 
 const PORT = config.server.port;
 

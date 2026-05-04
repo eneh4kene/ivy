@@ -7,9 +7,9 @@ import { Input } from '@/components/ui/input'
 import { useAuthStore } from '@/lib/store/auth.store'
 import { getTierName, getTierPrice } from '@/lib/permissions'
 import { useCurrencyStore } from '@/lib/store/currency.store'
-import api, { buddyApi } from '@/lib/api'
+import api, { buddyApi, donationsApi } from '@/lib/api'
 import type { UpdateProfileInput, AccountabilityBuddy } from '@/lib/types'
-import { User, Phone, Clock, Target, CreditCard, Trash2, Download, CheckCircle2, AlertCircle, ChevronRight, Users, Bell, BellOff } from 'lucide-react'
+import { User, Phone, Clock, Target, CreditCard, Trash2, Download, CheckCircle2, AlertCircle, ChevronRight, Users, Bell, BellOff, Heart } from 'lucide-react'
 import { usePushNotifications } from '@/hooks/usePushNotifications'
 
 function SectionCard({ title, description, icon: Icon, children }: {
@@ -68,6 +68,14 @@ export default function SettingsPage() {
 
   const { permission, isSubscribed, isLoading: pushLoading, subscribe, unsubscribe } = usePushNotifications()
 
+  // Charity state
+  const [userCharities, setUserCharities] = useState<any[]>([])
+  const [allCharities, setAllCharities] = useState<any[]>([])
+  const [charitiesLoading, setCharitiesLoading] = useState(true)
+  const [charitySaving, setCharitySaving] = useState(false)
+  const tierCharityLimit: Record<string, number> = { FREE: 2, PRO: 2, ELITE: 3, CONCIERGE: 999 }
+  const charityLimit = tierCharityLimit[user?.subscriptionTier ?? 'PRO'] ?? 2
+
   // Accountability Buddy state
   const [buddy, setBuddy] = useState<AccountabilityBuddy | null>(null)
   const [buddyLoading, setBuddyLoading] = useState(true)
@@ -95,8 +103,14 @@ export default function SettingsPage() {
   })
 
   useEffect(() => {
-    api.donations.getCharities().then(setCharities).catch(console.error)
     buddyApi.get().then((b) => setBuddy(b ?? null)).catch(console.error).finally(() => setBuddyLoading(false))
+    Promise.all([
+      donationsApi.getUserCharities(),
+      donationsApi.getCharities({ region: user?.region ?? 'GB', track: user?.track }),
+    ]).then(([mine, all]) => {
+      setUserCharities(mine.map((uc: any) => uc.charityId))
+      setAllCharities(all)
+    }).catch(console.error).finally(() => setCharitiesLoading(false))
   }, [])
 
   useEffect(() => {
@@ -478,10 +492,47 @@ export default function SettingsPage() {
           </SectionCard>
         )}
 
+        {/* Charity */}
+        <SectionCard title="Your Cause" description={`Choose up to ${charityLimit === 999 ? 'unlimited' : charityLimit} charities — your wallet splits equally`} icon={Heart}>
+          {charitiesLoading ? (
+            <div className="space-y-2">{[1,2,3].map(i => <div key={i} className="h-12 rounded-lg bg-muted/40 animate-pulse" />)}</div>
+          ) : (
+            <div className="space-y-2">
+              {allCharities.map((charity: any) => {
+                const selected = userCharities.includes(charity.id)
+                const atLimit = userCharities.length >= charityLimit && !selected
+                return (
+                  <div
+                    key={charity.id}
+                    onClick={async () => {
+                      if (atLimit) return
+                      const next = selected
+                        ? userCharities.filter((id: string) => id !== charity.id)
+                        : [...userCharities, charity.id]
+                      setUserCharities(next)
+                      setCharitySaving(true)
+                      try { await donationsApi.setUserCharities(next) } catch {}
+                      setCharitySaving(false)
+                    }}
+                    className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-all ${selected ? 'border-emerald-500 bg-emerald-500/5' : atLimit ? 'border-border opacity-40 cursor-not-allowed' : 'border-border hover:bg-accent/20'}`}
+                  >
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium truncate">{charity.name}</p>
+                      <p className="text-xs text-emerald-400">{charity.impactPerPound}</p>
+                    </div>
+                    {selected && <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />}
+                  </div>
+                )
+              })}
+              {charitySaving && <p className="text-xs text-muted-foreground text-center">Saving...</p>}
+            </div>
+          )}
+        </SectionCard>
+
         {/* Account Actions */}
         <SectionCard title="Account" icon={Trash2}>
           <div className="space-y-2.5">
-            <Button variant="outline" className="w-full justify-start" size="sm" disabled>
+            <Button variant="outline" className="w-full justify-start" size="sm" onClick={() => window.open('/api/users/me/export', '_blank')}>
               <Download className="w-4 h-4 mr-2 text-muted-foreground" />
               Export My Data
             </Button>

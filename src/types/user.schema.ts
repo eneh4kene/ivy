@@ -9,8 +9,8 @@ export const createUserSchema = z.object({
     timezone: z.string().default('Europe/London'),
     region: z.enum(['GB', 'US']).default('GB'),
     currency: z.enum(['GBP', 'USD']).default('GBP'),
-    track: z.string().min(1, 'Track is required'), // fitness, meditation, etc.
-    goal: z.string().min(1, 'Goal is required'),
+    track: z.string().default('fitness'),
+    goal: z.string().default(''),
     preferredCharityId: z.string().uuid().optional(),
   }),
 });

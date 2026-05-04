@@ -1,10 +1,10 @@
 import { Job } from 'bull';
 import { callScheduleQueue } from '../config/queues';
 import callService from '../services/call.service';
+import retellService from '../services/retell.service';
+import { handleMissedCall as handleMissedCallComms } from '../services/communication.service';
+import { config } from '../config';
 import logger from '../utils/logger';
-
-// This would integrate with Retell AI in production
-// For now, we'll create a placeholder that logs the call
 
 interface CallJobData {
   callId: string;
@@ -15,61 +15,72 @@ interface CallJobData {
   contextData?: Record<string, any>;
 }
 
-/**
- * Process call initiation jobs
- */
+function getAgentId(callType: string, isB2B: boolean): string {
+  if (isB2B) return config.retell.agentIds.b2b || config.retell.agentIds.b2c || '';
+  return config.retell.agentIds.b2c || '';
+}
+
+// Flatten nested context into top-level Retell LLM variables
+function flattenContext(ctx: Record<string, any> = {}): Record<string, string> {
+  const flat: Record<string, string> = {};
+  for (const [key, val] of Object.entries(ctx)) {
+    if (val === null || val === undefined) continue;
+    if (typeof val === 'object' && !Array.isArray(val)) {
+      for (const [k2, v2] of Object.entries(val as object)) {
+        if (v2 !== null && v2 !== undefined) flat[`${key}_${k2}`] = String(v2);
+      }
+    } else if (Array.isArray(val)) {
+      flat[key] = val.join(', ');
+    } else {
+      flat[key] = String(val);
+    }
+  }
+  return flat;
+}
+
 callScheduleQueue.process('initiate-call', async (job: Job<CallJobData>) => {
   const { callId, userId, callType, phone, userName, contextData } = job.data;
 
   try {
-    logger.info(`Processing call initiation for call ${callId}`);
+    logger.info(`Initiating ${callType} call ${callId} for ${userName}`);
 
-    // Update call status to IN_PROGRESS
-    await callService.updateCallStatus(callId, 'IN_PROGRESS', {
-      startedAt: new Date(),
+    await callService.updateCallStatus(callId, 'IN_PROGRESS', { startedAt: new Date() });
+
+    const isB2B = contextData?.subscriptionTier === 'B2B';
+    const agentId = getAgentId(callType, isB2B);
+
+    const retellCall = await retellService.initiateCall({
+      phoneNumber: phone,
+      agentId,
+      variables: flattenContext({ ...contextData, callType, userName }),
+      metadata: { callId, userId, callType },
     });
 
-    // TODO: In production, this would call Retell AI API
-    // const retellCall = await retellService.initiateCall({
-    //   phoneNumber: phone,
-    //   agentId: getAgentIdByCallType(callType),
-    //   variables: contextData,
-    // });
+    // Update call record with Retell's call ID
+    if (retellCall?.call_id) {
+      await callService.updateCallStatus(callId, 'IN_PROGRESS', {
+        retellCallId: retellCall.call_id,
+      });
+    }
 
-    // For now, simulate call
-    logger.info(`[SIMULATED] Initiating ${callType} call to ${phone} for ${userName}`);
-    logger.info(`[SIMULATED] Context:`, contextData);
+    logger.info(`Retell call initiated: ${retellCall?.call_id ?? 'simulated'}`);
 
-    // Simulate call completion after 30 seconds
-    setTimeout(async () => {
-      try {
-        await callService.updateCallStatus(callId, 'COMPLETED', {
-          endedAt: new Date(),
-          duration: 30,
-          outcome: 'completed',
-          sentiment: 'positive',
-          transcript: `[SIMULATED] ${callType} call with ${userName}`,
-        });
-        logger.info(`[SIMULATED] Call ${callId} completed`);
-      } catch (error) {
-        logger.error(`Error completing simulated call ${callId}:`, error);
-      }
-    }, 30000);
-
-    return {
-      success: true,
-      callId,
-      message: 'Call initiated successfully',
-    };
+    return { success: true, callId, retellCallId: retellCall?.call_id };
   } catch (error) {
-    logger.error(`Error processing call ${callId}:`, error);
-
-    // Update call status to FAILED
-    await callService.updateCallStatus(callId, 'FAILED', {
-      outcome: 'error',
-    });
-
+    logger.error(`Call ${callId} failed to initiate:`, error);
+    await callService.updateCallStatus(callId, 'FAILED', { outcome: 'error' });
     throw error;
+  }
+});
+
+// Missed call handler — fires when Retell reports no answer
+callScheduleQueue.process('missed-call-followup', async (job: Job<{ userId: string; callId: string }>) => {
+  const { userId, callId } = job.data;
+  try {
+    await handleMissedCallComms(userId);
+    logger.info(`Missed call followup sent for user ${userId}`);
+  } catch (err) {
+    logger.error(`Missed call followup failed for ${userId}:`, err);
   }
 });
 

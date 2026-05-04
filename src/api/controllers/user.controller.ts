@@ -165,6 +165,8 @@ class UserController {
           impactStories: true,
           accountabilityBuddy: true,
           messages: { select: { id: true, channel: true, direction: true, createdAt: true } },
+          charities: { include: { charity: { select: { id: true, name: true, category: true } } } },
+          pushSubscriptions: { select: { id: true, userAgent: true, createdAt: true, isActive: true } },
         },
       })
       if (!user) { res.status(404).json({ success: false, error: 'User not found' }); return }

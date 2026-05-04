@@ -4,6 +4,7 @@ import { NotFoundError, BadRequestError } from '../utils/errors';
 import logger from '../utils/logger';
 import { startOfDay, differenceInDays } from 'date-fns';
 import donationService from './donation.service';
+import { sendPushToUser, pushTemplates } from './push.service';
 
 class WorkoutService {
   /**
@@ -321,37 +322,25 @@ class WorkoutService {
 
     if (!user || !user.preferredCharity) return;
 
-    // 7-day streak bonus
     if (currentStreak === 7 && !streak.bonus7DayClaimed) {
       await this.awardStreakBonus(userId, user.preferredCharity.id, 3, 'STREAK_7_DAY', 7);
-      await prisma.streak.update({
-        where: { userId },
-        data: { bonus7DayClaimed: true },
-      });
-      // Award grace day for 7-day milestone
+      await prisma.streak.update({ where: { userId }, data: { bonus7DayClaimed: true } });
       await this.awardGraceDays(userId, 1, '7-day streak bonus');
+      sendPushToUser(userId, pushTemplates.streakWarning(7)).catch(() => {});
     }
 
-    // 30-day streak bonus
     if (currentStreak === 30 && !streak.bonus30DayClaimed) {
       await this.awardStreakBonus(userId, user.preferredCharity.id, 10, 'STREAK_30_DAY', 30);
-      await prisma.streak.update({
-        where: { userId },
-        data: { bonus30DayClaimed: true },
-      });
-      // Award grace days for 30-day milestone
+      await prisma.streak.update({ where: { userId }, data: { bonus30DayClaimed: true } });
       await this.awardGraceDays(userId, 2, '30-day streak bonus');
+      sendPushToUser(userId, pushTemplates.streakWarning(30)).catch(() => {});
     }
 
-    // 90-day streak bonus
     if (currentStreak === 90 && !streak.bonus90DayClaimed) {
       await this.awardStreakBonus(userId, user.preferredCharity.id, 25, 'STREAK_90_DAY', 90);
-      await prisma.streak.update({
-        where: { userId },
-        data: { bonus90DayClaimed: true },
-      });
-      // Award grace days for 90-day milestone
+      await prisma.streak.update({ where: { userId }, data: { bonus90DayClaimed: true } });
       await this.awardGraceDays(userId, 3, '90-day streak bonus');
+      sendPushToUser(userId, pushTemplates.streakWarning(90)).catch(() => {});
     }
   }
 

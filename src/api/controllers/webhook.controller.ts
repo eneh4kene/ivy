@@ -6,6 +6,7 @@ import messagingService from '../../services/messaging.service';
 import paymentService from '../../services/payment.service';
 import { logUsage } from '../../services/usage.service';
 import { serverAnalytics } from '../../lib/analytics';
+import { handleMissedCall as handleMissedCallComms } from '../../services/communication.service';
 import { sendSuccess } from '../../utils/response';
 import logger from '../../utils/logger';
 import { config } from '../../config';
@@ -96,9 +97,15 @@ class WebhookController {
           break;
 
         case 'call_no_answer':
-          // Handle missed call
           if (call.metadata?.callId) {
             await callService.handleMissedCall(call.metadata.callId);
+          }
+          // Fire WhatsApp "bad time?" fallback
+          if (call.metadata?.userId) {
+            await handleMissedCallComms(call.metadata.userId);
+            if (call.metadata?.userId) {
+              serverAnalytics.callMissed(call.metadata.userId, call.metadata?.callType ?? 'unknown');
+            }
           }
           break;
 
