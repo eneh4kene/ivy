@@ -19,6 +19,7 @@ import seasonsRoutes from './api/routes/seasons.routes';
 import callsRoutes from './api/routes/calls.routes';
 import buddyRoutes from './api/routes/buddy.routes';
 import pushRoutes from './api/routes/push.routes';
+import circleRoutes from './api/routes/circle.routes';
 
 const app: Application = express();
 
@@ -78,6 +79,7 @@ app.use('/api/seasons', seasonsRoutes);
 app.use('/api/calls', callsRoutes);
 app.use('/api/buddy', buddyRoutes);
 app.use('/api/push', pushRoutes);
+app.use('/api/circles', circleRoutes);
 app.use('/webhooks', webhookRoutes);
 
 // 404 handler

@@ -123,9 +123,14 @@ model Company {
   seasonEndDate   DateTime?
   seasonDuration  Int      @default(8) // weeks
 
+  // Company wellness season — top-down theme that flows into every employee's call
+  wellnessTheme   String? // e.g. "Move More May", "Mental Health Month"
+  wellnessGoal    String? // e.g. "Every employee hits 70% consistency this season"
+  wellnessSeason  Int     @default(1)
+
   // Pricing
-  platformFeePerUser  Decimal @default(15.00) // £10-18/employee/month
-  impactWalletPerUser Decimal @default(25.00) // £15-30/employee/month
+  platformFeePerUser  Decimal @default(15.00)
+  impactWalletPerUser Decimal @default(25.00)
 
   // Status
   isActive Boolean @default(true)
@@ -492,22 +497,51 @@ model IvyCircle {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  companyId String
-  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  // B2B circles belong to a company; B2C circles are standalone
+  companyId String?
+  company   Company? @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
   name        String
   description String?
-  size        Int     @default(0) // Current member count
-  maxSize     Int     @default(12) // 8-12 people
+  track       String  @default("fitness") // fitness | focus | sleep | balance
+  tier        String  @default("peer")    // peer | pro | celebrity
 
-  // Status
+  // Collective season layer — sits on top of individual goals
+  seasonTheme   String? // e.g. "Operation Ironman", "The Comeback Sprint"
+  seasonNumber  Int     @default(1)
+
+  size    Int @default(0)
+  maxSize Int @default(8) // 6-8 for peer, max 4 for Concierge
+
   isActive Boolean @default(true)
 
   // Relationships
-  members IvyCircleMember[]
+  members     IvyCircleMember[]
+  sessions    CircleSprintSession[]
+  sprintGoals CircleSprintGoal[]
 
   @@index([companyId])
   @@map("ivy_circles")
+}
+
+model CircleSprintGoal {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
+
+  circleId     String
+  circle       IvyCircle @relation(fields: [circleId], references: [id], onDelete: Cascade)
+  sprintNumber Int
+
+  // Set collectively at the sprint-start Circle session
+  pledge       String   // e.g. "We all hit 80% consistency this sprint"
+  theme        String?  // e.g. "Intensity sprint", "Sleep first sprint"
+  targetMetric String?  // e.g. "80% group consistency"
+
+  setByUserId String?  // facilitator who proposed it
+
+  @@unique([circleId, sprintNumber])
+  @@index([circleId])
+  @@map("circle_sprint_goals")
 }
 
 model IvyCircleMember {
@@ -520,7 +554,9 @@ model IvyCircleMember {
   userId String
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  role String @default("member") // "member", "facilitator"
+  role     String  @default("member") // "member" | "facilitator"
+  isActive Boolean @default(true)
+  joinedAt DateTime @default(now())
 
   @@unique([circleId, userId])
   @@index([userId])
@@ -702,13 +738,23 @@ model CircleSprintSession {
 
   status       String @default("scheduled") // "scheduled", "completed", "cancelled"
 
+  // Linked circle (persistent group)
+  circleId String?
+  circle   IvyCircle? @relation(fields: [circleId], references: [id])
+
   // Participants (JSON array of user IDs)
   participantUserIds String @db.Text // JSON
 
-  // Linked sprint
-  sprintId String?
+  // Sprint context
+  sprintId     String?
+  sprintNumber Int?
+
+  // Session outcomes — set after the session
+  collectivePledge String? // what the group committed to next sprint
+  highlights       String? @db.Text // JSON — key moments Ivy surfaces in individual calls
 
   @@index([sprintId])
+  @@index([circleId])
   @@map("circle_sprint_sessions")
 }
 

@@ -4,6 +4,7 @@ import logger from '../utils/logger';
 import { NotFoundError } from '../utils/errors';
 import { addMinutes, isBefore, differenceInDays } from 'date-fns';
 import seasonService from './season.service';
+import circleService from './circle.service';
 
 export type CallType = 'MORNING_PLANNING' | 'EVENING_REVIEW' | 'RESCUE' | 'WEEKLY_PLANNING' | 'MONTHLY_CHECKIN' | 'ONBOARDING' | 'SEASON_CLOSE';
 
@@ -167,9 +168,10 @@ class CallService {
       }),
     ]);
 
-    const [activeSeason, currentSprint] = await Promise.all([
+    const [activeSeason, currentSprint, circleContext] = await Promise.all([
       seasonService.getActiveSeason(userId),
       seasonService.getCurrentSprint(userId),
+      circleService.getCircleContextForUser(userId),
     ]);
 
     const now = new Date();
@@ -193,6 +195,20 @@ class CallService {
       seasonGoal: activeSeason?.goal ?? null,
       sprintNumber: currentSprint?.number ?? null,
       daysLeftInSprint,
+      // Circle / group context
+      circle: circleContext ? {
+        name: circleContext.circleName,
+        seasonTheme: circleContext.seasonTheme,
+        sprintPledge: circleContext.sprintPledge,
+        sprintTheme: circleContext.sprintTheme,
+        groupConsistencyRate: circleContext.groupConsistencyRate,
+        topPerformers: circleContext.topPerformers,
+        memberCount: circleContext.memberCount,
+        userRole: circleContext.userRole,
+      } : null,
+      // Company wellness context (B2B)
+      companyWellnessTheme: circleContext?.companyWellnessTheme ?? null,
+      companyWellnessGoal: circleContext?.companyWellnessGoal ?? null,
     };
   }
 

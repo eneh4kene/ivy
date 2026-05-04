@@ -273,6 +273,42 @@ export const buddyApi = {
   },
 }
 
+// Circles API
+export const circlesApi = {
+  getMy: async () => {
+    const response = await client.get<ApiResponse<any[]>>('/api/circles/my')
+    return response.data.data ?? []
+  },
+  get: async (id: string) => {
+    const response = await client.get<ApiResponse<any>>(`/api/circles/${id}`)
+    return response.data.data!
+  },
+  create: async (data: { name: string; track: string; tier?: string; seasonTheme?: string }) => {
+    const response = await client.post<ApiResponse<any>>('/api/circles', data)
+    return response.data.data!
+  },
+  update: async (id: string, data: { name?: string; seasonTheme?: string; track?: string }) => {
+    const response = await client.patch<ApiResponse<any>>(`/api/circles/${id}`, data)
+    return response.data.data!
+  },
+  join: async (circleId: string) => {
+    const response = await client.post<ApiResponse<any>>(`/api/circles/${circleId}/members`, {})
+    return response.data.data!
+  },
+  setSprintGoal: async (circleId: string, data: { sprintNumber: number; pledge: string; theme?: string; targetMetric?: string }) => {
+    const response = await client.post<ApiResponse<any>>(`/api/circles/${circleId}/sprint-goals`, data)
+    return response.data.data!
+  },
+  getSprintGoal: async (circleId: string, sprintNumber: number) => {
+    const response = await client.get<ApiResponse<any>>(`/api/circles/${circleId}/sprint-goals/${sprintNumber}`)
+    return response.data.data
+  },
+  getConsistency: async (circleId: string) => {
+    const response = await client.get<ApiResponse<any>>(`/api/circles/${circleId}/consistency`)
+    return response.data.data!
+  },
+}
+
 // Push notifications API
 export const pushApi = {
   subscribe: async (subscription: any) => {
@@ -298,6 +334,7 @@ export const api = {
   seasons: seasonsApi,
   buddy: buddyApi,
   push: pushApi,
+  circles: circlesApi,
 }
 
 export default api
