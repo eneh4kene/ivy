@@ -1,7 +1,8 @@
 'use client'
 
-import { useState } from 'react'
+import { Suspense, useState } from 'react'
 import Link from 'next/link'
+import { useSearchParams } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { usersApi, authApi } from '@/lib/api'
@@ -10,7 +11,10 @@ import type { Currency } from '@/lib/pricing'
 
 type Region = 'GB' | 'US'
 
-export default function SignupPage() {
+function SignupForm() {
+  const searchParams = useSearchParams()
+  const promoCode = searchParams.get('promo') ?? undefined
+
   const [firstName, setFirstName] = useState('')
   const [lastName, setLastName] = useState('')
   const [email, setEmail] = useState('')
@@ -43,14 +47,14 @@ export default function SignupPage() {
         region,
         currency,
       })
-      // Send magic link
-      await authApi.sendMagicLink({ email })
+      // Send magic link with promo code if present
+      await authApi.sendMagicLink({ email, promoCode })
       setEmailSent(true)
     } catch (err: any) {
       // If user already exists (conflict), just send a magic link
       if (err?.response?.status === 409 || err?.message?.toLowerCase().includes('already exists')) {
         try {
-          await authApi.sendMagicLink({ email })
+          await authApi.sendMagicLink({ email, promoCode })
           setEmailSent(true)
           return
         } catch (linkErr: any) {
@@ -88,6 +92,12 @@ export default function SignupPage() {
                 </div>
                 <h1 className="text-2xl font-bold tracking-tight mb-1.5">Create your account</h1>
                 <p className="text-sm text-muted-foreground">Enter your details and we'll send you a sign-up link — no password needed</p>
+                {promoCode && (
+                  <div className="mt-3 flex items-center gap-2 px-3 py-2 rounded-lg bg-primary/10 border border-primary/20">
+                    <Sparkles className="w-3.5 h-3.5 text-primary flex-shrink-0" />
+                    <span className="text-xs text-primary font-medium">Promo code <strong>{promoCode}</strong> will be applied at checkout</span>
+                  </div>
+                )}
               </div>
 
               <form onSubmit={handleSubmit} className="space-y-4">
@@ -254,5 +264,17 @@ export default function SignupPage() {
         </p>
       </div>
     </div>
+  )
+}
+
+export default function SignupPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+      </div>
+    }>
+      <SignupForm />
+    </Suspense>
   )
 }

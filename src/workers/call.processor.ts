@@ -15,7 +15,7 @@ interface CallJobData {
   contextData?: Record<string, any>;
 }
 
-function getAgentId(callType: string, isB2B: boolean): string {
+function getAgentId(_callType: string, isB2B: boolean): string {
   if (isB2B) return config.retell.agentIds.b2b || config.retell.agentIds.b2c || '';
   return config.retell.agentIds.b2c || '';
 }
@@ -75,7 +75,7 @@ callScheduleQueue.process('initiate-call', async (job: Job<CallJobData>) => {
 
 // Missed call handler — fires when Retell reports no answer
 callScheduleQueue.process('missed-call-followup', async (job: Job<{ userId: string; callId: string }>) => {
-  const { userId, callId } = job.data;
+  const { userId, callId: _callId } = job.data;
   try {
     await handleMissedCallComms(userId);
     logger.info(`Missed call followup sent for user ${userId}`);

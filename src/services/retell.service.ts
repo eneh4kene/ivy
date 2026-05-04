@@ -117,7 +117,7 @@ class RetellService {
   /**
    * Get agent ID based on call type and user tier
    */
-  getAgentId(callType: string, userTier?: string): string {
+  getAgentId(_callType: string, userTier?: string): string {
     // In production, you might have different agents for B2B vs B2C
     if (userTier === 'B2B') {
       return config.retell.agentIds.b2b || 'default-agent';

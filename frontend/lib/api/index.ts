@@ -28,7 +28,7 @@ import type {
 
 // Auth API
 export const authApi = {
-  sendMagicLink: async (data: LoginInput) => {
+  sendMagicLink: async (data: LoginInput & { promoCode?: string }) => {
     const response = await client.post<ApiResponse>('/api/auth/magic-link', data)
     return response.data
   },
@@ -188,8 +188,8 @@ export const statsApi = {
 
 // Payments API
 export const paymentsApi = {
-  createCheckoutSession: async (tier: string) => {
-    const response = await client.post<ApiResponse<{ sessionId: string; url: string }>>('/api/payments/checkout', { tier })
+  createCheckoutSession: async (tier: string, promoCode?: string) => {
+    const response = await client.post<ApiResponse<{ sessionId: string; url: string }>>('/api/payments/checkout', { tier, promoCode })
     return response.data.data!
   },
 

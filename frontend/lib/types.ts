@@ -49,6 +49,10 @@ export interface Charity {
   logoUrl?: string
   website?: string
   isActive: boolean
+  featured?: boolean
+  everyOrgSlug?: string
+  regions?: string[]
+  tracks?: string[]
 }
 
 // Company types
