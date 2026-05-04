@@ -37,7 +37,10 @@ model User {
   companyId          String?
 
   // Communication Style
-  commStyle       CommStyle @default(ADAPTIVE) // CALLS | TEXTS | ADAPTIVE
+  commStyle       CommStyle @default(ADAPTIVE)
+
+  // Circle preference
+  circleOptIn     Boolean   @default(true)  // false = solo, true = wants a Circle // CALLS | TEXTS | ADAPTIVE
 
   // Schedule Preferences
   morningCallTime String? // HH:MM format (e.g., "07:00")

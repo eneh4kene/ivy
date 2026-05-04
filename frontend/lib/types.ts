@@ -19,6 +19,7 @@ export interface User {
   minimumMode?: string
   giftFrame?: string
   commStyle: CommStyle
+  circleOptIn: boolean
   morningCallTime?: string
   eveningCallTime?: string
   callFrequency: number
@@ -280,6 +281,7 @@ export interface UpdateProfileInput {
   minimumMode?: string
   giftFrame?: string
   commStyle?: CommStyle
+  circleOptIn?: boolean
   morningCallTime?: string
   eveningCallTime?: string
   callFrequency?: number

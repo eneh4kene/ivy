@@ -26,6 +26,7 @@ export const updateUserSchema = z.object({
     minimumMode: z.string().optional(),
     giftFrame: z.string().optional(),
     commStyle: z.enum(['CALLS', 'TEXTS', 'ADAPTIVE']).optional(),
+    circleOptIn: z.boolean().optional(),
     preferredCharityId: z.string().uuid().optional(),
     morningCallTime: z.string().regex(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/).optional(), // HH:MM
     eveningCallTime: z.string().regex(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/).optional(), // HH:MM

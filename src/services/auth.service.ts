@@ -176,6 +176,7 @@ class AuthService {
         minimumMode: true,
         giftFrame: true,
         commStyle: true,
+        circleOptIn: true,
         preferredCharityId: true,
         morningCallTime: true,
         eveningCallTime: true,
