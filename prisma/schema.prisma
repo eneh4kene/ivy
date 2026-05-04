@@ -148,11 +148,12 @@ model Charity {
 
   name              String
   description       String
-  category          String // "health", "education", "environment", etc.
-  impactMetric      String // e.g., "meals provided", "trees planted"
-  impactPerPound    String // e.g., "2 meals per £1"
+  category          String  // "health", "education", "environment", etc.
+  impactMetric      String  // e.g., "meals provided", "trees planted"
+  impactPerPound    String  // e.g., "2 meals per £1"
   logoUrl           String?
   website           String?
+  everyOrgSlug      String? // Every.org nonprofit slug for payment dispatch
 
   isActive Boolean @default(true)
 
@@ -287,10 +288,17 @@ model Donation {
   workoutId String?
 
   // Streak Bonus Details
-  streakDays Int? // For streak bonuses, how many days achieved
+  streakDays Int?
+
+  // Every.org dispatch tracking
+  dispatchStatus   String  @default("PENDING") // PENDING | DISPATCHED | FAILED
+  everyOrgChargeId String?
+  dispatchError    String?
+  dispatchedAt     DateTime?
 
   @@index([userId, createdAt])
   @@index([charityId])
+  @@index([dispatchStatus])
   @@map("donations")
 }
 

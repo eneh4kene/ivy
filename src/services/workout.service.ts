@@ -3,6 +3,7 @@ import { CreateWorkoutInput, UpdateWorkoutInput, CompleteWorkoutInput, GetWorkou
 import { NotFoundError, BadRequestError } from '../utils/errors';
 import logger from '../utils/logger';
 import { startOfDay, differenceInDays } from 'date-fns';
+import donationService from './donation.service';
 
 class WorkoutService {
   /**
@@ -153,6 +154,29 @@ class WorkoutService {
     // Update streak if completed or partial
     if (data.status === 'COMPLETED' || data.status === 'PARTIAL') {
       await this.updateStreak(userId, new Date(workout.plannedDate));
+
+      // Fire donation — non-blocking, failure never breaks the completion flow
+      try {
+        const user = await prisma.user.findUnique({
+          where: { id: userId },
+          select: { preferredCharityId: true },
+        })
+        if (user?.preferredCharityId) {
+          const amount = await donationService.calculateDonationAmount(userId)
+          const canDonate = await donationService.canMakeDonation(userId, amount)
+          if (canDonate.allowed) {
+            await donationService.createDonation(
+              userId,
+              user.preferredCharityId,
+              amount,
+              'COMPLETION',
+              workoutId
+            )
+          }
+        }
+      } catch (donationErr) {
+        logger.warn(`Donation failed for workout ${workoutId} — streak preserved`, donationErr)
+      }
 
       // Award bonus grace day for double-completion (non-minimum workout on a day already completed)
       if (data.status === 'COMPLETED' && !workout.isMinimum) {

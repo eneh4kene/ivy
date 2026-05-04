@@ -4,7 +4,7 @@ import { config } from '../config';
 import logger from '../utils/logger';
 import { NotFoundError, BadRequestError } from '../utils/errors';
 import { SubscriptionTier } from '@prisma/client';
-import { getStripePriceId, type Currency } from '../config/pricing';
+import { getStripePriceId, IMPACT_WALLET_MONTHLY, type Currency } from '../config/pricing';
 
 class PaymentService {
   private stripe: Stripe | null = null;
@@ -227,30 +227,22 @@ class PaymentService {
    * Update Impact Wallet limits based on subscription tier
    */
   private async updateImpactWalletLimits(userId: string, tier: SubscriptionTier) {
-    const limits: Record<SubscriptionTier, { monthly: number; daily: number }> = {
-      FREE: { monthly: 4, daily: 2 },
-      PRO: { monthly: 15, daily: 3 },
-      ELITE: { monthly: 30, daily: 5 },
-      CONCIERGE: { monthly: 60, daily: 10 },
-      B2B: { monthly: 30, daily: 5 },
-    };
-
-    const limit = limits[tier];
+    const tierKey = Object.keys(IMPACT_WALLET_MONTHLY).includes(tier) ? tier : 'PRO'
+    const walletConfig = IMPACT_WALLET_MONTHLY[tierKey] ?? IMPACT_WALLET_MONTHLY['PRO']
+    const monthly = walletConfig.GBP
+    const daily = Math.round((monthly / 30) * 100) / 100
 
     await prisma.impactWallet.upsert({
       where: { userId },
       create: {
         userId,
-        monthlyLimit: limit.monthly,
-        dailyCap: limit.daily,
+        monthlyLimit: monthly,
+        dailyCap: daily,
         currentMonthSpent: 0,
         lifetimeDonated: 0,
         monthStartDate: new Date(),
       },
-      update: {
-        monthlyLimit: limit.monthly,
-        dailyCap: limit.daily,
-      },
+      update: { monthlyLimit: monthly, dailyCap: daily },
     });
   }
 

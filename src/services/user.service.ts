@@ -2,6 +2,7 @@ import prisma from '../utils/prisma';
 import { CreateUserInput, UpdateUserInput } from '../types/user.schema';
 import { ConflictError, NotFoundError } from '../utils/errors';
 import logger from '../utils/logger';
+import { IMPACT_WALLET_MONTHLY } from '../config/pricing';
 
 class UserService {
   /**
@@ -175,30 +176,25 @@ class UserService {
    * Initialize user's Impact Wallet and Streak
    */
   async initializeUserResources(userId: string, subscriptionTier: string) {
-    // Determine wallet limits based on tier
-    let monthlyLimit = 20; // FREE/PRO
-    let dailyCap = 3;
+    // Trial users get PRO wallet — they experience the real product from day one
+    const tierKey = ['PRO', 'ELITE', 'CONCIERGE'].includes(subscriptionTier)
+      ? subscriptionTier
+      : 'PRO'
+    const walletConfig = IMPACT_WALLET_MONTHLY[tierKey] ?? IMPACT_WALLET_MONTHLY['PRO']
+    const monthlyLimit = walletConfig.GBP
+    const dailyCap = Math.round((monthlyLimit / 30) * 100) / 100
 
-    if (subscriptionTier === 'ELITE') {
-      monthlyLimit = 30;
-      dailyCap = 4;
-    } else if (subscriptionTier === 'CONCIERGE') {
-      monthlyLimit = 50;
-      dailyCap = 5;
-    } else if (subscriptionTier === 'B2B') {
-      monthlyLimit = 25;
-      dailyCap = 3;
-    }
-
-    // Create Impact Wallet
-    await prisma.impactWallet.create({
-      data: {
+    await prisma.impactWallet.upsert({
+      where: { userId },
+      create: {
         userId,
         monthlyLimit,
         dailyCap,
         currentMonthSpent: 0,
+        lifetimeDonated: 0,
         monthStartDate: new Date(),
       },
+      update: { monthlyLimit, dailyCap },
     });
 
     // Create Streak record

@@ -7,6 +7,7 @@ import logger from './utils/logger';
 import prisma from './utils/prisma';
 import cron from 'node-cron';
 import buddyService from './services/buddy.service';
+import { dispatchPendingDonations } from './services/every-org.service';
 
 const PORT = config.server.port;
 
@@ -17,10 +18,16 @@ const server = app.listen(PORT, () => {
   logger.info(`🔗 Base URL: ${config.server.baseUrl}`);
 });
 
-// Every Sunday at 9am UTC — send weekly accountability buddy digests
+// Every Sunday at 9am UTC — weekly accountability buddy digests
 cron.schedule('0 9 * * 0', async () => {
   logger.info('Running weekly buddy digest...');
   await buddyService.sendWeeklyDigests();
+});
+
+// 1st of every month at 2am UTC — dispatch accumulated wallet donations to charities via Every.org
+cron.schedule('0 2 1 * *', async () => {
+  logger.info('Running monthly charity donation dispatch...');
+  await dispatchPendingDonations();
 });
 
 // Graceful shutdown
