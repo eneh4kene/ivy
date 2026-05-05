@@ -2,17 +2,20 @@ import Redis from 'ioredis';
 import { config } from './index';
 import logger from '../utils/logger';
 
-// Create Redis client
-const redis = new Redis({
-  host: config.redis.host,
-  port: config.redis.port,
-  password: config.redis.password,
-  retryStrategy: (times: number) => {
-    const delay = Math.min(times * 50, 2000);
-    return delay;
-  },
-  maxRetriesPerRequest: 3,
-});
+// REDIS_URL takes precedence (Railway, Heroku, Render all inject this).
+// Individual vars are the fallback for self-hosted / local setups.
+const redis = process.env.REDIS_URL
+  ? new Redis(process.env.REDIS_URL, {
+      retryStrategy: (times: number) => Math.min(times * 50, 2000),
+      maxRetriesPerRequest: 3,
+    })
+  : new Redis({
+      host: config.redis.host,
+      port: config.redis.port,
+      password: config.redis.password,
+      retryStrategy: (times: number) => Math.min(times * 50, 2000),
+      maxRetriesPerRequest: 3,
+    });
 
 // Handle connection events
 redis.on('connect', () => {

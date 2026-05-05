@@ -7,12 +7,15 @@ const envSchema = z.object({
   // Server
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
   PORT: z.string().transform(Number).default('3000'),
-  API_BASE_URL: z.string().url(),
+  // Optional — Railway doesn't know its own URL until first deploy
+  API_BASE_URL: z.string().url().optional(),
 
   // Database
   DATABASE_URL: z.string().url(),
 
-  // Redis
+  // Redis — Railway and most platforms inject REDIS_URL as a connection string.
+  // Individual vars (REDIS_HOST etc.) are the fallback for self-hosted setups.
+  REDIS_URL: z.string().optional(),
   REDIS_HOST: z.string().default('localhost'),
   REDIS_PORT: z.string().transform(Number).default('6379'),
   REDIS_PASSWORD: z.string().optional(),

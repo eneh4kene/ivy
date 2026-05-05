@@ -4,7 +4,7 @@ export const config = {
   server: {
     port: env.PORT,
     env: env.NODE_ENV,
-    baseUrl: env.API_BASE_URL,
+    baseUrl: env.API_BASE_URL ?? `http://localhost:${env.PORT}`,
   },
   database: {
     url: env.DATABASE_URL,

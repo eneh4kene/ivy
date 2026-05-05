@@ -2,12 +2,16 @@ import Queue from 'bull';
 import { config } from './index';
 import logger from '../utils/logger';
 
-// Redis connection options for Bull
-const redisOptions = {
-  host: config.redis.host,
-  port: config.redis.port,
-  password: config.redis.password,
-};
+// Bull accepts either a Redis URL string or an options object.
+// REDIS_URL is injected by Railway/Heroku/Render; individual vars are the fallback.
+const redisOptions: string | { host: string; port: number; password?: string } =
+  process.env.REDIS_URL
+    ? process.env.REDIS_URL
+    : {
+        host: config.redis.host,
+        port: config.redis.port,
+        password: config.redis.password,
+      };
 
 // Create queues
 export const callScheduleQueue = new Queue('call-schedule', {
