@@ -356,6 +356,20 @@ export const adminApi = {
     const response = await client.get<ApiResponse<unknown>>('/api/admin/reports', { params: { type } })
     return response.data.data
   },
+  getCalls: async (params?: { limit?: number; offset?: number; callType?: string; sentiment?: string; userId?: string }) => {
+    const response = await client.get<ApiResponse<{
+      id: string
+      callType: string
+      scheduledAt: string
+      duration: number | null
+      outcome: string | null
+      sentiment: string | null
+      transcript: string | null
+      user: { id: string; firstName: string; lastName: string; email: string; track: string; goal: string }
+      workoutFollowed: { activity: string; status: string } | null
+    }[]>>('/api/admin/calls', { params })
+    return response.data
+  },
   getUsage: async (days = 30) => {
     const response = await client.get<ApiResponse<{
       periodDays: number

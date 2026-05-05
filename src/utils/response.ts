@@ -10,6 +10,7 @@ export interface ApiResponse<T = unknown> {
   meta?: {
     page?: number;
     limit?: number;
+    offset?: number;
     total?: number;
   };
 }

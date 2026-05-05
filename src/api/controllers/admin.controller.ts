@@ -211,6 +211,77 @@ class AdminController {
     }
   }
 
+  async getCalls(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const companyId = this.requireCompany(req, res);
+      if (!companyId) return;
+
+      const limit = Math.min(Number(req.query.limit ?? 30), 100);
+      const offset = Number(req.query.offset ?? 0);
+      const callType = req.query.callType as string | undefined;
+      const sentiment = req.query.sentiment as string | undefined;
+      const userId = req.query.userId as string | undefined;
+
+      const where: Record<string, unknown> = {
+        user: { companyId },
+        status: 'COMPLETED',
+      };
+      if (callType) where.callType = callType;
+      if (sentiment) where.sentiment = sentiment;
+      if (userId) where.userId = userId;
+
+      const [calls, total] = await Promise.all([
+        prisma.call.findMany({
+          where,
+          include: {
+            user: { select: { id: true, firstName: true, lastName: true, email: true, track: true, goal: true } },
+          },
+          orderBy: { scheduledAt: 'desc' },
+          take: limit,
+          skip: offset,
+        }),
+        prisma.call.count({ where }),
+      ]);
+
+      // For each call, check if a workout was logged within 12h (the close rate signal)
+      const enriched = await Promise.all(
+        calls.map(async (call) => {
+          const workoutAfter = call.endedAt
+            ? await prisma.workout.findFirst({
+                where: {
+                  userId: call.userId,
+                  status: { in: ['COMPLETED', 'PARTIAL'] },
+                  completedAt: {
+                    gte: call.scheduledAt,
+                    lte: new Date(call.scheduledAt.getTime() + 12 * 60 * 60 * 1000),
+                  },
+                },
+                select: { id: true, activity: true, status: true },
+              })
+            : null;
+
+          return {
+            id: call.id,
+            callType: call.callType,
+            scheduledAt: call.scheduledAt,
+            duration: call.duration,
+            outcome: call.outcome,
+            sentiment: call.sentiment,
+            transcript: call.transcript,
+            user: call.user,
+            workoutFollowed: workoutAfter
+              ? { activity: workoutAfter.activity, status: workoutAfter.status }
+              : null,
+          };
+        })
+      );
+
+      sendSuccess(res, enriched, 200, { total, limit, offset });
+    } catch (error) {
+      next(error);
+    }
+  }
+
   async getUsage(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
     try {
       const companyId = this.requireCompany(req, res);

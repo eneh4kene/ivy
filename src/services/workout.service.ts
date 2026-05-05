@@ -5,6 +5,7 @@ import logger from '../utils/logger';
 import { startOfDay, differenceInDays } from 'date-fns';
 import donationService from './donation.service';
 import { sendPushToUser, pushTemplates } from './push.service';
+import { serverAnalytics } from '../lib/analytics';
 
 class WorkoutService {
   /**
@@ -155,6 +156,24 @@ class WorkoutService {
     // Update streak if completed or partial
     if (data.status === 'COMPLETED' || data.status === 'PARTIAL') {
       await this.updateStreak(userId, new Date(workout.plannedDate));
+
+      // Check if a call happened today — fire conversion analytics
+      const todayStart = startOfDay(new Date());
+      const callToday = await prisma.call.findFirst({
+        where: {
+          userId,
+          status: 'COMPLETED',
+          scheduledAt: { gte: todayStart },
+        },
+        orderBy: { scheduledAt: 'desc' },
+      });
+      if (callToday) {
+        const streakRecord = await prisma.streak.findUnique({ where: { userId }, select: { currentStreak: true } });
+        serverAnalytics.workoutFollowedCall(userId, callToday.callType, streakRecord?.currentStreak ?? 0);
+        if (callToday.callType === 'RESCUE') {
+          serverAnalytics.rescueResolved(userId);
+        }
+      }
 
       // Fire donation — non-blocking, failure never breaks the completion flow
       try {

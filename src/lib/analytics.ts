@@ -37,6 +37,14 @@ export const serverAnalytics = {
   rescueCallInitiated: (userId: string) =>
     capture(userId, 'rescue_call_initiated'),
 
+  // Did completing a workout follow a call that same day?
+  workoutFollowedCall: (userId: string, callType: string, streakDays: number) =>
+    capture(userId, 'workout_followed_call', { call_type: callType, streak_days: streakDays }),
+
+  // Rescue call → workout logged same day (the key rescue conversion signal)
+  rescueResolved: (userId: string) =>
+    capture(userId, 'rescue_resolved'),
+
   streakMilestoneReached: (userId: string, days: number) =>
     capture(userId, 'streak_milestone_reached', { days }),
 
