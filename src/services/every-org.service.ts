@@ -19,6 +19,7 @@
 import axios from 'axios'
 import prisma from '../utils/prisma'
 import logger from '../utils/logger'
+import { GBP_TO_USD } from '../config/pricing'
 
 const EVERY_ORG_BASE = 'https://api.every.org/v1'
 const EVERY_ORG_DONATE_BASE = 'https://www.every.org/api/v0.2'
@@ -118,8 +119,11 @@ async function _dispatchDonationList(pending: DonationWithRelations[]): Promise<
       continue
     }
 
-    const totalGbp = donations.reduce((sum, d) => sum + Number(d.amount), 0)
-    const totalUsd = first.user.currency === 'USD' ? totalGbp : totalGbp * 1.27
+    const totalInCurrency = donations.reduce((sum, d) => sum + Number(d.amount), 0)
+    // Every.org accepts USD; convert from the user's stored currency
+    const totalUsd = first.user.currency === 'USD'
+      ? totalInCurrency
+      : totalInCurrency * GBP_TO_USD
 
     const result = await dispatchDonation({
       everyOrgSlug: first.charity.everyOrgSlug,
@@ -137,7 +141,7 @@ async function _dispatchDonationList(pending: DonationWithRelations[]): Promise<
         where: { id: { in: ids } },
         data: { dispatchStatus: 'DISPATCHED', everyOrgChargeId: result.chargeId },
       })
-      logger.info(`Dispatched £${totalGbp.toFixed(2)} to ${first.charity.name} (${result.chargeId})`)
+      logger.info(`Dispatched ${totalInCurrency.toFixed(2)} ${first.user.currency} (${totalUsd.toFixed(2)} USD) to ${first.charity.name} (${result.chargeId})`)
     } else {
       await prisma.donation.updateMany({
         where: { id: { in: ids } },

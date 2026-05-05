@@ -11,7 +11,7 @@ router.use(authenticate);
 router.get('/', async (req: any, res, next) => {
   try {
     const { limit = 20, offset = 0 } = req.query;
-    const calls = await callService.getCallsForUser(req.user.userId, Number(limit), Number(offset));
+    const calls = await callService.getCallsForUser(req.user.id, Number(limit), Number(offset));
     sendSuccess(res, calls);
   } catch (e) { next(e); }
 });
@@ -19,7 +19,7 @@ router.get('/', async (req: any, res, next) => {
 // GET /api/calls/upcoming — upcoming scheduled calls
 router.get('/upcoming', async (req: any, res, next) => {
   try {
-    const calls = await callService.getUpcomingCallsForUser(req.user.userId);
+    const calls = await callService.getUpcomingCallsForUser(req.user.id);
     sendSuccess(res, calls);
   } catch (e) { next(e); }
 });
@@ -27,7 +27,7 @@ router.get('/upcoming', async (req: any, res, next) => {
 // POST /api/calls/rescue — user initiates a rescue call
 router.post('/rescue', async (req: any, res, next) => {
   try {
-    const call = await callService.scheduleRescueCall(req.user.userId);
+    const call = await callService.scheduleRescueCall(req.user.id);
     sendSuccess(res, call, 201);
   } catch (e) { next(e); }
 });

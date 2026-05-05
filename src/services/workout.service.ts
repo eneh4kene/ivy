@@ -398,18 +398,23 @@ class WorkoutService {
     type: 'STREAK_7_DAY' | 'STREAK_30_DAY' | 'STREAK_90_DAY',
     streakDays: number
   ) {
+    const userCurrency = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { currency: true },
+    });
+
     await prisma.donation.create({
       data: {
         userId,
         charityId,
         amount,
-        currency: 'GBP',
+        currency: userCurrency?.currency ?? 'GBP',
         donationType: type,
         streakDays,
       },
     });
 
-    logger.info(`Streak bonus awarded: ${amount} GBP for ${streakDays}-day streak`);
+    logger.info(`Streak bonus awarded: ${amount} for ${streakDays}-day streak (user ${userId})`);
   }
 
   /**

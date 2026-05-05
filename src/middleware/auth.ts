@@ -16,6 +16,7 @@ export interface AuthRequest<
     subscriptionTier: string;
     subscriptionStatus: string;
     stripeSubscriptionId: string | null;
+    companyId: string | null;
   };
 }
 
@@ -48,6 +49,7 @@ export const authenticate = async (
         subscriptionTier: true,
         subscriptionStatus: true,
         stripeSubscriptionId: true,
+        companyId: true,
         isActive: true,
       },
     });
@@ -63,6 +65,7 @@ export const authenticate = async (
       subscriptionTier: user.subscriptionTier,
       subscriptionStatus: user.subscriptionStatus,
       stripeSubscriptionId: user.stripeSubscriptionId,
+      companyId: user.companyId,
     };
 
     next();

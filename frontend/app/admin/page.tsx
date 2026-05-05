@@ -4,106 +4,50 @@ import { useState, useEffect } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { formatCurrency } from '@/lib/utils'
 import { useAuthStore } from '@/lib/store/auth.store'
+import { adminApi } from '@/lib/api'
 
-// Mock data - these will be replaced with actual API calls
-interface CompanyStats {
-  season: {
-    name: string
-    startDate: string
-    endDate: string
-    daysRemaining: number
-  }
-  enrollment: {
-    total: number
-    active: number
-    pending: number
-  }
-  participation: {
-    rate: number
-    trend: number
-  }
-  consistency: {
-    rate: number
-    trend: number
-  }
-  donations: {
-    total: number
-    trend: number
-  }
-  tracks: Array<{
-    track: string
-    count: number
-    percentage: number
-  }>
-  weeklyParticipation: Array<{
-    week: number
-    rate: number
-  }>
+interface AdminStats {
+  season: { name: string; startDate: string | null; endDate: string | null; daysRemaining: number | null }
+  enrollment: { total: number; active: number; pending: number }
+  participation: { rate: number }
+  consistency: { rate: number }
+  donations: { total: number }
+  tracks: { track: string; count: number; percentage: number }[]
+  weeklyParticipation: { week: number; rate: number }[]
 }
 
 export default function AdminDashboardPage() {
   const user = useAuthStore((state) => state.user)
-  const [stats, setStats] = useState<CompanyStats | null>(null)
+  const [stats, setStats] = useState<AdminStats | null>(null)
   const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    // TODO: Replace with actual API call
-    // For now, using mock data
-    setTimeout(() => {
-      setStats({
-        season: {
-          name: 'Season 3',
-          startDate: '2025-01-15',
-          endDate: '2025-03-15',
-          daysRemaining: 45,
-        },
-        enrollment: {
-          total: 125,
-          active: 98,
-          pending: 27,
-        },
-        participation: {
-          rate: 78,
-          trend: 5,
-        },
-        consistency: {
-          rate: 65,
-          trend: -3,
-        },
-        donations: {
-          total: 2340,
-          trend: 420,
-        },
-        tracks: [
-          { track: 'Fitness', count: 50, percentage: 40 },
-          { track: 'Focus', count: 38, percentage: 30 },
-          { track: 'Sleep', count: 25, percentage: 20 },
-          { track: 'Balance', count: 12, percentage: 10 },
-        ],
-        weeklyParticipation: [
-          { week: 1, rate: 82 },
-          { week: 2, rate: 79 },
-          { week: 3, rate: 75 },
-          { week: 4, rate: 78 },
-          { week: 5, rate: 80 },
-          { week: 6, rate: 78 },
-        ],
-      })
-      setIsLoading(false)
-    }, 500)
+    adminApi.getStats()
+      .then(setStats)
+      .catch((err) => setError(err.message ?? 'Failed to load stats'))
+      .finally(() => setIsLoading(false))
   }, [])
 
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-full">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600" />
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="p-8 text-center">
+        <p className="text-red-600 font-medium">{error}</p>
+        <p className="text-sm text-muted-foreground mt-2">Make sure your account is linked to a company.</p>
       </div>
     )
   }
 
   return (
     <div className="p-8">
-      {/* Header */}
       <div className="mb-8">
         <h1 className="text-3xl font-bold mb-2">Company Overview</h1>
         <p className="text-muted-foreground">
@@ -118,9 +62,13 @@ export default function AdminDashboardPage() {
             <div>
               <p className="text-indigo-100 text-sm mb-1">{stats?.season.name}</p>
               <h2 className="text-2xl font-bold mb-1">
-                {new Date(stats?.season.startDate || '').toLocaleDateString()} - {new Date(stats?.season.endDate || '').toLocaleDateString()}
+                {stats?.season.startDate
+                  ? `${new Date(stats.season.startDate).toLocaleDateString()} - ${new Date(stats.season.endDate ?? '').toLocaleDateString()}`
+                  : 'Season dates not set'}
               </h2>
-              <p className="text-indigo-100">{stats?.season.daysRemaining} days remaining</p>
+              <p className="text-indigo-100">
+                {stats?.season.daysRemaining != null ? `${stats.season.daysRemaining} days remaining` : 'Not started'}
+              </p>
             </div>
             <div className="text-right">
               <p className="text-indigo-100 text-sm mb-1">Employees</p>
@@ -135,71 +83,35 @@ export default function AdminDashboardPage() {
       <div className="grid gap-6 md:grid-cols-3 mb-8">
         <Card>
           <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Participation Rate
-            </CardTitle>
+            <CardTitle className="text-sm font-medium text-muted-foreground">Participation Rate</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="flex items-end justify-between">
-              <div>
-                <p className="text-4xl font-bold">{stats?.participation.rate}%</p>
-                <p className={`text-sm mt-1 ${stats && stats.participation.trend > 0 ? 'text-green-600' : 'text-red-600'}`}>
-                  {stats && stats.participation.trend > 0 ? '↑' : '↓'} {Math.abs(stats?.participation.trend || 0)}% from last week
-                </p>
-              </div>
-              <svg className="w-8 h-8 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
-              </svg>
-            </div>
+            <p className="text-4xl font-bold">{stats?.participation.rate ?? 0}%</p>
+            <p className="text-sm text-muted-foreground mt-1">Users active this week</p>
           </CardContent>
         </Card>
-
         <Card>
           <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Consistency Score
-            </CardTitle>
+            <CardTitle className="text-sm font-medium text-muted-foreground">Consistency Score</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="flex items-end justify-between">
-              <div>
-                <p className="text-4xl font-bold">{stats?.consistency.rate}%</p>
-                <p className={`text-sm mt-1 ${stats && stats.consistency.trend > 0 ? 'text-green-600' : 'text-red-600'}`}>
-                  {stats && stats.consistency.trend > 0 ? '↑' : '↓'} {Math.abs(stats?.consistency.trend || 0)}% from last week
-                </p>
-              </div>
-              <svg className="w-8 h-8 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-            </div>
+            <p className="text-4xl font-bold">{stats?.consistency.rate ?? 0}%</p>
+            <p className="text-sm text-muted-foreground mt-1">Overall workout completion</p>
           </CardContent>
         </Card>
-
         <Card>
           <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Total Donations
-            </CardTitle>
+            <CardTitle className="text-sm font-medium text-muted-foreground">Total Donations</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="flex items-end justify-between">
-              <div>
-                <p className="text-4xl font-bold">{formatCurrency(stats?.donations.total || 0)}</p>
-                <p className="text-sm text-green-600 mt-1">
-                  ↑ {formatCurrency(stats?.donations.trend || 0)} this month
-                </p>
-              </div>
-              <svg className="w-8 h-8 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
-              </svg>
-            </div>
+            <p className="text-4xl font-bold">{formatCurrency(stats?.donations.total ?? 0)}</p>
+            <p className="text-sm text-muted-foreground mt-1">All time</p>
           </CardContent>
         </Card>
       </div>
 
       {/* Charts Row */}
       <div className="grid gap-6 md:grid-cols-2 mb-8">
-        {/* Participation Over Time */}
         <Card>
           <CardHeader>
             <CardTitle>Participation Over Time</CardTitle>
@@ -214,10 +126,7 @@ export default function AdminDashboardPage() {
                     <span className="font-medium">{item.rate}%</span>
                   </div>
                   <div className="w-full bg-secondary rounded-full h-2">
-                    <div
-                      className="bg-indigo-600 h-2 rounded-full transition-all"
-                      style={{ width: `${item.rate}%` }}
-                    />
+                    <div className="bg-indigo-600 h-2 rounded-full transition-all" style={{ width: `${item.rate}%` }} />
                   </div>
                 </div>
               ))}
@@ -225,7 +134,6 @@ export default function AdminDashboardPage() {
           </CardContent>
         </Card>
 
-        {/* Track Distribution */}
         <Card>
           <CardHeader>
             <CardTitle>Track Distribution</CardTitle>
@@ -236,30 +144,22 @@ export default function AdminDashboardPage() {
               {stats?.tracks.map((item) => (
                 <div key={item.track} className="space-y-2">
                   <div className="flex items-center justify-between text-sm">
-                    <span className="font-medium">{item.track}</span>
-                    <span className="text-muted-foreground">
-                      {item.count} ({item.percentage}%)
-                    </span>
+                    <span className="font-medium capitalize">{item.track}</span>
+                    <span className="text-muted-foreground">{item.count} ({item.percentage}%)</span>
                   </div>
                   <div className="w-full bg-secondary rounded-full h-2">
-                    <div
-                      className={`h-2 rounded-full transition-all ${
-                        item.track === 'Fitness' ? 'bg-blue-600' :
-                        item.track === 'Focus' ? 'bg-purple-600' :
-                        item.track === 'Sleep' ? 'bg-indigo-600' :
-                        'bg-green-600'
-                      }`}
-                      style={{ width: `${item.percentage}%` }}
-                    />
+                    <div className="bg-indigo-600 h-2 rounded-full transition-all" style={{ width: `${item.percentage}%` }} />
                   </div>
                 </div>
               ))}
+              {(!stats?.tracks || stats.tracks.length === 0) && (
+                <p className="text-sm text-muted-foreground text-center py-4">No track data yet</p>
+              )}
             </div>
           </CardContent>
         </Card>
       </div>
 
-      {/* Privacy Notice */}
       <Card className="bg-blue-50 border-blue-200">
         <CardContent className="p-6">
           <div className="flex items-start gap-3">

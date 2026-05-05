@@ -309,7 +309,7 @@ class PaymentService {
    * Handle subscription updated webhook event
    */
   async handleSubscriptionUpdated(subscription: Stripe.Subscription) {
-    const userId = subscription.metadata.userId;
+    let userId = subscription.metadata.userId;
 
     if (!userId) {
       // Try to find user by Stripe customer ID
@@ -321,6 +321,8 @@ class PaymentService {
         logger.error('Cannot find user for subscription', { subscription: subscription.id });
         return;
       }
+
+      userId = user.id;
     }
 
     // Get the price ID from the subscription
@@ -351,7 +353,7 @@ class PaymentService {
    * Handle subscription deleted webhook event
    */
   async handleSubscriptionDeleted(subscription: Stripe.Subscription) {
-    const userId = subscription.metadata.userId;
+    let userId = subscription.metadata.userId;
 
     if (!userId) {
       const user = await prisma.user.findFirst({
@@ -363,20 +365,7 @@ class PaymentService {
         return;
       }
 
-      await prisma.user.update({
-        where: { id: user.id },
-        data: {
-          subscriptionTier: 'FREE',
-          subscriptionStatus: 'CANCELLED',
-          stripeSubscriptionId: null,
-        },
-      });
-
-      // Downgrade Impact Wallet limits
-      await this.updateImpactWalletLimits(user.id, 'FREE');
-
-      logger.info(`Subscription cancelled: ${subscription.id} for user ${user.id}`);
-      return;
+      userId = user.id;
     }
 
     await prisma.user.update({

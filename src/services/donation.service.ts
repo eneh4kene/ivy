@@ -96,6 +96,7 @@ class DonationService {
     const user = await prisma.user.findUnique({
       where: { id: userId },
       include: { preferredCharity: true },
+      // select not used here because include is present; currency comes from the model
     });
 
     if (!user) {
@@ -132,7 +133,7 @@ class DonationService {
         userId,
         charityId: targetCharityId,
         amount,
-        currency: 'GBP',
+        currency: user.currency,
         donationType,
         workoutId,
         streakDays,

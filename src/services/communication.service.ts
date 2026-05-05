@@ -90,10 +90,21 @@ export async function dispatchInteraction(
   logger.info(`dispatch:${interactionType} → ${channel} (${reason}) for user ${userId}`)
 
   switch (channel) {
-    case 'CALL':
-      // Actual Retell call is scheduled by call.service — this just confirms routing
-      logger.info(`Routing ${interactionType} to call for ${userId}`)
+    case 'CALL': {
+      const callTypeMap: Partial<Record<InteractionType, string>> = {
+        RESCUE: 'RESCUE',
+        SEASON_CLOSE: 'SEASON_CLOSE',
+        SPRINT_END: 'SEASON_CLOSE',
+        MORNING_CHECKIN: 'MORNING_PLANNING',
+        EVENING_CHECKIN: 'EVENING_REVIEW',
+        STREAK_MILESTONE: 'EVENING_REVIEW',
+      }
+      const callType = (callTypeMap[interactionType] ?? 'RESCUE') as any
+      const scheduledAt = new Date(Date.now() + 2 * 60 * 1000)
+      const { default: callService } = await import('./call.service')
+      await callService.scheduleCall(userId, callType, scheduledAt, context as Record<string, any>)
       break
+    }
 
     case 'TEXT':
       await sendTextCheckin(userId, interactionType, context)
@@ -132,7 +143,7 @@ async function countRecentMissedCalls(userId: string, limit: number): Promise<nu
     take: limit,
     select: { status: true },
   })
-  return recent.filter((c) => ['MISSED', 'FAILED'].includes(c.status as string)).length
+  return recent.filter((c) => ['NO_ANSWER', 'FAILED'].includes(c.status as string)).length
 }
 
 async function isTextUserWarmingUp(userId: string): Promise<boolean> {

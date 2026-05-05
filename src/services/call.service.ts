@@ -95,11 +95,24 @@ class CallService {
         morningCallTime: true,
         eveningCallTime: true,
         timezone: true,
+        preferredDays: true,
+        callFrequency: true,
       },
     });
 
     if (!user) {
       throw new NotFoundError('User not found');
+    }
+
+    // Respect preferred call days if set
+    if (user.preferredDays) {
+      const preferredDays: string[] = JSON.parse(user.preferredDays);
+      if (preferredDays.length > 0) {
+        const dayName = date.toLocaleDateString('en-US', { weekday: 'long' }).toLowerCase();
+        if (!preferredDays.includes(dayName)) {
+          return [];
+        }
+      }
     }
 
     const calls = [];
@@ -150,6 +163,7 @@ class CallService {
         where: { id: userId },
         include: {
           preferredCharity: true,
+          company: { select: { name: true } },
         },
       }),
       prisma.streak.findUnique({ where: { userId } }),
@@ -185,6 +199,7 @@ class CallService {
       goal: user?.goal,
       minimumMode: user?.minimumMode,
       giftFrame: user?.giftFrame,
+      subscriptionTier: user?.subscriptionTier,
       currentStreak: streak?.currentStreak || 0,
       longestStreak: streak?.longestStreak || 0,
       workoutsThisWeek,

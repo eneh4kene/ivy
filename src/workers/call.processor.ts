@@ -2,7 +2,6 @@ import { Job } from 'bull';
 import { callScheduleQueue } from '../config/queues';
 import callService from '../services/call.service';
 import retellService from '../services/retell.service';
-import { handleMissedCall as handleMissedCallComms } from '../services/communication.service';
 import { config } from '../config';
 import logger from '../utils/logger';
 
@@ -44,8 +43,7 @@ callScheduleQueue.process('initiate-call', async (job: Job<CallJobData>) => {
   try {
     logger.info(`Initiating ${callType} call ${callId} for ${userName}`);
 
-    await callService.updateCallStatus(callId, 'IN_PROGRESS', { startedAt: new Date() });
-
+    // Don't pre-stamp IN_PROGRESS/startedAt here — the Retell call_started webhook sets those
     const isB2B = contextData?.subscriptionTier === 'B2B';
     const agentId = getAgentId(callType, isB2B);
 
@@ -70,17 +68,6 @@ callScheduleQueue.process('initiate-call', async (job: Job<CallJobData>) => {
     logger.error(`Call ${callId} failed to initiate:`, error);
     await callService.updateCallStatus(callId, 'FAILED', { outcome: 'error' });
     throw error;
-  }
-});
-
-// Missed call handler — fires when Retell reports no answer
-callScheduleQueue.process('missed-call-followup', async (job: Job<{ userId: string; callId: string }>) => {
-  const { userId, callId: _callId } = job.data;
-  try {
-    await handleMissedCallComms(userId);
-    logger.info(`Missed call followup sent for user ${userId}`);
-  } catch (err) {
-    logger.error(`Missed call followup failed for ${userId}:`, err);
   }
 });
 

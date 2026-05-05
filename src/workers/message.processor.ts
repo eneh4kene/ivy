@@ -2,8 +2,10 @@ import { Job } from 'bull';
 import { messageQueue } from '../config/queues';
 import prisma from '../utils/prisma';
 import axios from 'axios';
+import twilio from 'twilio';
 import { config } from '../config';
 import logger from '../utils/logger';
+import { logUsage } from '../services/usage.service';
 
 interface WhatsAppJobData {
   messageId: string;
@@ -36,11 +38,13 @@ messageQueue.process('send-whatsapp', async (job: Job<WhatsAppJobData>) => {
     );
 
     const waId = response.data.messages?.[0]?.id;
+    // Status moves from SENT → DELIVERED via the WhatsApp delivery webhook
     await prisma.message.update({
       where: { id: messageId },
-      data: { status: 'DELIVERED', whatsappId: waId },
+      data: { status: 'SENT', whatsappId: waId },
     });
 
+    await logUsage('whatsapp', 'whatsapp_message', 1, job.data.userId, { messageId, waId });
     logger.info(`WhatsApp sent to ${phone}: ${waId}`);
     return { success: true, waId };
   } catch (err: any) {
@@ -59,8 +63,8 @@ messageQueue.process('send-sms', async (job: Job<SMSJobData>) => {
   }
 
   try {
-    const twilio = require('twilio')(config.twilio.accountSid, config.twilio.authToken);
-    const message = await twilio.messages.create({
+    const client = twilio(config.twilio.accountSid, config.twilio.authToken);
+    const message = await client.messages.create({
       body: content,
       from: config.twilio.phoneNumber,
       to: phone,
@@ -68,9 +72,10 @@ messageQueue.process('send-sms', async (job: Job<SMSJobData>) => {
 
     await prisma.message.update({
       where: { id: messageId },
-      data: { status: 'DELIVERED' },
+      data: { status: 'SENT' },
     });
 
+    await logUsage('twilio', 'sms', 1, job.data.userId, { messageId, sid: message.sid });
     logger.info(`SMS sent to ${phone}: ${message.sid}`);
     return { success: true, sid: message.sid };
   } catch (err: any) {

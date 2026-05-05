@@ -46,7 +46,17 @@ export const authApi = {
 
 // Users API
 export const usersApi = {
-  createUser: async (data: any) => {
+  createUser: async (data: {
+    email: string
+    firstName: string
+    lastName: string
+    phone?: string
+    track: string
+    goal: string
+    subscriptionTier?: string
+    region?: string
+    currency?: string
+  }) => {
     const response = await client.post<ApiResponse<User>>('/api/users', data)
     return response.data.data!
   },
@@ -273,38 +283,86 @@ export const buddyApi = {
   },
 }
 
-// Circles API
+interface CircleMember { id: string; firstName: string }
+interface Circle {
+  id: string; name: string; track: string; tier: string
+  seasonTheme?: string; size: number; maxSize: number; isActive: boolean
+  members: { userId: string; role: string; user: CircleMember }[]
+}
+interface SprintGoal { circleId: string; sprintNumber: number; pledge: string; theme?: string; targetMetric?: string }
+interface ConsistencyResult { rate: number; topPerformers: string[]; memberCount: number }
+
 export const circlesApi = {
-  getMy: async () => {
-    const response = await client.get<ApiResponse<any[]>>('/api/circles/my')
+  getMy: async (): Promise<Circle[]> => {
+    const response = await client.get<ApiResponse<Circle[]>>('/api/circles/my')
     return response.data.data ?? []
   },
-  get: async (id: string) => {
-    const response = await client.get<ApiResponse<any>>(`/api/circles/${id}`)
+  get: async (id: string): Promise<Circle> => {
+    const response = await client.get<ApiResponse<Circle>>(`/api/circles/${id}`)
     return response.data.data!
   },
-  create: async (data: { name: string; track: string; tier?: string; seasonTheme?: string }) => {
-    const response = await client.post<ApiResponse<any>>('/api/circles', data)
+  create: async (data: { name: string; track: string; tier?: string; seasonTheme?: string }): Promise<Circle> => {
+    const response = await client.post<ApiResponse<Circle>>('/api/circles', data)
     return response.data.data!
   },
-  update: async (id: string, data: { name?: string; seasonTheme?: string; track?: string }) => {
-    const response = await client.patch<ApiResponse<any>>(`/api/circles/${id}`, data)
+  update: async (id: string, data: { name?: string; seasonTheme?: string; track?: string }): Promise<Circle> => {
+    const response = await client.patch<ApiResponse<Circle>>(`/api/circles/${id}`, data)
     return response.data.data!
   },
   join: async (circleId: string) => {
-    const response = await client.post<ApiResponse<any>>(`/api/circles/${circleId}/members`, {})
+    const response = await client.post<ApiResponse<{ circleId: string; userId: string }>>(`/api/circles/${circleId}/members`, {})
     return response.data.data!
   },
-  setSprintGoal: async (circleId: string, data: { sprintNumber: number; pledge: string; theme?: string; targetMetric?: string }) => {
-    const response = await client.post<ApiResponse<any>>(`/api/circles/${circleId}/sprint-goals`, data)
+  setSprintGoal: async (circleId: string, data: { sprintNumber: number; pledge: string; theme?: string; targetMetric?: string }): Promise<SprintGoal> => {
+    const response = await client.post<ApiResponse<SprintGoal>>(`/api/circles/${circleId}/sprint-goals`, data)
     return response.data.data!
   },
-  getSprintGoal: async (circleId: string, sprintNumber: number) => {
-    const response = await client.get<ApiResponse<any>>(`/api/circles/${circleId}/sprint-goals/${sprintNumber}`)
+  getSprintGoal: async (circleId: string, sprintNumber: number): Promise<SprintGoal | null> => {
+    const response = await client.get<ApiResponse<SprintGoal>>(`/api/circles/${circleId}/sprint-goals/${sprintNumber}`)
+    return response.data.data ?? null
+  },
+  getConsistency: async (circleId: string): Promise<ConsistencyResult> => {
+    const response = await client.get<ApiResponse<ConsistencyResult>>(`/api/circles/${circleId}/consistency`)
+    return response.data.data!
+  },
+}
+
+// Admin API (B2B company admins)
+interface AdminStats {
+  season: { name: string; startDate: string | null; endDate: string | null; daysRemaining: number | null }
+  enrollment: { total: number; active: number; pending: number }
+  participation: { rate: number }
+  consistency: { rate: number }
+  donations: { total: number }
+  tracks: { track: string; count: number; percentage: number }[]
+  weeklyParticipation: { week: number; rate: number }[]
+}
+interface AdminEmployee { id: string; name: string; email: string; status: 'active' | 'pending' | 'inactive'; track: string; joinedAt: string }
+
+export const adminApi = {
+  getStats: async (): Promise<AdminStats> => {
+    const response = await client.get<ApiResponse<AdminStats>>('/api/admin/stats')
+    return response.data.data!
+  },
+  getEmployees: async (): Promise<AdminEmployee[]> => {
+    const response = await client.get<ApiResponse<AdminEmployee[]>>('/api/admin/employees')
+    return response.data.data!
+  },
+  inviteEmployees: async (emails: string[]) => {
+    const response = await client.post<ApiResponse<{ results: { email: string; status: string; error?: string }[] }>>('/api/admin/employees/invite', { emails })
+    return response.data.data!
+  },
+  getReportData: async (type?: string) => {
+    const response = await client.get<ApiResponse<unknown>>('/api/admin/reports', { params: { type } })
     return response.data.data
   },
-  getConsistency: async (circleId: string) => {
-    const response = await client.get<ApiResponse<any>>(`/api/circles/${circleId}/consistency`)
+  getUsage: async (days = 30) => {
+    const response = await client.get<ApiResponse<{
+      periodDays: number
+      totalCostGbp: number
+      byService: { service: string; operation: string; totalCostGbp: number; totalUnits: number; count: number }[]
+      byUser: { userId: string; name: string; email: string; totalCostGbp: number }[]
+    }>>('/api/admin/usage', { params: { days } })
     return response.data.data!
   },
 }
@@ -335,6 +393,7 @@ export const api = {
   buddy: buddyApi,
   push: pushApi,
   circles: circlesApi,
+  admin: adminApi,
 }
 
 export default api

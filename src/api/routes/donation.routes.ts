@@ -24,9 +24,6 @@ router.get('/charities/:id', authenticate, donationController.getCharityById);
 router.get('/user-charities', authenticate, donationController.getUserCharities);
 router.post('/user-charities', authenticate, donationController.setUserCharities);
 
-// All routes below require authentication
-router.use(authenticate);
-
 /**
  * @route   GET /api/donations
  * @desc    Get user's donations with filtering

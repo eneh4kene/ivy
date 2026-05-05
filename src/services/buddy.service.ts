@@ -1,7 +1,9 @@
 import prisma from '../utils/prisma';
 import logger from '../utils/logger';
 import nodemailer from 'nodemailer';
+import axios from 'axios';
 import { config } from '../config';
+import { logUsage } from './usage.service';
 
 class BuddyService {
   private transporter: nodemailer.Transporter | null = null;
@@ -179,23 +181,12 @@ class BuddyService {
         const text = `🌿 *Ivy Weekly Update for ${user.firstName}*\n\n🔥 ${streak?.currentStreak ?? 0}-day streak\n✅ ${completedThisWeek}/${totalThisWeek} workouts this week\n💚 ${currency}${weeklyDonations.toFixed(0)} donated${latestMarker ? `\n\n✨ _"${latestMarker.marker}"_` : ''}\n\nSend them some encouragement — they'll love it.`;
 
         try {
-          const fetch = (await import('node-fetch')).default as any;
-          await fetch(
+          await axios.post(
             `https://graph.facebook.com/v18.0/${config.whatsapp.phoneNumberId}/messages`,
-            {
-              method: 'POST',
-              headers: {
-                Authorization: `Bearer ${config.whatsapp.accessToken}`,
-                'Content-Type': 'application/json',
-              },
-              body: JSON.stringify({
-                messaging_product: 'whatsapp',
-                to: buddy.buddyPhone,
-                type: 'text',
-                text: { body: text },
-              }),
-            }
+            { messaging_product: 'whatsapp', to: buddy.buddyPhone, type: 'text', text: { body: text } },
+            { headers: { Authorization: `Bearer ${config.whatsapp.accessToken}`, 'Content-Type': 'application/json' } }
           );
+          await logUsage('whatsapp', 'whatsapp_message', 1, buddy.userId, { recipient: 'buddy', buddyPhone: buddy.buddyPhone });
           logger.info(`WhatsApp digest sent to ${buddy.buddyPhone}`);
         } catch (err) {
           logger.error('Failed to send buddy WhatsApp:', err);

@@ -5,11 +5,13 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
+import { statsApi } from '@/lib/api'
 
 interface LifeMarker {
   id: string
   name: string
   description: string
+  saved: boolean
 }
 
 const SUGGESTED_MARKERS = [
@@ -26,25 +28,30 @@ export function LifeMarkersSetupStep() {
   const [newMarkerName, setNewMarkerName] = useState('')
   const [newMarkerDescription, setNewMarkerDescription] = useState('')
 
-  const addMarker = (name: string, description: string = '') => {
+  const addMarker = async (name: string, description: string = '') => {
     if (!name.trim()) return
 
-    const newMarker: LifeMarker = {
-      id: Date.now().toString(),
-      name: name.trim(),
-      description: description.trim(),
-    }
-
-    setMarkers([...markers, newMarker])
+    const tempId = Date.now().toString()
+    const newMarker: LifeMarker = { id: tempId, name: name.trim(), description: description.trim(), saved: false }
+    setMarkers(prev => [...prev, newMarker])
     setNewMarkerName('')
     setNewMarkerDescription('')
+
+    try {
+      await statsApi.createLifeMarker({
+        marker: name.trim(),
+        category: 'mental',
+        significance: 'medium',
+      })
+      setMarkers(prev => prev.map(m => m.id === tempId ? { ...m, saved: true } : m))
+    } catch {
+      setMarkers(prev => prev.filter(m => m.id !== tempId))
+    }
   }
 
   const removeMarker = (id: string) => {
     setMarkers(markers.filter(m => m.id !== id))
   }
-
-  // TODO: Save life markers to API
 
   return (
     <div className="space-y-6">
@@ -59,11 +66,11 @@ export function LifeMarkersSetupStep() {
         <p className="text-sm text-muted-foreground mb-4">
           Life markers are the non-quantifiable aspects of your life that matter most to you. They could be relationships, career satisfaction, creativity, or anything else that contributes to your overall wellbeing.
         </p>
-        <p className="text-sm font-medium">Examples:</p>
+        <p className="text-sm font-medium">Suggestions:</p>
         <div className="flex flex-wrap gap-2 mt-2">
-          {SUGGESTED_MARKERS.map((marker, index) => (
+          {SUGGESTED_MARKERS.map((marker) => (
             <Button
-              key={index}
+              key={marker.name}
               variant="outline"
               size="sm"
               onClick={() => addMarker(marker.name)}
@@ -75,7 +82,6 @@ export function LifeMarkersSetupStep() {
         </div>
       </div>
 
-      {/* Custom Marker Input */}
       <div className="space-y-3">
         <Label className="text-base font-semibold">Add a custom life marker</Label>
         <div className="space-y-2">
@@ -101,7 +107,6 @@ export function LifeMarkersSetupStep() {
         </div>
       </div>
 
-      {/* Added Markers */}
       {markers.length > 0 && (
         <div className="space-y-3">
           <Label className="text-base font-semibold">Your life markers ({markers.length}/5)</Label>
@@ -110,17 +115,15 @@ export function LifeMarkersSetupStep() {
               <CardContent className="p-4">
                 <div className="flex items-start justify-between gap-4">
                   <div className="flex-1">
-                    <p className="font-medium">{marker.name}</p>
+                    <div className="flex items-center gap-2">
+                      <p className="font-medium">{marker.name}</p>
+                      {marker.saved && <span className="text-xs text-green-600">✓ saved</span>}
+                    </div>
                     {marker.description && (
                       <p className="text-sm text-muted-foreground mt-1">{marker.description}</p>
                     )}
                   </div>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => removeMarker(marker.id)}
-                    className="flex-shrink-0"
-                  >
+                  <Button variant="ghost" size="sm" onClick={() => removeMarker(marker.id)}>
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                     </svg>
@@ -135,23 +138,10 @@ export function LifeMarkersSetupStep() {
       {markers.length >= 5 && (
         <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
           <p className="text-sm text-yellow-800">
-            You've reached the maximum of 5 life markers. You can edit these anytime from your dashboard.
+            You&apos;ve reached the maximum of 5 life markers. You can edit these anytime from your dashboard.
           </p>
         </div>
       )}
-
-      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-        <div className="flex items-start gap-3">
-          <svg className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-          </svg>
-          <div>
-            <p className="text-sm text-blue-800">
-              Ivy will check in on these markers during your AI calls and human review sessions, helping you maintain balance across all areas of your life.
-            </p>
-          </div>
-        </div>
-      </div>
     </div>
   )
 }

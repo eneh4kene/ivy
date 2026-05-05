@@ -5,6 +5,7 @@ import { config } from '../config';
 import prisma from '../utils/prisma';
 import logger from '../utils/logger';
 import { BadRequestError, UnauthorizedError } from '../utils/errors';
+import { logUsage } from './usage.service';
 
 class AuthService {
   private transporter: nodemailer.Transporter;
@@ -129,6 +130,7 @@ class AuthService {
         `,
       });
 
+      await logUsage('sendgrid', 'email', 1, user.id, { type: 'magic_link', email });
       logger.info(`Magic link sent to ${email}`);
     } catch (error) {
       logger.error('Failed to send magic link email:', error);

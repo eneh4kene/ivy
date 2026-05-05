@@ -41,3 +41,5 @@ export function formatPrice(amount: number, currency: Currency): string {
 export function getRegionFromCurrency(currency: Currency): Region {
   return currency === 'USD' ? 'US' : 'GB'
 }
+
+export const GBP_TO_USD = 1.27

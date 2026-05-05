@@ -1,60 +1,58 @@
 'use client'
 
+import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { adminApi } from '@/lib/api'
+import client from '@/lib/api/client'
 
 const reports = [
-  {
-    name: 'End of Season Summary',
-    description: 'Complete overview of participation, consistency, donations, and transformation trends',
-    format: 'PDF',
-    icon: '📊',
-  },
-  {
-    name: 'Weekly Participation Report',
-    description: 'Week-by-week participation rates and engagement metrics',
-    format: 'CSV',
-    icon: '📈',
-  },
-  {
-    name: 'Aggregate Wellness Trends',
-    description: 'Anonymous energy, mood, and health confidence trends over time',
-    format: 'PDF',
-    icon: '🏥',
-  },
-  {
-    name: 'Donation Impact Report',
-    description: 'Total donations by charity, impact metrics, and employee engagement',
-    format: 'PDF',
-    icon: '❤️',
-  },
-  {
-    name: 'Track Distribution Analysis',
-    description: 'Breakdown of employee track selections and completion rates',
-    format: 'CSV',
-    icon: '🎯',
-  },
-  {
-    name: 'Employee Enrollment List',
-    description: 'List of all enrolled employees with status (no performance data)',
-    format: 'CSV',
-    icon: '👥',
-  },
+  { name: 'End of Season Summary', description: 'Complete overview of participation, consistency, donations, and transformation trends', type: 'summary', format: 'JSON', icon: '📊' },
+  { name: 'Employee Enrollment List', description: 'List of all enrolled employees with status (no performance data)', type: 'employees', format: 'CSV', icon: '👥' },
+  { name: 'Aggregate Wellness Trends', description: 'Anonymous energy, mood, and health confidence trends over time', type: 'summary', format: 'JSON', icon: '🏥' },
+  { name: 'Donation Impact Report', description: 'Total donations by charity, impact metrics, and employee engagement', type: 'summary', format: 'JSON', icon: '❤️' },
 ]
 
 export default function ReportsPage() {
-  const handleDownload = (reportName: string) => {
-    // TODO: Implement actual report generation
-    console.log(`Downloading: ${reportName}`)
+  const [downloading, setDownloading] = useState<string | null>(null)
+
+  const handleDownload = async (reportName: string, type: string, format: string) => {
+    setDownloading(reportName)
+    try {
+      if (format === 'CSV') {
+        // Fetch CSV directly from the API
+        const response = await client.get('/api/admin/reports', {
+          params: { type },
+          responseType: 'blob',
+        })
+        const url = URL.createObjectURL(new Blob([response.data as BlobPart]))
+        const a = document.createElement('a')
+        a.href = url
+        a.download = `ivy-${type}.csv`
+        a.click()
+        URL.revokeObjectURL(url)
+      } else {
+        const data = await adminApi.getReportData(type)
+        const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
+        const url = URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = `ivy-${type}-report.json`
+        a.click()
+        URL.revokeObjectURL(url)
+      }
+    } catch (err) {
+      alert('Failed to generate report. Please try again.')
+    } finally {
+      setDownloading(null)
+    }
   }
 
   return (
     <div className="p-8">
       <div className="mb-8">
         <h1 className="text-3xl font-bold mb-2">Reports & Exports</h1>
-        <p className="text-muted-foreground">
-          Generate and download reports for your company&apos;s Ivy program
-        </p>
+        <p className="text-muted-foreground">Generate and download reports for your company&apos;s Ivy program</p>
       </div>
 
       {/* Quick Export */}
@@ -62,16 +60,18 @@ export default function ReportsPage() {
         <CardContent className="p-6">
           <div className="flex items-center justify-between">
             <div className="flex-1">
-              <h3 className="text-lg font-semibold mb-1">Quick Export - Current Season</h3>
-              <p className="text-sm text-muted-foreground">
-                Download a comprehensive report for Season 3 (Jan 15 - Mar 15)
-              </p>
+              <h3 className="text-lg font-semibold mb-1">Quick Export — Season Summary</h3>
+              <p className="text-sm text-muted-foreground">Download a comprehensive JSON report for the current season</p>
             </div>
-            <Button size="lg">
+            <Button
+              size="lg"
+              disabled={downloading === 'quick'}
+              onClick={() => handleDownload('quick', 'summary', 'JSON')}
+            >
               <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
               </svg>
-              Download Season Report
+              {downloading === 'quick' ? 'Generating…' : 'Download Season Report'}
             </Button>
           </div>
         </CardContent>
@@ -82,32 +82,27 @@ export default function ReportsPage() {
         {reports.map((report) => (
           <Card key={report.name} className="hover:shadow-md transition-shadow">
             <CardHeader>
-              <div className="flex items-start justify-between">
-                <div className="flex items-start gap-3">
-                  <span className="text-3xl">{report.icon}</span>
-                  <div>
-                    <CardTitle className="text-lg">{report.name}</CardTitle>
-                    <CardDescription className="mt-1">
-                      {report.description}
-                    </CardDescription>
-                  </div>
+              <div className="flex items-start gap-3">
+                <span className="text-3xl">{report.icon}</span>
+                <div>
+                  <CardTitle className="text-lg">{report.name}</CardTitle>
+                  <CardDescription className="mt-1">{report.description}</CardDescription>
                 </div>
               </div>
             </CardHeader>
             <CardContent>
               <div className="flex items-center justify-between">
-                <span className="text-sm text-muted-foreground">
-                  Format: {report.format}
-                </span>
+                <span className="text-sm text-muted-foreground">Format: {report.format}</span>
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => handleDownload(report.name)}
+                  disabled={downloading === report.name}
+                  onClick={() => handleDownload(report.name, report.type, report.format)}
                 >
                   <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
                   </svg>
-                  Generate
+                  {downloading === report.name ? 'Generating…' : 'Generate'}
                 </Button>
               </div>
             </CardContent>
@@ -115,7 +110,6 @@ export default function ReportsPage() {
         ))}
       </div>
 
-      {/* Privacy Notice */}
       <Card className="mt-8 bg-blue-50 border-blue-200">
         <CardContent className="p-6">
           <div className="flex items-start gap-3">

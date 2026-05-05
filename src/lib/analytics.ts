@@ -58,7 +58,9 @@ export const serverAnalytics = {
   identify: (userId: string, props: Record<string, unknown>) => {
     try {
       getClient()?.identify({ distinctId: userId, properties: props })
-    } catch {}
+    } catch (err) {
+      logger.warn('Analytics identify failed', err)
+    }
   },
 
   shutdown: async () => {
