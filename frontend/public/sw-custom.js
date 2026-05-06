@@ -1,4 +1,6 @@
 // Custom service worker logic — runs alongside next-pwa's generated sw.js
+// next-pwa requires this placeholder to inject its precache manifest
+self.__WB_MANIFEST;
 
 self.addEventListener('push', function (event) {
   if (!event.data) return;
