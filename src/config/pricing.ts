@@ -23,13 +23,22 @@ export const IMPACT_WALLET_MONTHLY: Record<string, Record<Currency, number>> = {
   CONCIERGE: { GBP: 60, USD: 75 },
 }
 
-// Stripe Price IDs — set these via environment variables
-// Create USD prices in your Stripe dashboard, then add to .env:
-//   STRIPE_PRICE_PRO_GBP, STRIPE_PRICE_PRO_USD
-//   STRIPE_PRICE_ELITE_GBP, STRIPE_PRICE_ELITE_USD
-//   STRIPE_PRICE_CONCIERGE_GBP, STRIPE_PRICE_CONCIERGE_USD
+// Maps internal tier enum → env var name fragment (matches frontend product names)
+// Railway / .env vars to set:
+//   STRIPE_PRICE_IVY_GBP, STRIPE_PRICE_IVY_USD
+//   STRIPE_PRICE_IVY_PLUS_GBP, STRIPE_PRICE_IVY_PLUS_USD
+//   STRIPE_PRICE_IVY_CONCIERGE_GBP, STRIPE_PRICE_IVY_CONCIERGE_USD
+//   STRIPE_PRICE_B2B_GBP, STRIPE_PRICE_B2B_USD
+const TIER_ENV_NAME: Record<string, string> = {
+  PRO:       'IVY',
+  ELITE:     'IVY_PLUS',
+  CONCIERGE: 'IVY_CONCIERGE',
+  B2B:       'B2B',
+}
+
 export function getStripePriceId(tier: string, currency: Currency): string | undefined {
-  const key = `STRIPE_PRICE_${tier}_${currency}`
+  const envName = TIER_ENV_NAME[tier] ?? tier
+  const key = `STRIPE_PRICE_${envName}_${currency}`
   return process.env[key]
 }
 

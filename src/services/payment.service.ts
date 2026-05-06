@@ -19,45 +19,20 @@ class PaymentService {
     }
   }
 
-  /**
-   * Get Stripe price ID for a subscription tier and currency.
-   * Tries currency-specific env var first (e.g. STRIPE_PRICE_PRO_GBP),
-   * then falls back to the legacy var (e.g. STRIPE_PRICE_PRO).
-   */
   private getPriceId(tier: SubscriptionTier, currency: Currency = 'GBP'): string {
-    // Try currency-specific price first
-    const currencySpecific = getStripePriceId(tier, currency)
-    if (currencySpecific) return currencySpecific
-
-    // Fall back to legacy (GBP-only) env vars
-    const legacyPriceIds: Record<SubscriptionTier, string> = {
-      FREE: '',
-      PRO: process.env.STRIPE_PRICE_PRO || '',
-      ELITE: process.env.STRIPE_PRICE_ELITE || '',
-      CONCIERGE: process.env.STRIPE_PRICE_CONCIERGE || '',
-      B2B: process.env.STRIPE_PRICE_B2B || '',
-    };
-
-    return legacyPriceIds[tier];
+    return getStripePriceId(tier, currency) ?? ''
   }
 
-  /**
-   * Map Stripe price ID back to subscription tier
-   */
   private getTierFromPriceId(priceId: string): SubscriptionTier | null {
     const tierMap: Record<string, SubscriptionTier> = {
-      // Legacy (GBP-only) env vars
-      [process.env.STRIPE_PRICE_PRO || '']: 'PRO',
-      [process.env.STRIPE_PRICE_ELITE || '']: 'ELITE',
-      [process.env.STRIPE_PRICE_CONCIERGE || '']: 'CONCIERGE',
-      [process.env.STRIPE_PRICE_B2B || '']: 'B2B',
-      // Currency-specific env vars
-      [process.env.STRIPE_PRICE_PRO_GBP || '']: 'PRO',
-      [process.env.STRIPE_PRICE_PRO_USD || '']: 'PRO',
-      [process.env.STRIPE_PRICE_ELITE_GBP || '']: 'ELITE',
-      [process.env.STRIPE_PRICE_ELITE_USD || '']: 'ELITE',
-      [process.env.STRIPE_PRICE_CONCIERGE_GBP || '']: 'CONCIERGE',
-      [process.env.STRIPE_PRICE_CONCIERGE_USD || '']: 'CONCIERGE',
+      [process.env.STRIPE_PRICE_IVY_GBP || '']:           'PRO',
+      [process.env.STRIPE_PRICE_IVY_USD || '']:           'PRO',
+      [process.env.STRIPE_PRICE_IVY_PLUS_GBP || '']:     'ELITE',
+      [process.env.STRIPE_PRICE_IVY_PLUS_USD || '']:     'ELITE',
+      [process.env.STRIPE_PRICE_IVY_CONCIERGE_GBP || '']: 'CONCIERGE',
+      [process.env.STRIPE_PRICE_IVY_CONCIERGE_USD || '']: 'CONCIERGE',
+      [process.env.STRIPE_PRICE_B2B_GBP || '']:           'B2B',
+      [process.env.STRIPE_PRICE_B2B_USD || '']:           'B2B',
     };
 
     return tierMap[priceId] || null;
