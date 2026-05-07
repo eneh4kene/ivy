@@ -2,7 +2,7 @@ import prisma from '../utils/prisma';
 import { callScheduleQueue } from '../config/queues';
 import logger from '../utils/logger';
 import { NotFoundError } from '../utils/errors';
-import { addMinutes, isBefore, differenceInDays } from 'date-fns';
+import { addMinutes, isBefore, differenceInDays, startOfMonth, startOfDay, endOfDay } from 'date-fns';
 import seasonService from './season.service';
 import circleService from './circle.service';
 
@@ -155,75 +155,142 @@ class CallService {
   }
 
   /**
-   * Get user context for call (stats, goals, etc.)
+   * Get user context for call — keys match {{variable_name}} placeholders in the Retell prompt.
    */
   async getUserContext(userId: string): Promise<Record<string, any>> {
-    const [user, streak, workoutsThisWeek, donations] = await Promise.all([
+    const now = new Date();
+    const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+
+    const [
+      user, streak,
+      workoutsThisWeek, workoutsThisMonth, totalWorkouts,
+      donations, todaysWorkout, impactWallet,
+      firstScore, latestScore, recentLifeMarkers,
+      completedCallCount,
+      activeSeason, currentSprint, circleContext,
+    ] = await Promise.all([
       prisma.user.findUnique({
         where: { id: userId },
-        include: {
-          preferredCharity: true,
-          company: { select: { name: true } },
-        },
+        include: { preferredCharity: true, company: { select: { name: true } } },
       }),
       prisma.streak.findUnique({ where: { userId } }),
-      prisma.workout.count({
-        where: {
-          userId,
-          status: { in: ['COMPLETED', 'PARTIAL'] },
-          createdAt: {
-            gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000),
-          },
-        },
+      prisma.workout.count({ where: { userId, status: { in: ['COMPLETED', 'PARTIAL'] }, createdAt: { gte: weekAgo } } }),
+      prisma.workout.count({ where: { userId, status: { in: ['COMPLETED', 'PARTIAL'] }, createdAt: { gte: startOfMonth(now) } } }),
+      prisma.workout.count({ where: { userId, status: { in: ['COMPLETED', 'PARTIAL'] } } }),
+      prisma.donation.aggregate({ where: { userId }, _sum: { amount: true } }),
+      prisma.workout.findFirst({
+        where: { userId, status: 'PLANNED', plannedDate: { gte: startOfDay(now), lte: endOfDay(now) } },
+        orderBy: { plannedDate: 'asc' },
       }),
-      prisma.donation.aggregate({
-        where: { userId },
-        _sum: { amount: true },
-      }),
-    ]);
-
-    const [activeSeason, currentSprint, circleContext] = await Promise.all([
+      prisma.impactWallet.findUnique({ where: { userId } }),
+      prisma.transformationScore.findFirst({ where: { userId }, orderBy: { createdAt: 'asc' } }),
+      prisma.transformationScore.findFirst({ where: { userId }, orderBy: { createdAt: 'desc' } }),
+      prisma.lifeMarker.findMany({ where: { userId }, orderBy: { createdAt: 'desc' }, take: 3 }),
+      prisma.call.count({ where: { userId, status: 'COMPLETED' } }),
       seasonService.getActiveSeason(userId),
       seasonService.getCurrentSprint(userId),
       circleService.getCircleContextForUser(userId),
     ]);
 
-    const now = new Date();
     const daysLeftInSprint = currentSprint
       ? Math.max(0, differenceInDays(currentSprint.endDate, now))
       : null;
 
+    const onboardedAt = user?.onboardedAt ?? user?.createdAt;
+    const weeks_in_program = onboardedAt
+      ? Math.floor(differenceInDays(now, onboardedAt) / 7)
+      : 0;
+
+    const donationAmounts: Record<string, number> = { FREE: 1.0, PRO: 1.0, ELITE: 1.5, CONCIERGE: 2.0, B2B: 1.0 };
+    const donation_amount = donationAmounts[user?.subscriptionTier ?? 'PRO'] ?? 1.0;
+
+    const days_since_workout = streak?.lastWorkoutDate
+      ? differenceInDays(now, new Date(streak.lastWorkoutDate))
+      : null;
+
+    const days_since_last_interaction = user?.lastCallAt
+      ? differenceInDays(now, new Date(user.lastCallAt))
+      : null;
+
+    const preferred_days = (() => {
+      try { return user?.preferredDays ? (JSON.parse(user.preferredDays) as string[]).join(', ') : null; }
+      catch { return null; }
+    })();
+
+    const recent_life_markers = recentLifeMarkers.map((m) => m.marker).join(' | ') || null;
+
     return {
-      name: user?.firstName,
+      // Identity
+      user_name: user?.firstName,
+      subscription_tier: user?.subscriptionTier,
       track: user?.track,
-      goal: user?.goal,
-      minimumMode: user?.minimumMode,
-      giftFrame: user?.giftFrame,
-      subscriptionTier: user?.subscriptionTier,
-      currentStreak: streak?.currentStreak || 0,
-      longestStreak: streak?.longestStreak || 0,
-      workoutsThisWeek,
-      totalDonated: Number(donations._sum.amount || 0),
-      charity: user?.preferredCharity?.name,
-      charityImpact: user?.preferredCharity?.impactMetric,
-      seasonNumber: activeSeason?.number ?? null,
-      seasonGoal: activeSeason?.goal ?? null,
-      sprintNumber: currentSprint?.number ?? null,
-      daysLeftInSprint,
-      // Circle / group context
-      circle: circleContext ? {
-        name: circleContext.circleName,
-        seasonTheme: circleContext.seasonTheme,
-        sprintPledge: circleContext.sprintPledge,
-        sprintTheme: circleContext.sprintTheme,
-        groupConsistencyRate: circleContext.groupConsistencyRate,
-        topPerformers: circleContext.topPerformers,
-        memberCount: circleContext.memberCount,
-        userRole: circleContext.userRole,
-      } : null,
-      // Company wellness context (B2B)
-      companyWellnessTheme: circleContext?.companyWellnessTheme ?? null,
-      companyWellnessGoal: circleContext?.companyWellnessGoal ?? null,
+      weekly_goal: user?.callFrequency ?? 3,
+      charity_name: user?.preferredCharity?.name ?? null,
+      monthly_wallet: Number(impactWallet?.monthlyLimit ?? 0),
+      donation_amount,
+
+      // Personal context
+      minimum_action: user?.minimumMode ?? null,
+      gift_frame: user?.giftFrame ?? null,
+      why_started: user?.goal ?? null,
+      goal: user?.goal ?? null,
+      comm_preference: user?.commStyle ?? null,
+
+      // Schedule
+      morning_window: user?.morningCallTime ?? null,
+      evening_window: user?.eveningCallTime ?? null,
+      preferred_days,
+      calendar_connected: user?.googleCalendarConnected || user?.outlookCalendarConnected || false,
+      missed_call_recovery: ['ELITE', 'CONCIERGE'].includes(user?.subscriptionTier ?? ''),
+      calls_per_week: user?.callFrequency ?? 2,
+
+      // Stats
+      current_streak: streak?.currentStreak ?? 0,
+      longest_streak: streak?.longestStreak ?? 0,
+      workouts_this_week: workoutsThisWeek,
+      workouts_this_month: workoutsThisMonth,
+      total_workouts: totalWorkouts,
+      total_donated: Number(donations._sum.amount ?? 0),
+      weeks_in_program,
+
+      // Transformation
+      start_energy: firstScore?.energyScore ?? null,
+      current_energy: latestScore?.energyScore ?? null,
+      start_mood: firstScore?.moodScore ?? null,
+      current_mood: latestScore?.moodScore ?? null,
+      start_confidence: firstScore?.healthConfidence ?? null,
+      current_confidence: latestScore?.healthConfidence ?? null,
+      recent_life_markers,
+
+      // Today's context (call_type added by processor)
+      todays_plan: todaysWorkout?.activity ?? null,
+      workout_time: todaysWorkout?.plannedTime ?? null,
+      day_of_week: now.toLocaleDateString('en-US', { weekday: 'long' }),
+      days_since_workout,
+      previous_streak: streak?.longestStreak ?? 0,
+
+      // Flags
+      is_first_call: completedCallCount === 0,
+      is_first_week_of_month: now.getDate() <= 7,
+      is_quarterly_milestone: [12, 24, 36, 48].includes(weeks_in_program),
+      days_since_last_interaction,
+      user_status: 'active',
+
+      // Season / Sprint
+      season_number: activeSeason?.number ?? null,
+      season_goal: activeSeason?.goal ?? null,
+      sprint_number: currentSprint?.number ?? null,
+      days_left_in_sprint: daysLeftInSprint,
+
+      // Circle
+      circle_name: circleContext?.circleName ?? null,
+      circle_season_theme: circleContext?.seasonTheme ?? null,
+      circle_sprint_pledge: circleContext?.sprintPledge ?? null,
+      circle_consistency_rate: circleContext?.groupConsistencyRate ?? null,
+
+      // B2B
+      company_wellness_theme: circleContext?.companyWellnessTheme ?? null,
+      company_wellness_goal: circleContext?.companyWellnessGoal ?? null,
     };
   }
 

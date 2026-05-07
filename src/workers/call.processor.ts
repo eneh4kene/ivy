@@ -44,13 +44,13 @@ callScheduleQueue.process('initiate-call', async (job: Job<CallJobData>) => {
     logger.info(`Initiating ${callType} call ${callId} for ${userName}`);
 
     // Don't pre-stamp IN_PROGRESS/startedAt here — the Retell call_started webhook sets those
-    const isB2B = contextData?.subscriptionTier === 'B2B';
+    const isB2B = contextData?.subscription_tier === 'B2B';
     const agentId = getAgentId(callType, isB2B);
 
     const retellCall = await retellService.initiateCall({
       phoneNumber: phone,
       agentId,
-      variables: flattenContext({ ...contextData, callType, userName }),
+      variables: flattenContext({ ...contextData, call_type: callType.toLowerCase() }),
       metadata: { callId, userId, callType },
     });
 
