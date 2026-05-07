@@ -1,5 +1,8 @@
 FROM node:18-alpine
 
+# Prisma's schema engine binary requires OpenSSL — not present in Alpine by default
+RUN apk add --no-cache openssl
+
 WORKDIR /app
 
 # Copy package files
