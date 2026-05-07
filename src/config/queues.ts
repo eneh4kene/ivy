@@ -58,7 +58,12 @@ export const donationQueue = new Queue('donations', {
   },
 });
 
-// Queue event listeners
+// Queue event listeners — error handler is critical: without it, a Redis connection
+// failure emits an unhandled 'error' event and Node.js crashes the process.
+[callScheduleQueue, messageQueue, donationQueue].forEach((q) => {
+  q.on('error', (err) => logger.error(`Queue ${q.name} error:`, err));
+});
+
 callScheduleQueue.on('completed', (job) => {
   logger.info(`Call schedule job ${job.id} completed`);
 });
