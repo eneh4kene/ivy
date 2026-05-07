@@ -158,7 +158,7 @@ class UserService {
   async markUserAsOnboarded(userId: string) {
     const fullUser = await prisma.user.findUnique({
       where: { id: userId },
-      select: { id: true, goal: true, morningCallTime: true, eveningCallTime: true },
+      select: { id: true, goal: true, morningCallTime: true, eveningCallTime: true, phone: true, subscriptionTier: true },
     });
 
     const user = await prisma.user.update({
@@ -173,10 +173,25 @@ class UserService {
         .catch((err) => logger.warn(`Failed to create Season 1 for ${userId}:`, err));
     }
 
-    // Schedule today's calls if call times are set (non-blocking)
-    if (fullUser?.morningCallTime || fullUser?.eveningCallTime) {
-      callService.scheduleDailyCalls(userId, new Date())
-        .catch((err) => logger.warn(`Failed to schedule first calls for ${userId}:`, err));
+    // Schedule first call (non-blocking). Try regular daily calls first; if call times have
+    // already passed today (or weren't set), fire an ONBOARDING call in 5 minutes instead.
+    const canCall = fullUser?.phone && fullUser.subscriptionTier !== 'FREE';
+    if (canCall) {
+      (async () => {
+        try {
+          const scheduled = (fullUser.morningCallTime || fullUser.eveningCallTime)
+            ? await callService.scheduleDailyCalls(userId, new Date())
+            : [];
+
+          if (scheduled.length === 0) {
+            const scheduledAt = new Date(Date.now() + 5 * 60 * 1000);
+            await callService.scheduleCall(userId, 'ONBOARDING', scheduledAt);
+            logger.info(`Onboarding call scheduled for user ${userId} in 5 min`);
+          }
+        } catch (err) {
+          logger.warn(`Failed to schedule first calls for ${userId}:`, err);
+        }
+      })();
     }
 
     logger.info(`User onboarded: ${user.id}`);

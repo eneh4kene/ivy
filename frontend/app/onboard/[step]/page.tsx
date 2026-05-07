@@ -31,6 +31,12 @@ export default function OnboardingStepPage() {
   const user = useAuthStore((state) => state.user)
   const [flow, setFlow] = useState<OnboardingFlow | null>(null)
   const [currentStep, setCurrentStep] = useState<OnboardingStep | null>(null)
+  const [canProceedPrefs, setCanProceedPrefs] = useState(false)
+
+  // Unblock preferences step immediately if phone already set
+  useEffect(() => {
+    if (user?.phone) setCanProceedPrefs(true)
+  }, [user?.phone])
 
   const stepId = params.step as string
 
@@ -72,7 +78,7 @@ export default function OnboardingStepPage() {
       case 'charity-selection':
         return <CharitySelectionStep />
       case 'preferences':
-        return <PreferencesStep />
+        return <PreferencesStep onPhoneReady={setCanProceedPrefs} />
       case 'complete':
         return <CompleteStep tier={flow.tier} />
       case 'health-assessment':
@@ -102,8 +108,10 @@ export default function OnboardingStepPage() {
     }
   }
 
+  const canProceed = currentStep.component === 'preferences' ? canProceedPrefs : true
+
   return (
-    <OnboardingWizard flow={flow} currentStep={currentStep}>
+    <OnboardingWizard flow={flow} currentStep={currentStep} canProceed={canProceed}>
       {renderStepComponent()}
     </OnboardingWizard>
   )

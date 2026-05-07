@@ -1,8 +1,10 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Label } from '@/components/ui/label'
+import { Input } from '@/components/ui/input'
 import { usersApi } from '@/lib/api'
+import { useAuthStore } from '@/lib/store/auth.store'
 import { Phone, MessageSquare } from 'lucide-react'
 
 const VIBES = [
@@ -34,9 +36,56 @@ const CALL_TIME_MAP: Record<string, { morning: string; evening: string }> = {
   evening: { morning: '19:00', evening: '21:00' },
 }
 
-export function PreferencesStep() {
+interface PreferencesStepProps {
+  onPhoneReady?: (ready: boolean) => void
+}
+
+export function PreferencesStep({ onPhoneReady }: PreferencesStepProps) {
+  const user = useAuthStore((state) => state.user)
   const [vibe, setVibe] = useState<string | null>(null)
   const [preferredCallTime, setPreferredCallTime] = useState<string | null>(null)
+  const [phone, setPhone] = useState(user?.phone ?? '')
+  const [phoneSaved, setPhoneSaved] = useState(!!user?.phone)
+  const [phoneSaving, setPhoneSaving] = useState(false)
+  const [phoneError, setPhoneError] = useState('')
+
+  // If user already has a phone (e.g. set during signup), pre-fill and unblock Continue
+  useEffect(() => {
+    if (user?.phone) {
+      setPhone(user.phone)
+      setPhoneSaved(true)
+      onPhoneReady?.(true)
+    }
+  }, [user?.phone]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handlePhoneSave = async () => {
+    const cleaned = phone.trim().replace(/\s/g, '')
+    if (!cleaned) {
+      setPhoneError('Phone number is required — this is how Ivy calls you')
+      setPhoneSaved(false)
+      onPhoneReady?.(false)
+      return
+    }
+    if (!/^\+?[0-9]{10,15}$/.test(cleaned)) {
+      setPhoneError('Include your country code (e.g. +447700900000 or +12125551234)')
+      setPhoneSaved(false)
+      onPhoneReady?.(false)
+      return
+    }
+    setPhoneSaving(true)
+    setPhoneError('')
+    try {
+      await usersApi.updateProfile({ phone: cleaned })
+      setPhoneSaved(true)
+      onPhoneReady?.(true)
+    } catch {
+      setPhoneError('Failed to save — please try again')
+      setPhoneSaved(false)
+      onPhoneReady?.(false)
+    } finally {
+      setPhoneSaving(false)
+    }
+  }
 
   const handleVibeSelect = async (vibeId: string) => {
     setVibe(vibeId)
@@ -65,6 +114,31 @@ export function PreferencesStep() {
 
   return (
     <div className="space-y-10">
+
+      {/* Phone number */}
+      <div>
+        <Label className="text-base font-semibold mb-1 block">
+          What's your phone number?
+        </Label>
+        <p className="text-sm text-muted-foreground mb-3">
+          Ivy calls you here each day. Include your country code.
+        </p>
+        <Input
+          type="tel"
+          placeholder="+44 7700 900000"
+          value={phone}
+          onChange={(e) => {
+            setPhone(e.target.value)
+            if (phoneSaved) { setPhoneSaved(false); onPhoneReady?.(false) }
+            if (phoneError) setPhoneError('')
+          }}
+          onBlur={handlePhoneSave}
+          className={phoneError ? 'border-red-500' : phoneSaved ? 'border-emerald-500' : ''}
+        />
+        {phoneSaving && <p className="text-xs text-muted-foreground mt-1.5">Saving…</p>}
+        {phoneError && <p className="text-xs text-red-500 mt-1.5">{phoneError}</p>}
+        {phoneSaved && !phoneSaving && <p className="text-xs text-emerald-600 mt-1.5">✓ Saved</p>}
+      </div>
 
       {/* Vibe check */}
       <div>
