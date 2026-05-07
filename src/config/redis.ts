@@ -2,20 +2,31 @@ import Redis from 'ioredis';
 import { config } from './index';
 import logger from '../utils/logger';
 
-// REDIS_URL takes precedence (Railway, Heroku, Render all inject this).
-// Individual vars are the fallback for self-hosted / local setups.
-const redis = process.env.REDIS_URL
-  ? new Redis(process.env.REDIS_URL, {
-      retryStrategy: (times: number) => Math.min(times * 50, 2000),
-      maxRetriesPerRequest: 3,
-    })
-  : new Redis({
-      host: config.redis.host,
-      port: config.redis.port,
-      password: config.redis.password,
-      retryStrategy: (times: number) => Math.min(times * 50, 2000),
+// REDIS_URL takes precedence. Upstash uses rediss:// (TLS) — pass tls:{} explicitly
+// so ioredis enables it regardless of URL parsing quirks.
+function buildRedisClient(): Redis {
+  const retry = (times: number) => Math.min(times * 50, 2000);
+  if (process.env.REDIS_URL) {
+    const url = new URL(process.env.REDIS_URL);
+    return new Redis({
+      host: url.hostname,
+      port: parseInt(url.port) || 6379,
+      password: url.password || undefined,
+      ...(process.env.REDIS_URL.startsWith('rediss://') ? { tls: {} } : {}),
+      retryStrategy: retry,
       maxRetriesPerRequest: 3,
     });
+  }
+  return new Redis({
+    host: config.redis.host,
+    port: config.redis.port,
+    password: config.redis.password,
+    retryStrategy: retry,
+    maxRetriesPerRequest: 3,
+  });
+}
+
+const redis = buildRedisClient();
 
 // Handle connection events
 redis.on('connect', () => {
