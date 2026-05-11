@@ -165,7 +165,7 @@ class CallService {
     const [
       user, streak,
       workoutsThisWeek, workoutsThisMonth, totalWorkouts,
-      donations, todaysWorkout, impactWallet,
+      donations, todaysWorkout, todaysOutcome, impactWallet,
       firstScore, latestScore, recentLifeMarkers,
       completedCallCount, buddy,
       activeSeason, currentSprint, circleContext,
@@ -179,9 +179,16 @@ class CallService {
       prisma.workout.count({ where: { userId, status: { in: ['COMPLETED', 'PARTIAL'] }, createdAt: { gte: startOfMonth(now) } } }),
       prisma.workout.count({ where: { userId, status: { in: ['COMPLETED', 'PARTIAL'] } } }),
       prisma.donation.aggregate({ where: { userId }, _sum: { amount: true } }),
+      // Today's PLANNED workout — used for morning call context
       prisma.workout.findFirst({
         where: { userId, status: 'PLANNED', plannedDate: { gte: startOfDay(now), lte: endOfDay(now) } },
         orderBy: { plannedDate: 'asc' },
+      }),
+      // Today's most recent outcome — used for evening call sub-typing (completed/partial/missed)
+      prisma.workout.findFirst({
+        where: { userId, plannedDate: { gte: startOfDay(now), lte: endOfDay(now) } },
+        orderBy: { updatedAt: 'desc' },
+        select: { status: true },
       }),
       prisma.impactWallet.findUnique({ where: { userId } }),
       prisma.transformationScore.findFirst({ where: { userId }, orderBy: { createdAt: 'asc' } }),
@@ -340,6 +347,7 @@ class CallService {
       // Today's context (call_type added by processor)
       todays_plan: todaysWorkout?.activity ?? null,
       workout_time: todaysWorkout?.plannedTime ?? null,
+      todays_workout_status: todaysOutcome?.status ?? null,  // used for evening sub-typing
       day_of_week: now.toLocaleDateString('en-US', { weekday: 'long' }),
       days_since_workout,
       previous_streak: streak?.longestStreak ?? 0,
