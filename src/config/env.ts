@@ -41,6 +41,9 @@ const envSchema = z.object({
   WHATSAPP_ACCESS_TOKEN: z.string().optional(),
   WHATSAPP_WEBHOOK_VERIFY_TOKEN: z.string().optional(),
 
+  // Anthropic (call insight extraction + behavioural synthesis)
+  ANTHROPIC_API_KEY: z.string().optional(),
+
   // Stripe
   STRIPE_SECRET_KEY: z.string().optional(),
   STRIPE_PUBLISHABLE_KEY: z.string().optional(),

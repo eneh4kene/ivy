@@ -297,6 +297,15 @@ class CallService {
       // B2B
       company_wellness_theme: circleContext?.companyWellnessTheme ?? null,
       company_wellness_goal: circleContext?.companyWellnessGoal ?? null,
+
+      // Behavioural intelligence (from insight.service — null until enough calls exist)
+      inferred_patterns: (user?.inferredProfile as any)?.inferred_patterns ?? null,
+      notable_observation: (user?.inferredProfile as any)?.notable_observation ?? null,
+      probe_for_specificity: (user?.inferredProfile as any)?.probe_for_specificity ?? false,
+      most_effective_nudge: (user?.inferredProfile as any)?.most_effective_nudge ?? null,
+      high_risk_signals: (user?.inferredProfile as any)?.high_risk_signals ?? [],
+      preferred_register: (user?.inferredProfile as any)?.preferred_register ?? null,
+      behavioural_modifiers: (user?.inferredProfile as any)?.behavioural_modifiers ?? null,
     };
   }
 

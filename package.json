@@ -28,6 +28,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.95.2",
     "@prisma/client": "^5.9.1",
     "@sentry/node": "^10.51.0",
     "@types/node-cron": "^3.0.11",

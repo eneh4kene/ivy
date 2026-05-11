@@ -4,6 +4,7 @@ import crypto from 'crypto';
 import callService from '../../services/call.service';
 import messagingService from '../../services/messaging.service';
 import paymentService from '../../services/payment.service';
+import insightService from '../../services/insight.service';
 import { logUsage } from '../../services/usage.service';
 import { serverAnalytics } from '../../lib/analytics';
 import { handleMissedCall as handleMissedCallComms } from '../../services/communication.service';
@@ -92,6 +93,16 @@ class WebhookController {
                 durationSecs,
                 outcome
               )
+            }
+
+            // Async insight extraction — never blocks webhook response
+            if (call.transcript && call.metadata?.callId && call.metadata?.userId) {
+              insightService.extractCallInsights(
+                call.metadata.callId,
+                call.transcript,
+                call.metadata?.callType ?? 'unknown',
+                call.metadata.userId,
+              ).catch((err) => logger.error('Insight extraction error:', err));
             }
           }
           break;

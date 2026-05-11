@@ -63,6 +63,9 @@ model User {
   outlookCalendarConnected   Boolean   @default(false)
   outlookCalendarRefreshToken String?
 
+  // Behavioural intelligence
+  inferredProfile Json?  // Synthesized pattern profile from call history — see insight.service.ts
+
   // Status
   isActive       Boolean @default(true)
   isOnboarded    Boolean @default(false)
@@ -270,7 +273,10 @@ model Call {
   needsFollowUp Boolean @default(false)
 
   // Dynamic Variables (snapshot at call time)
-  contextSnapshot Json? // JSON of user stats, streak, etc.
+  contextSnapshot Json?  // JSON of user stats, streak, etc.
+
+  // Behavioural intelligence
+  callInsights    Json?  // Structured insights extracted from transcript — see insight.service.ts
 
   @@index([userId, scheduledAt])
   @@index([callType, status])
