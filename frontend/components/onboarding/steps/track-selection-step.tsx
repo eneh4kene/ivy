@@ -2,6 +2,8 @@
 
 import { useState } from 'react'
 import { Card, CardContent } from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import { usersApi } from '@/lib/api'
 
 const TRACKS = [
@@ -39,15 +41,34 @@ const TRACKS = [
   },
 ]
 
+const TRACK_DETAIL_PLACEHOLDER: Record<string, string> = {
+  fitness: 'e.g. morning runs, gym 3× a week, 10k training',
+  focus: 'e.g. daily meditation, deep work blocks, reading 30 min',
+  sleep: 'e.g. in bed by 10pm, no screens after 9pm, 8 hours',
+  balance: 'e.g. yoga every morning, phone-free evenings, weekly hike',
+}
+
 export function TrackSelectionStep() {
   const [selectedTrack, setSelectedTrack] = useState<string | null>(null)
+  const [trackDetail, setTrackDetail] = useState('')
 
   const handleTrackSelect = async (trackId: string) => {
     setSelectedTrack(trackId)
+    setTrackDetail('')
     try {
-      await usersApi.updateProfile({ track: trackId })
+      await usersApi.updateProfile({ track: trackId as any, trackDetail: undefined })
     } catch (e) {
       console.error('Failed to save track selection:', e)
+    }
+  }
+
+  const handleDetailBlur = async () => {
+    const detail = trackDetail.trim()
+    if (!detail || !selectedTrack) return
+    try {
+      await usersApi.updateProfile({ trackDetail: detail })
+    } catch (e) {
+      console.error('Failed to save track detail:', e)
     }
   }
 
@@ -101,17 +122,23 @@ export function TrackSelectionStep() {
       </div>
 
       {selectedTrack && (
-        <div className="bg-green-50 border border-green-200 rounded-lg p-4 animate-in fade-in slide-in-from-bottom-2 duration-300">
-          <div className="flex items-start gap-3">
-            <svg className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-            </svg>
-            <div>
-              <p className="text-sm font-medium text-green-900">Great choice!</p>
-              <p className="text-sm text-green-800">
-                Your {TRACKS.find(t => t.id === selectedTrack)?.name} track is selected. You'll receive personalized workouts and AI coaching calls tailored to this focus.
-              </p>
-            </div>
+        <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-300">
+          <div className="space-y-2">
+            <Label className="text-base font-semibold">
+              What specifically are you working on?
+            </Label>
+            <p className="text-sm text-muted-foreground">
+              Ivy uses this to make every call feel like it's about your actual life, not a generic routine.
+            </p>
+            <Input
+              placeholder={TRACK_DETAIL_PLACEHOLDER[selectedTrack]}
+              value={trackDetail}
+              onChange={(e) => setTrackDetail(e.target.value)}
+              onBlur={handleDetailBlur}
+            />
+            {trackDetail.trim() && (
+              <p className="text-xs text-emerald-600">✓ Saved</p>
+            )}
           </div>
         </div>
       )}

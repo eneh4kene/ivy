@@ -225,6 +225,7 @@ class CallService {
       user_name: user?.firstName,
       subscription_tier: user?.subscriptionTier,
       track: user?.track,
+      track_detail: user?.trackDetail ?? null, // personal specificity — Ivy uses this in conversation
       weekly_goal: user?.callFrequency ?? 3,
       charity_name: user?.preferredCharity?.name ?? null,
       monthly_wallet: Number(impactWallet?.monthlyLimit ?? 0),

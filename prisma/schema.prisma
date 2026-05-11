@@ -49,8 +49,9 @@ model User {
   preferredDays   String? // JSON array of days ["monday", "tuesday"]
 
   // Workout Preferences
-  track       String // "fitness", "meditation", "reading", etc.
-  goal        String // User's primary goal
+  track       String  // standard track: "fitness" | "focus" | "sleep" | "balance"
+  trackDetail String? // personal specificity: "morning runs", "daily meditation", etc.
+  goal        String  // User's primary goal
   minimumMode String? // The minimum acceptable action
   giftFrame   String? // Who/what they're doing this for
 

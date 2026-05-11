@@ -15,6 +15,7 @@ export interface User {
   subscriptionTier: SubscriptionTier
   subscriptionStatus: string
   track: string
+  trackDetail?: string
   goal: string
   minimumMode?: string
   giftFrame?: string
@@ -281,6 +282,7 @@ export interface UpdateProfileInput {
   phone?: string
   timezone?: string
   track?: string
+  trackDetail?: string
   goal?: string
   minimumMode?: string
   giftFrame?: string
