@@ -599,6 +599,7 @@ model Season {
   number      Int      // Season 1, 2, 3...
   title       String?  // "Operation Ironman", user-defined
   goal        String   // Overarching 12-week goal
+  seasonType  String   @default("standard") // "standard" | "memorial" | "challenge"
   startDate   DateTime
   endDate     DateTime // startDate + 12 weeks
 

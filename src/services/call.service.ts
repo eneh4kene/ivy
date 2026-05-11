@@ -166,7 +166,7 @@ class CallService {
       workoutsThisWeek, workoutsThisMonth, totalWorkouts,
       donations, todaysWorkout, impactWallet,
       firstScore, latestScore, recentLifeMarkers,
-      completedCallCount,
+      completedCallCount, buddy,
       activeSeason, currentSprint, circleContext,
     ] = await Promise.all([
       prisma.user.findUnique({
@@ -187,6 +187,7 @@ class CallService {
       prisma.transformationScore.findFirst({ where: { userId }, orderBy: { createdAt: 'desc' } }),
       prisma.lifeMarker.findMany({ where: { userId }, orderBy: { createdAt: 'desc' }, take: 3 }),
       prisma.call.count({ where: { userId, status: 'COMPLETED' } }),
+      prisma.accountabilityBuddy.findUnique({ where: { userId }, select: { buddyName: true } }),
       seasonService.getActiveSeason(userId),
       seasonService.getCurrentSprint(userId),
       circleService.getCircleContextForUser(userId),
@@ -279,8 +280,13 @@ class CallService {
       // Season / Sprint
       season_number: activeSeason?.number ?? null,
       season_goal: activeSeason?.goal ?? null,
+      season_type: activeSeason?.seasonType ?? 'standard',
       sprint_number: currentSprint?.number ?? null,
       days_left_in_sprint: daysLeftInSprint,
+
+      // Accountability buddy
+      buddy_name: buddy?.buddyName ?? null,
+      buddy_reply: null, // placeholder — populated when buddy reply inbound feature is built
 
       // Circle
       circle_name: circleContext?.circleName ?? null,

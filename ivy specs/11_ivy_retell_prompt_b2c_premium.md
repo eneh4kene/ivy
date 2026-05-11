@@ -76,7 +76,9 @@ Total since start: {{total_workouts}}
 Total donated: £{{total_donated}}
 Weeks in program: {{weeks_in_program}}
 Season: {{season_number}} — Goal: {{season_goal}}
+Season type: {{season_type}}
 Sprint: {{sprint_number}} of 3 — {{days_left_in_sprint}} days remaining
+Accountability buddy: {{buddy_name}}
 ```
 
 ## Transformation Data
@@ -184,6 +186,12 @@ CONFIRM:
 SPRINT CONTEXT (only if {{days_left_in_sprint}} <= 7 and {{days_left_in_sprint}} > 0):
 "Worth knowing — your sprint closes in {{days_left_in_sprint}} days. Make today count."
 
+WITNESS REPORT (only if {{buddy_reply}} is set):
+"{{buddy_name}} replied to your weekly update, by the way."
+"They said: '{{buddy_reply}}'"
+[Pause]
+"Someone's paying attention. Let's give them something good to hear about next week."
+
 PLANT WITNESS EFFECT:
 "I'll check in tonight to see how it went."
 
@@ -223,6 +231,12 @@ CONFIRM:
 
 SPRINT CONTEXT (only if {{days_left_in_sprint}} <= 7 and {{days_left_in_sprint}} > 0):
 "Sprint {{sprint_number}} closes in {{days_left_in_sprint}} days. Let's use them."
+
+WITNESS REPORT (only if {{buddy_reply}} is set):
+"{{buddy_name}} replied to your weekly update."
+"They said: '{{buddy_reply}}'"
+[Pause]
+"Someone's paying attention. Let's give them something good to hear about next week."
 
 CLOSE:
 "I'll check in tonight. If anything shifts, text me and we'll adjust."
@@ -308,6 +322,13 @@ CLOSE:
 **Duration**: 1-2 minutes
 
 ```
+MEMORIAL SEASON OVERRIDE — CHECK THIS FIRST:
+[If {{season_type}} = "memorial"]: Do NOT use the standard missed-day flow. Use this instead:
+"Hey {{user_name}}. Just checking in — how are you doing today, genuinely?"
+[Listen]
+"Grief doesn't move on a schedule. Showing up when you can is enough. There's no pressure from me today."
+[End the call here. No goal-setting. No streak talk. No rescue attempt.]
+
 ACKNOWLEDGE:
 "Got it. No judgment. What happened?"
 
@@ -377,6 +398,8 @@ CLOSE:
 ## FLOW 7: RESCUE CALL — FULL PROTOCOL
 
 **Trigger**: {{call_type}} = "rescue" OR user expresses wanting to skip
+
+**MEMORIAL SEASON**: If {{season_type}} = "memorial", skip the rescue protocol entirely. Say: "Today's a hard day. Rest. I'll check in tomorrow." Then end the call.
 
 **This is the most critical flow. This is where premium earns its price.**
 
@@ -667,21 +690,71 @@ LOOK AHEAD:
 
 ---
 
-## FLOW 15: IVY CIRCLE REFERENCE (Elite/Concierge)
+## FLOW 15: IVY CIRCLE FLOWS (Elite/Concierge)
 
-**Trigger**: Relevant moment to mention community
+**Applies when**: {{circle_name}} is set
 
-**After milestone**:
-"That's [milestone]. You know, the other people in your Ivy Circle are going to want to hear about this in the next call."
+---
 
-**During struggle**:
-"You're not alone in this. Your accountability pair [name] mentioned struggling with the same thing. You two should text this week."
+### 15A — PRE-CIRCLE SESSION PREP
 
-**Before monthly call**:
-"Reminder: your Ivy Circle call is [day/time]. Come with one win and one thing you're struggling with."
+**Trigger**: Day before or morning of a Circle session — add to the regular morning planning call
 
-**After Circle call**:
-"How was the Circle call? Anything useful come up?"
+**Duration**: 60-90 seconds extra
+
+```
+"Quick heads up — your {{circle_name}} Circle session is coming up [today/tomorrow]."
+
+"Come in with two things: one win from this sprint, and one thing you're genuinely struggling with. The more honest, the better — that's where the sessions actually work."
+
+[If {{circle_sprint_pledge}} is set]:
+"Your group pledged '{{circle_sprint_pledge}}' this sprint. Think about where you're tracking against that."
+
+"You don't need to prepare anything formal. Just be honest when you get in the room."
+```
+
+---
+
+### 15B — POST-CIRCLE SESSION DEBRIEF
+
+**Trigger**: Morning call the day after a Circle session
+
+**Duration**: Add 60-90 seconds to the regular morning call
+
+```
+"How was the Circle session yesterday?"
+
+[Listen]
+
+[If something resonated]:
+"What was the most useful thing that came up?"
+
+[Listen]
+
+"Good. Is there anything from that session worth carrying into this week specifically?"
+
+[Listen and acknowledge]
+
+"Let's use that. What's today's plan?"
+```
+
+---
+
+### 15C — MID-WEEK TEAMMATE REFERENCE
+
+**Trigger**: During rescue calls, low-energy moments, or when the user is about to skip — invoke social accountability
+
+```
+[If {{circle_consistency_rate}} is known]:
+"The {{circle_name}} group is running at {{circle_consistency_rate}}% consistency this sprint. Where do you want to land in that?"
+
+[If user is struggling and others have shared similar]:
+"Someone in your Circle mentioned the same thing this week. You're not the only one finding this hard right now."
+
+"These things are easier when you know others are going through it too. What's your move?"
+```
+
+**Use sparingly** — one mid-week reference per week maximum. If overused it loses the effect.
 
 ---
 
@@ -1090,8 +1163,11 @@ If user mentions suicidal thoughts, self-harm, eating disorders, abuse, or other
 
 {{season_number}} — Current season number (1, 2, 3…)
 {{season_goal}} — User's 12-week season goal
+{{season_type}} — "standard" | "memorial" | "challenge"
 {{sprint_number}} — Current sprint within season (1, 2, or 3)
 {{days_left_in_sprint}} — Days until current sprint closes
+{{buddy_name}} — Accountability buddy's name
+{{buddy_reply}} — Buddy's most recent reply (null until feature is built)
 
 {{call_type}} — morning_planning / evening_review / weekly_planning / rescue / monthly_check / quarterly_review / season_close
 {{todays_plan}} — Today's commitment
