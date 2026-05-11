@@ -91,6 +91,7 @@ model User {
   accountabilityBuddy AccountabilityBuddy?
   pushSubscriptions   PushSubscription[]
   charities           UserCharity[]
+  callMemories        CallMemory[]
 
   @@index([email])
   @@index([companyId])
@@ -277,7 +278,11 @@ model Call {
   contextSnapshot Json?  // JSON of user stats, streak, etc.
 
   // Behavioural intelligence
-  callInsights    Json?  // Structured insights extracted from transcript — see insight.service.ts
+  callInsights    Json?   // Structured insights extracted from transcript — see insight.service.ts
+  callSummary     String? @db.Text  // Ivy's 2-3 sentence narrative summary — surfaced in next call's prompt
+
+  // Relationships
+  memories        CallMemory[]
 
   @@index([userId, scheduledAt])
   @@index([callType, status])
@@ -768,6 +773,26 @@ model CircleSprintSession {
   @@index([sprintId])
   @@index([circleId])
   @@map("circle_sprint_sessions")
+}
+
+// ============================================
+// CALL MEMORY (Long-term curated moments — Layer 3)
+// ============================================
+
+model CallMemory {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
+
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  callId    String
+  call      Call     @relation(fields: [callId], references: [id], onDelete: Cascade)
+
+  content   String   @db.Text  // memorable fact as Ivy observed it
+  category  String             // motivation | life_event | personal_detail | struggle | breakthrough
+
+  @@index([userId, createdAt])
+  @@map("call_memories")
 }
 
 // ============================================

@@ -7,6 +7,7 @@ export interface RetellCallParams {
   agentId: string;
   variables?: Record<string, any>;
   metadata?: Record<string, any>;
+  systemPrompt?: string; // passed via override_llm_config.general_prompt — replaces agent's static prompt
 }
 
 class RetellService {
@@ -27,16 +28,22 @@ class RetellService {
     }
 
     try {
+      const body: Record<string, any> = {
+        from_number: config.twilio.phoneNumber,
+        to_number: params.phoneNumber,
+        agent_id: params.agentId,
+        override_agent_id: params.agentId,
+        retell_llm_dynamic_variables: params.variables || {},
+        metadata: params.metadata || {},
+      };
+
+      if (params.systemPrompt) {
+        body.override_llm_config = { general_prompt: params.systemPrompt };
+      }
+
       const response = await axios.post(
         `${this.baseUrl}/create-phone-call`,
-        {
-          from_number: config.twilio.phoneNumber,
-          to_number: params.phoneNumber,
-          agent_id: params.agentId,
-          override_agent_id: params.agentId,
-          retell_llm_dynamic_variables: params.variables || {},
-          metadata: params.metadata || {},
-        },
+        body,
         {
           headers: {
             'Authorization': `Bearer ${this.apiKey}`,

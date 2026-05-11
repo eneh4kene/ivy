@@ -2,7 +2,7 @@ import prisma from '../utils/prisma';
 import { callScheduleQueue } from '../config/queues';
 import logger from '../utils/logger';
 import { NotFoundError } from '../utils/errors';
-import { addMinutes, isBefore, differenceInDays, startOfMonth, startOfDay, endOfDay } from 'date-fns';
+import { addMinutes, isBefore, differenceInDays, startOfMonth, startOfDay, endOfDay, subDays } from 'date-fns';
 import seasonService from './season.service';
 import circleService from './circle.service';
 
@@ -156,8 +156,9 @@ class CallService {
 
   /**
    * Get user context for call — keys match {{variable_name}} placeholders in the Retell prompt.
+   * Pass callType to include memory layers (Layer 1 within-day, Layer 2 rolling recent, Layer 3 long-term).
    */
-  async getUserContext(userId: string): Promise<Record<string, any>> {
+  async getUserContext(userId: string, callType?: string): Promise<Record<string, any>> {
     const now = new Date();
     const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
 
@@ -196,6 +197,78 @@ class CallService {
     const daysLeftInSprint = currentSprint
       ? Math.max(0, differenceInDays(currentSprint.endDate, now))
       : null;
+
+    // ── Memory layers (only fetched when callType is provided) ──────────────────
+    let morning_context: string | null = null;
+    let last_evening_context: string | null = null;
+    let recent_calls: string | null = null;
+    let long_term_memories: string | null = null;
+
+    if (callType) {
+      const [morningCall, eveningCall, recentSummaries, ltMemories] = await Promise.all([
+        // Layer 1a: for EVENING_REVIEW — what was planned this morning?
+        callType === 'EVENING_REVIEW'
+          ? prisma.call.findFirst({
+              where: {
+                userId, callType: 'MORNING_PLANNING',
+                NOT: { callSummary: null },
+                scheduledAt: { gte: startOfDay(now), lte: endOfDay(now) },
+              },
+              orderBy: { scheduledAt: 'desc' },
+              select: { callSummary: true },
+            })
+          : Promise.resolve(null),
+
+        // Layer 1b: for MORNING_PLANNING — what happened last night?
+        callType === 'MORNING_PLANNING'
+          ? prisma.call.findFirst({
+              where: {
+                userId, callType: 'EVENING_REVIEW',
+                NOT: { callSummary: null },
+                scheduledAt: { gte: subDays(now, 2) },
+              },
+              orderBy: { scheduledAt: 'desc' },
+              select: { callSummary: true },
+            })
+          : Promise.resolve(null),
+
+        // Layer 2: rolling recent — last 4 completed calls with summaries
+        prisma.call.findMany({
+          where: { userId, status: 'COMPLETED', NOT: { callSummary: null } },
+          orderBy: { scheduledAt: 'desc' },
+          take: 4,
+          select: { callType: true, callSummary: true, scheduledAt: true },
+        }),
+
+        // Layer 3: long-term curated memories
+        prisma.callMemory.findMany({
+          where: { userId },
+          orderBy: { createdAt: 'desc' },
+          take: 8,
+          select: { content: true, category: true },
+        }),
+      ]);
+
+      morning_context = morningCall?.callSummary ?? null;
+      last_evening_context = eveningCall?.callSummary ?? null;
+
+      if (recentSummaries.length) {
+        recent_calls = recentSummaries
+          .map((c) => {
+            const daysAgo = differenceInDays(now, c.scheduledAt);
+            const label = daysAgo === 0 ? 'today' : daysAgo === 1 ? 'yesterday' : `${daysAgo}d ago`;
+            return `[${c.callType.toLowerCase()} ${label}]: "${c.callSummary}"`;
+          })
+          .join('\n');
+      }
+
+      if (ltMemories.length) {
+        long_term_memories = ltMemories
+          .map((m) => `${m.category}: ${m.content}`)
+          .join('\n');
+      }
+    }
+    // ────────────────────────────────────────────────────────────────────────────
 
     const onboardedAt = user?.onboardedAt ?? user?.createdAt;
     const weeks_in_program = onboardedAt
@@ -298,6 +371,12 @@ class CallService {
       // B2B
       company_wellness_theme: circleContext?.companyWellnessTheme ?? null,
       company_wellness_goal: circleContext?.companyWellnessGoal ?? null,
+
+      // Memory layers (populated when callType is provided — see three-layer memory design)
+      morning_context,        // Layer 1: today's morning call summary (for EVENING_REVIEW)
+      last_evening_context,   // Layer 1: last evening call summary (for MORNING_PLANNING)
+      recent_calls,           // Layer 2: last 4 call summaries as rolling narrative
+      long_term_memories,     // Layer 3: curated memorable facts about this person
 
       // Behavioural intelligence (from insight.service — null until enough calls exist)
       inferred_patterns: (user?.inferredProfile as any)?.inferred_patterns ?? null,

@@ -2,6 +2,7 @@ import { Job } from 'bull';
 import { callScheduleQueue } from '../config/queues';
 import callService from '../services/call.service';
 import retellService from '../services/retell.service';
+import promptService from '../services/prompt.service';
 import { config } from '../config';
 import logger from '../utils/logger';
 
@@ -43,15 +44,27 @@ callScheduleQueue.process('initiate-call', async (job: Job<CallJobData>) => {
   try {
     logger.info(`Initiating ${callType} call ${callId} for ${userName}`);
 
-    // Don't pre-stamp IN_PROGRESS/startedAt here — the Retell call_started webhook sets those
-    const isB2B = contextData?.subscription_tier === 'B2B';
+    // Fetch fresh context at execution time so memory layers reflect calls that
+    // happened after this job was scheduled (e.g. morning summary for evening call)
+    let ctx = contextData ?? {};
+    try {
+      ctx = await callService.getUserContext(userId, callType);
+    } catch (err) {
+      logger.warn(`Fresh context fetch failed for ${callId} — falling back to scheduled snapshot:`, err);
+    }
+
+    const isB2B = ctx.subscription_tier === 'B2B';
     const agentId = getAgentId(callType, isB2B);
+
+    // Build a focused, call-specific system prompt with memory injected
+    const systemPrompt = promptService.buildSystemPrompt(callType, ctx, isB2B);
 
     const retellCall = await retellService.initiateCall({
       phoneNumber: phone,
       agentId,
-      variables: flattenContext({ ...contextData, call_type: callType.toLowerCase() }),
+      variables: flattenContext({ ...ctx, call_type: callType.toLowerCase() }),
       metadata: { callId, userId, callType },
+      systemPrompt,
     });
 
     // Update call record with Retell's call ID

@@ -12,6 +12,11 @@ export interface CallInsights {
   nudge_that_landed: string | null;  // consequence_framing | identity | gift_frame | social_proof | minimum_negotiation | none
   completed_outcome: boolean | null; // true=completed, false=missed, null=unknown
   key_insight: string;               // single most notable behavioural signal
+  call_summary: string;              // 2-3 sentences from Ivy's perspective — surfaced in the next call
+  memorable_moments: Array<{         // specific facts worth remembering long-term
+    content: string;
+    category: 'motivation' | 'life_event' | 'personal_detail' | 'struggle' | 'breakthrough';
+  }>;
 }
 
 // Synthesised profile built from the last N calls' insights
@@ -30,7 +35,7 @@ export interface InferredProfile {
 // grow past Haiku's 4096-token minimum. Cache_control markers are included as best
 // practice; expand these prompts with examples to unlock caching.
 
-const EXTRACTION_SYSTEM = `You analyse accountability coaching call transcripts and extract structured behavioural insights. Your output helps a voice AI named Ivy adapt her approach based on what she observes about each user over time.
+const EXTRACTION_SYSTEM = `You analyse accountability coaching call transcripts and extract structured behavioural insights. Your output helps a voice AI named Ivy adapt her approach and remember each user across calls.
 
 Extract these signals from the transcript:
 
@@ -65,7 +70,16 @@ completed_outcome
   true if they confirmed completion, false if they said they missed, null if unknown
 
 key_insight
-  One sentence. The single most notable behavioural signal in this call — something specific, not generic. What would be most useful for Ivy to remember?
+  One sentence. The single most notable behavioural signal in this call — something specific, not generic.
+
+call_summary
+  2-3 sentences written from Ivy's perspective, as if briefing the next Ivy call. What was planned or confirmed? What was the person's energy like? Anything notable? Example: "James committed to a 6pm gym session — upper body weights. He was slightly hesitant due to meetings but responded well to identity framing and locked it in confidently."
+
+memorable_moments
+  An array of specific facts worth remembering long-term about this person. Only include genuinely memorable details — not generic. Each item has:
+  - content: the specific fact as Ivy observed it (one sentence, concrete)
+  - category: one of motivation | life_event | personal_detail | struggle | breakthrough
+  Return an empty array [] if nothing notable emerged.
 
 Respond ONLY with valid JSON. No markdown, no explanation, no code fences.`;
 
@@ -115,7 +129,7 @@ class InsightService {
     try {
       const response = await this.client.messages.create({
         model: 'claude-haiku-4-5',
-        max_tokens: 400,
+        max_tokens: 700,
         system: [
           {
             type: 'text',
@@ -136,12 +150,28 @@ class InsightService {
 
       const insights: CallInsights = JSON.parse(raw);
 
+      // Store full insights JSON + copy call_summary to the dedicated text column
       await prisma.call.update({
         where: { id: callId },
-        data: { callInsights: insights as object },
+        data: {
+          callInsights: insights as object,
+          callSummary: insights.call_summary ?? null,
+        },
       });
 
-      logger.info(`Call insights extracted for ${callId}`);
+      // Persist memorable moments as CallMemory records (Layer 3 long-term memory)
+      if (insights.memorable_moments?.length) {
+        await prisma.callMemory.createMany({
+          data: insights.memorable_moments.map((m) => ({
+            userId,
+            callId,
+            content: m.content,
+            category: m.category,
+          })),
+        });
+      }
+
+      logger.info(`Call insights extracted for ${callId} (summary: ${!!insights.call_summary}, memories: ${insights.memorable_moments?.length ?? 0})`);
 
       // Synthesise updated profile — fires async, never throws to caller
       this.synthesizeUserProfile(userId).catch((err) =>
