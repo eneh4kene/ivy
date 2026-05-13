@@ -416,12 +416,12 @@ const FLOWS: Record<string, FlowFn> = {
 
 class PromptService {
 
-  buildSystemPrompt(callType: string, ctx: Record<string, any>, isB2B: boolean): string {
+  buildSystemPrompt(callType: string, ctx: Record<string, any>, isB2B: boolean, brief?: string): string {
     const sections = [
       this.persona(ctx, isB2B),
       this.memoryBlock(ctx, callType),
       this.behaviouralAdapter(ctx),
-      this.resolveFlow(callType, ctx),
+      brief ?? this.resolveFlow(callType, ctx),
       this.standingRules(ctx),
       this.safetyRules(),
     ].filter(Boolean);

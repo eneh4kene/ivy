@@ -5,36 +5,46 @@ import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
 import { usersApi } from '@/lib/api'
 import { useAuthStore } from '@/lib/store/auth.store'
-import { Phone, MessageSquare } from 'lucide-react'
+import { Phone, MessageSquare, Shuffle } from 'lucide-react'
+import type { CommStyle } from '@/lib/types'
 
 const VIBES = [
   {
-    id: 'CALLS',
-    label: 'Caller',
-    description: "I'm fine picking up",
+    id: 'ADAPTIVE' as CommStyle,
+    label: 'Let Ivy learn',
+    description: 'Calls by default — adapts from there',
+    sub: 'Recommended',
+    icon: Shuffle,
+  },
+  {
+    id: 'CALLS' as CommStyle,
+    label: 'Always call',
+    description: "I'm fine picking up — always ring me",
+    sub: null,
     icon: Phone,
   },
   {
-    id: 'TEXTS',
-    label: 'Texter',
+    id: 'TEXTS' as CommStyle,
+    label: 'Texts first',
     description: "I'd rather not talk on the phone",
+    sub: null,
     icon: MessageSquare,
   },
 ]
 
-const CALL_TIMES = [
-  { id: 'morning', label: 'Morning', time: '7:00 – 9:00 AM', icon: '🌅' },
-  { id: 'midday', label: 'Midday', time: '12:00 – 2:00 PM', icon: '☀️' },
-  { id: 'afternoon', label: 'Afternoon', time: '4:00 – 6:00 PM', icon: '🌤️' },
-  { id: 'evening', label: 'Evening', time: '7:00 – 9:00 PM', icon: '🌙' },
+const MORNING_SLOTS = [
+  { id: '06:00', label: '6:00 AM', icon: '🌅' },
+  { id: '07:00', label: '7:00 AM', icon: '☀️' },
+  { id: '08:00', label: '8:00 AM', icon: '🌤️' },
+  { id: '09:00', label: '9:00 AM', icon: '🌞' },
 ]
 
-const CALL_TIME_MAP: Record<string, { morning: string; evening: string }> = {
-  morning: { morning: '07:00', evening: '09:00' },
-  midday: { morning: '12:00', evening: '14:00' },
-  afternoon: { morning: '16:00', evening: '18:00' },
-  evening: { morning: '19:00', evening: '21:00' },
-}
+const EVENING_SLOTS = [
+  { id: '18:00', label: '6:00 PM', icon: '🌆' },
+  { id: '19:00', label: '7:00 PM', icon: '🌇' },
+  { id: '20:00', label: '8:00 PM', icon: '🌙' },
+  { id: '21:00', label: '9:00 PM', icon: '🌃' },
+]
 
 interface PreferencesStepProps {
   onPhoneReady?: (ready: boolean) => void
@@ -42,14 +52,14 @@ interface PreferencesStepProps {
 
 export function PreferencesStep({ onPhoneReady }: PreferencesStepProps) {
   const user = useAuthStore((state) => state.user)
-  const [vibe, setVibe] = useState<string | null>(null)
-  const [preferredCallTime, setPreferredCallTime] = useState<string | null>(null)
+  const [vibe, setVibe] = useState<CommStyle | null>(null)
+  const [morningSlot, setMorningSlot] = useState<string | null>(null)
+  const [eveningSlot, setEveningSlot] = useState<string | null>(null)
   const [phone, setPhone] = useState(user?.phone ?? '')
   const [phoneSaved, setPhoneSaved] = useState(!!user?.phone)
   const [phoneSaving, setPhoneSaving] = useState(false)
   const [phoneError, setPhoneError] = useState('')
 
-  // If user already has a phone (e.g. set during signup), pre-fill and unblock Continue
   useEffect(() => {
     if (user?.phone) {
       setPhone(user.phone)
@@ -87,28 +97,30 @@ export function PreferencesStep({ onPhoneReady }: PreferencesStepProps) {
     }
   }
 
-  const handleVibeSelect = async (vibeId: string) => {
+  const handleVibeSelect = async (vibeId: CommStyle) => {
     setVibe(vibeId)
     try {
-      // Both start on ADAPTIVE — vibe just sets Ivy's initial posture
-      await usersApi.updateProfile({ commStyle: 'ADAPTIVE' })
+      await usersApi.updateProfile({ commStyle: vibeId })
     } catch (e) {
-      console.error('Failed to save vibe:', e)
+      console.error('Failed to save communication style:', e)
     }
   }
 
-  const handleCallTimeSelect = async (timeId: string) => {
-    setPreferredCallTime(timeId)
-    const times = CALL_TIME_MAP[timeId]
-    if (times) {
-      try {
-        await usersApi.updateProfile({
-          morningCallTime: times.morning,
-          eveningCallTime: times.evening,
-        })
-      } catch (e) {
-        console.error('Failed to save call time:', e)
-      }
+  const handleMorningSlot = async (slotId: string) => {
+    setMorningSlot(slotId)
+    try {
+      await usersApi.updateProfile({ morningCallTime: slotId })
+    } catch (e) {
+      console.error('Failed to save morning call time:', e)
+    }
+  }
+
+  const handleEveningSlot = async (slotId: string) => {
+    setEveningSlot(slotId)
+    try {
+      await usersApi.updateProfile({ eveningCallTime: slotId })
+    } catch (e) {
+      console.error('Failed to save evening call time:', e)
     }
   }
 
@@ -143,12 +155,12 @@ export function PreferencesStep({ onPhoneReady }: PreferencesStepProps) {
       {/* Vibe check */}
       <div>
         <Label className="text-base font-semibold mb-1 block">
-          Are you more of a caller or a texter?
+          How would you like Ivy to reach you?
         </Label>
         <p className="text-sm text-muted-foreground mb-5">
-          Ivy adapts either way — this just helps her know where to start.
+          This is a starting point — Ivy will adapt based on what actually works.
         </p>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 gap-3">
           {VIBES.map((v) => {
             const Icon = v.icon
             const selected = vibe === v.id
@@ -156,52 +168,90 @@ export function PreferencesStep({ onPhoneReady }: PreferencesStepProps) {
               <div
                 key={v.id}
                 onClick={() => handleVibeSelect(v.id)}
-                className={`flex flex-col items-center gap-3 p-5 rounded-xl border cursor-pointer transition-all ${
+                className={`flex items-center gap-4 p-4 rounded-xl border cursor-pointer transition-all ${
                   selected
                     ? 'border-emerald-500 bg-emerald-500/5'
                     : 'border-border hover:border-border/80 hover:bg-accent/30'
                 }`}
               >
-                <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
+                <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
                   selected ? 'bg-emerald-500/15 text-emerald-400' : 'bg-muted text-muted-foreground'
                 }`}>
                   <Icon className="w-5 h-5" />
                 </div>
-                <div className="text-center">
-                  <p className="text-sm font-semibold">{v.label}</p>
+                <div className="flex-1">
+                  <div className="flex items-center gap-2">
+                    <p className="text-sm font-semibold">{v.label}</p>
+                    {v.sub && (
+                      <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-400">
+                        {v.sub}
+                      </span>
+                    )}
+                  </div>
                   <p className="text-xs text-muted-foreground mt-0.5">{v.description}</p>
                 </div>
+                {selected && <div className="w-4 h-4 rounded-full bg-emerald-500 shrink-0" />}
               </div>
             )
           })}
         </div>
       </div>
 
-      {/* Call time — shown for everyone, framed around when Ivy checks in */}
+      {/* Morning call time */}
       <div className="border-t border-border pt-8">
         <Label className="text-base font-semibold mb-1 block">
-          When works best for your check-ins?
+          Morning check-in time
         </Label>
         <p className="text-sm text-muted-foreground mb-5">
-          Morning sets your commitment. Evening closes the loop.
+          When Ivy calls to plan your day.
         </p>
-        <div className="grid gap-3 md:grid-cols-2">
-          {CALL_TIMES.map((timeSlot) => (
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+          {MORNING_SLOTS.map((slot) => (
             <div
-              key={timeSlot.id}
-              onClick={() => handleCallTimeSelect(timeSlot.id)}
+              key={slot.id}
+              onClick={() => handleMorningSlot(slot.id)}
               className={`flex items-center gap-3 p-4 rounded-xl border cursor-pointer transition-all ${
-                preferredCallTime === timeSlot.id
+                morningSlot === slot.id
                   ? 'border-emerald-500 bg-emerald-500/5'
                   : 'border-border hover:border-border/80 hover:bg-accent/30'
               }`}
             >
-              <span className="text-xl">{timeSlot.icon}</span>
+              <span className="text-xl">{slot.icon}</span>
               <div className="flex-1">
-                <p className="text-sm font-medium">{timeSlot.label}</p>
-                <p className="text-xs text-muted-foreground">{timeSlot.time}</p>
+                <p className="text-sm font-medium">{slot.label}</p>
               </div>
-              {preferredCallTime === timeSlot.id && (
+              {morningSlot === slot.id && (
+                <div className="w-4 h-4 rounded-full bg-emerald-500 shrink-0" />
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Evening call time */}
+      <div>
+        <Label className="text-base font-semibold mb-1 block">
+          Evening check-in time
+        </Label>
+        <p className="text-sm text-muted-foreground mb-5">
+          When Ivy calls to see how it went.
+        </p>
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+          {EVENING_SLOTS.map((slot) => (
+            <div
+              key={slot.id}
+              onClick={() => handleEveningSlot(slot.id)}
+              className={`flex items-center gap-3 p-4 rounded-xl border cursor-pointer transition-all ${
+                eveningSlot === slot.id
+                  ? 'border-emerald-500 bg-emerald-500/5'
+                  : 'border-border hover:border-border/80 hover:bg-accent/30'
+              }`}
+            >
+              <span className="text-xl">{slot.icon}</span>
+              <div className="flex-1">
+                <p className="text-sm font-medium">{slot.label}</p>
+              </div>
+              {eveningSlot === slot.id && (
                 <div className="w-4 h-4 rounded-full bg-emerald-500 shrink-0" />
               )}
             </div>

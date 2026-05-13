@@ -1,6 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import prisma from '../utils/prisma';
 import logger from '../utils/logger';
+import { startOfDay, subDays } from 'date-fns';
 
 // Per-call structured insights extracted from transcript
 export interface CallInsights {
@@ -13,6 +14,7 @@ export interface CallInsights {
   completed_outcome: boolean | null; // true=completed, false=missed, null=unknown
   key_insight: string;               // single most notable behavioural signal
   call_summary: string;              // 2-3 sentences from Ivy's perspective — surfaced in the next call
+  next_season_goal: string | null;   // SEASON_CLOSE only: user's stated goal for the next season
   memorable_moments: Array<{         // specific facts worth remembering long-term
     content: string;
     category: 'motivation' | 'life_event' | 'personal_detail' | 'struggle' | 'breakthrough';
@@ -21,19 +23,19 @@ export interface CallInsights {
 
 // Synthesised profile built from the last N calls' insights
 export interface InferredProfile {
-  inferred_patterns: string | null;     // what Ivy says aloud at Season Close / quarterly call
-  notable_observation: string | null;   // one specific earned observation
+  inferred_patterns: string | null;
+  notable_observation: string | null;
   commitment_style: 'specific' | 'vague' | 'variable';
-  most_effective_nudge: string | null;  // lead with this in rescue calls
-  high_risk_signals: string[];          // language patterns that precede misses
-  probe_for_specificity: boolean;       // if true, always ask time + location in morning plans
+  most_effective_nudge: string | null;
+  high_risk_signals: string[];
+  probe_for_specificity: boolean;
   preferred_register: 'direct' | 'gentle' | 'energetic';
-  behavioural_modifiers: string | null; // 1-2 sentence instruction to Ivy about how to adapt
+  behavioural_modifiers: string | null;
+  // Communication preference — learned from call answer rate and explicit signals
+  call_answer_rate: number | null;           // 0.0–1.0 over last 30 days, null if < 5 calls
+  contact_preference: 'calls' | 'texts' | 'adaptive';
+  contact_pattern_note: string | null;       // e.g. "tends not to answer before 8am"
 }
-
-// Static system prompts — kept frozen so prompt caching activates once the prompts
-// grow past Haiku's 4096-token minimum. Cache_control markers are included as best
-// practice; expand these prompts with examples to unlock caching.
 
 const EXTRACTION_SYSTEM = `You analyse accountability coaching call transcripts and extract structured behavioural insights. Your output helps a voice AI named Ivy adapt her approach and remember each user across calls.
 
@@ -73,7 +75,10 @@ key_insight
   One sentence. The single most notable behavioural signal in this call — something specific, not generic.
 
 call_summary
-  2-3 sentences written from Ivy's perspective, as if briefing the next Ivy call. What was planned or confirmed? What was the person's energy like? Anything notable? Example: "James committed to a 6pm gym session — upper body weights. He was slightly hesitant due to meetings but responded well to identity framing and locked it in confidently."
+  2-3 sentences written from Ivy's perspective, as if briefing the next Ivy call. What was planned or confirmed? What was the person's energy like? Anything notable?
+
+next_season_goal
+  SEASON_CLOSE calls only: the user's stated goal for the next season, in their own words. Extract verbatim or close paraphrase. null for all other call types, or if the user did not state a goal.
 
 memorable_moments
   An array of specific facts worth remembering long-term about this person. Only include genuinely memorable details — not generic. Each item has:
@@ -86,17 +91,19 @@ Respond ONLY with valid JSON. No markdown, no explanation, no code fences.`;
 const SYNTHESIS_SYSTEM = `You synthesise behavioural patterns from a series of accountability coaching call insights. Your output directly shapes how a voice AI named Ivy adapts her approach with each individual user.
 
 How your output is used:
-- inferred_patterns: Ivy says this aloud to the user at Season Close or quarterly calls. Write it as something Ivy would naturally say — warm, specific, grounded in data. "I've noticed something about you..." Not flattery. An earned observation.
+- inferred_patterns: Ivy says this aloud to the user at Season Close or quarterly calls. Write it as something Ivy would naturally say — warm, specific, grounded in data.
 - notable_observation: The single sharpest thing Ivy can say. One sentence, maximum specificity.
 - behavioural_modifiers: A 1-2 sentence instruction to Ivy (never said to the user) about how to adapt her approach in every call.
 - probe_for_specificity: If true, Ivy always asks for time + location in morning plans before confirming.
 - most_effective_nudge: Ivy leads with this in rescue calls for this user.
 - high_risk_signals: Language or patterns that have preceded misses. Ivy listens for these.
 - preferred_register: Ivy calibrates her tone — direct, gentle, or energetic.
+- contact_preference: Based on the call_answer_rate and any signals in the data, infer whether this person prefers calls, texts, or is adaptive. If answer rate is below 0.35, lean toward texts. Above 0.65, calls. Otherwise adaptive.
+- contact_pattern_note: A one-sentence specific note about when or why they tend not to answer or prefer one medium. null if no clear pattern exists.
 
 Rules:
 - Only surface patterns with at least 3 data points. If a pattern has 1-2 instances, return null.
-- Never generate flattery or generic observations. "You always follow through" is not an observation — it's praise. "Every time you've said 'I'll probably go', you've missed — but every time you've named a specific time, you've done it" is an observation.
+- Never generate flattery or generic observations.
 - inferred_patterns should feel like it could only be said to this specific person, not anyone.
 
 Respond ONLY with valid JSON. No markdown, no explanation, no code fences.`;
@@ -114,8 +121,8 @@ class InsightService {
 
   /**
    * Extract structured behavioural insights from a completed call transcript.
-   * Fires async after call_analyzed webhook — never blocks the webhook response.
-   * On completion, triggers synthesizeUserProfile.
+   * Fires async after call_analyzed webhook. On completion, triggers synthesizeUserProfile.
+   * For SEASON_CLOSE calls: if a next_season_goal is found, starts Season 2 automatically.
    */
   async extractCallInsights(
     callId: string,
@@ -124,12 +131,12 @@ class InsightService {
     userId: string,
   ): Promise<void> {
     if (!this.client) return;
-    if (!transcript || transcript.length < 200) return; // too short to analyse
+    if (!transcript || transcript.length < 200) return;
 
     try {
       const response = await this.client.messages.create({
         model: 'claude-haiku-4-5',
-        max_tokens: 700,
+        max_tokens: 800,
         system: [
           {
             type: 'text',
@@ -150,7 +157,6 @@ class InsightService {
 
       const insights: CallInsights = JSON.parse(raw);
 
-      // Store full insights JSON + copy call_summary to the dedicated text column
       await prisma.call.update({
         where: { id: callId },
         data: {
@@ -159,7 +165,6 @@ class InsightService {
         },
       });
 
-      // Persist memorable moments as CallMemory records (Layer 3 long-term memory)
       if (insights.memorable_moments?.length) {
         await prisma.callMemory.createMany({
           data: insights.memorable_moments.map((m) => ({
@@ -173,7 +178,13 @@ class InsightService {
 
       logger.info(`Call insights extracted for ${callId} (summary: ${!!insights.call_summary}, memories: ${insights.memorable_moments?.length ?? 0})`);
 
-      // Synthesise updated profile — fires async, never throws to caller
+      // Season Close: if user stated a next-season goal, start the next season automatically
+      if (callType === 'SEASON_CLOSE' && insights.next_season_goal) {
+        this.startNextSeasonFromClose(userId, insights.next_season_goal).catch((err) =>
+          logger.error(`Auto-startNextSeason failed for user ${userId}:`, err)
+        );
+      }
+
       this.synthesizeUserProfile(userId).catch((err) =>
         logger.error(`Profile synthesis failed for user ${userId}:`, err)
       );
@@ -183,19 +194,33 @@ class InsightService {
   }
 
   /**
+   * Called after a SEASON_CLOSE call is analysed. Marks the closing season as CLOSED
+   * and starts the next season with the goal the user stated on the call.
+   */
+  private async startNextSeasonFromClose(userId: string, nextGoal: string): Promise<void> {
+    // Lazy import to avoid circular dependency
+    const seasonService = (await import('./season.service')).default;
+    await seasonService.startNextSeason(userId, nextGoal);
+    logger.info(`Season auto-advanced for user ${userId} — next goal: "${nextGoal}"`);
+  }
+
+  /**
    * Synthesise a behavioural profile from the last 20 calls with insights.
-   * Called after each extraction. Requires ≥3 calls with insights before producing output.
+   * Requires ≥3 calls with insights before producing output.
    */
   async synthesizeUserProfile(userId: string): Promise<void> {
     if (!this.client) return;
 
     try {
-      const recentCalls = await prisma.call.findMany({
-        where: { userId, NOT: { callInsights: { equals: undefined } }, status: 'COMPLETED' },
-        orderBy: { createdAt: 'desc' },
-        take: 20,
-        select: { callType: true, callInsights: true, createdAt: true },
-      });
+      const [recentCalls, callAnswerRate] = await Promise.all([
+        prisma.call.findMany({
+          where: { userId, NOT: { callInsights: { equals: undefined } }, status: 'COMPLETED' },
+          orderBy: { createdAt: 'desc' },
+          take: 20,
+          select: { callType: true, callInsights: true, createdAt: true },
+        }),
+        this.calculateCallAnswerRate(userId),
+      ]);
 
       if (recentCalls.length < 3) return;
 
@@ -211,12 +236,14 @@ class InsightService {
   "high_risk_signals": ["array of strings"],
   "probe_for_specificity": true or false,
   "preferred_register": "direct | gentle | energetic",
-  "behavioural_modifiers": "string or null"
+  "behavioural_modifiers": "string or null",
+  "contact_preference": "calls | texts | adaptive",
+  "contact_pattern_note": "string or null"
 }`;
 
       const response = await this.client.messages.create({
         model: 'claude-haiku-4-5',
-        max_tokens: 600,
+        max_tokens: 700,
         system: [
           {
             type: 'text',
@@ -227,7 +254,7 @@ class InsightService {
         messages: [
           {
             role: 'user',
-            content: `Synthesise a behavioural profile from ${recentCalls.length} recent calls.\n\nInsights:\n${insightsSummary}\n\nReturn JSON matching:\n${responseSchema}`,
+            content: `Synthesise a behavioural profile from ${recentCalls.length} recent calls.\n\nCall answer rate (last 30 days): ${callAnswerRate !== null ? `${Math.round(callAnswerRate * 100)}%` : 'not enough data'}\n\nInsights:\n${insightsSummary}\n\nReturn JSON matching:\n${responseSchema}`,
           },
         ],
       });
@@ -235,17 +262,43 @@ class InsightService {
       const raw = response.content[0]?.type === 'text' ? response.content[0].text.trim() : null;
       if (!raw) return;
 
-      const profile: InferredProfile = JSON.parse(raw);
+      const profile: Omit<InferredProfile, 'call_answer_rate'> = JSON.parse(raw);
 
       await prisma.user.update({
         where: { id: userId },
-        data: { inferredProfile: profile as any },
+        data: {
+          inferredProfile: {
+            ...profile,
+            call_answer_rate: callAnswerRate,
+          } as any,
+        },
       });
 
-      logger.info(`Behavioural profile updated for user ${userId} (${recentCalls.length} calls)`);
+      logger.info(`Behavioural profile updated for user ${userId} (${recentCalls.length} calls, answer rate: ${callAnswerRate !== null ? `${Math.round(callAnswerRate * 100)}%` : 'n/a'})`);
     } catch (err) {
       logger.error(`Profile synthesis failed for user ${userId}:`, err);
     }
+  }
+
+  /**
+   * Calculate the fraction of scheduled calls the user has answered over the last 30 days.
+   * Returns null if fewer than 5 scheduled calls — not enough signal yet.
+   */
+  private async calculateCallAnswerRate(userId: string): Promise<number | null> {
+    const since = subDays(startOfDay(new Date()), 30);
+    const calls = await prisma.call.findMany({
+      where: {
+        userId,
+        scheduledAt: { gte: since },
+        status: { in: ['COMPLETED', 'NO_ANSWER', 'FAILED'] },
+      },
+      select: { status: true },
+    });
+
+    if (calls.length < 5) return null;
+
+    const answered = calls.filter((c) => c.status === 'COMPLETED').length;
+    return Math.round((answered / calls.length) * 100) / 100;
   }
 }
 

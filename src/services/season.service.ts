@@ -151,16 +151,86 @@ class SeasonService {
     // Push notification — sprint complete
     await sendPushToUser(userId, pushTemplates.seasonClose()).catch(() => {});
 
-    // Dispatch Impact Story notification (story content created separately by ops)
-    const user = await prisma.user.findUnique({
-      where: { id: userId },
-      select: { preferredCharity: { select: { name: true } }, subscriptionTier: true },
-    });
+    const [user, sprint] = await Promise.all([
+      prisma.user.findUnique({
+        where: { id: userId },
+        select: { preferredCharity: { select: { name: true } }, subscriptionTier: true },
+      }),
+      prisma.sprint.findUnique({ where: { id: sprintId }, select: { number: true } }),
+    ]);
+
     if (user?.preferredCharity) {
       await sendPushToUser(userId, pushTemplates.impactStory(user.preferredCharity.name)).catch(() => {});
     }
 
+    // If user is in a Circle, create/ensure a sprint session is scheduled
+    if (sprint && ['ELITE', 'CONCIERGE', 'B2B'].includes(user?.subscriptionTier ?? '')) {
+      await this.scheduleCircleSprintSession(userId, sprintId, sprint.number).catch((err) =>
+        logger.warn(`Circle session scheduling failed for user ${userId}:`, err)
+      );
+    }
+
     logger.info(`Sprint-end events fired for user ${userId}, sprint ${sprintId}`);
+  }
+
+  /**
+   * Creates a CircleSprintSession for the user's circle if one doesn't already exist
+   * for this sprint. Scheduled 3 days after sprint end (gives the group time to settle).
+   */
+  private async scheduleCircleSprintSession(
+    userId: string,
+    sprintId: string,
+    sprintNumber: number,
+  ): Promise<void> {
+    const membership = await prisma.ivyCircleMember.findFirst({
+      where: { userId, isActive: true },
+      include: {
+        circle: {
+          include: {
+            members: {
+              where: { isActive: true },
+              select: { userId: true },
+            },
+          },
+        },
+      },
+    });
+
+    if (!membership) return; // user is not in a circle
+
+    const circleId = membership.circle.id;
+
+    // Idempotent — only create if no session exists for this sprint
+    const existing = await prisma.circleSprintSession.findFirst({
+      where: { circleId, sprintNumber },
+    });
+    if (existing) return;
+
+    const participantIds = membership.circle.members.map((m) => m.userId);
+    const scheduledAt = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000); // 3 days from now
+
+    await prisma.circleSprintSession.create({
+      data: {
+        circleId,
+        sprintId,
+        sprintNumber,
+        facilitatorType: 'peer',
+        scheduledAt,
+        status: 'scheduled',
+        participantUserIds: JSON.stringify(participantIds),
+      },
+    });
+
+    // Notify all circle members
+    for (const uid of participantIds) {
+      await sendPushToUser(uid, {
+        title: 'Circle session incoming',
+        body: `Your group session for Sprint ${sprintNumber} is scheduled. Come with one win and one honest struggle.`,
+        url: '/seasons',
+      }).catch(() => {});
+    }
+
+    logger.info(`Circle sprint session scheduled for circle ${circleId}, sprint ${sprintNumber}`);
   }
 
   private async onSeasonEnd(userId: string, seasonId: string): Promise<void> {
@@ -177,7 +247,7 @@ class SeasonService {
     logger.info(`Season Close call scheduled for user ${userId}, season ${seasonId}`);
   }
 
-  async startNextSeason(userId: string): Promise<any> {
+  async startNextSeason(userId: string, goal?: string): Promise<any> {
     const lastSeason = await prisma.season.findFirst({
       where: { userId },
       orderBy: { number: 'desc' },
@@ -197,7 +267,7 @@ class SeasonService {
       : new Date();
 
     return this.createSeason(userId, {
-      goal: '', // User sets the goal during Season 2 onboarding / Season Close call
+      goal: goal || 'Build consistent habits this season',
       startDate,
     });
   }

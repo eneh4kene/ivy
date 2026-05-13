@@ -34,6 +34,10 @@ const envSchema = z.object({
   RETELL_API_KEY: z.string().optional(),
   RETELL_AGENT_ID_B2B: z.string().optional(),
   RETELL_AGENT_ID_B2C: z.string().optional(),
+  // SIP URI for Twilio to forward inbound calls to Retell (from Retell dashboard → Phone Numbers)
+  RETELL_SIP_ENDPOINT: z.string().optional(),
+  // Shared webhook signing secret (used for both outbound call webhooks and inbound call webhook)
+  RETELL_WEBHOOK_SECRET: z.string().optional(),
 
   // WhatsApp
   WHATSAPP_BUSINESS_ACCOUNT_ID: z.string().optional(),

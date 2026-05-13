@@ -30,6 +30,8 @@ export const config = {
       b2b: env.RETELL_AGENT_ID_B2B,
       b2c: env.RETELL_AGENT_ID_B2C,
     },
+    sipEndpoint: env.RETELL_SIP_ENDPOINT,
+    webhookSecret: env.RETELL_WEBHOOK_SECRET,
   },
   whatsapp: {
     businessAccountId: env.WHATSAPP_BUSINESS_ACCOUNT_ID,

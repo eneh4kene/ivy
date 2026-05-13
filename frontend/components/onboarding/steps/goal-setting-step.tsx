@@ -3,21 +3,20 @@
 import { useState } from 'react'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Textarea } from '@/components/ui/textarea'
 import { usersApi } from '@/lib/api'
 
 export function GoalSettingStep() {
-  const [primaryGoal, setPrimaryGoal] = useState('')
-  const [whyItMatters, setWhyItMatters] = useState('')
-  const [successLooksLike, setSuccessLooksLike] = useState('')
+  const [goal, setGoal] = useState('')
+  const [giftFrame, setGiftFrame] = useState('')
+  const [minimumMode, setMinimumMode] = useState('')
 
   const saveGoals = async () => {
-    if (!primaryGoal.trim()) return
+    if (!goal.trim()) return
     try {
       await usersApi.updateProfile({
-        goal: primaryGoal,
-        minimumMode: whyItMatters || undefined,
-        giftFrame: successLooksLike || undefined,
+        goal: goal.trim(),
+        giftFrame: giftFrame.trim() || undefined,
+        minimumMode: minimumMode.trim() || undefined,
       })
     } catch (e) {
       console.error('Failed to save goals:', e)
@@ -28,59 +27,59 @@ export function GoalSettingStep() {
     <div className="space-y-6">
       <div className="text-center mb-8">
         <p className="text-muted-foreground">
-          Clear goals help Ivy provide better coaching. Your goals are completely private and only used to personalize your experience.
+          These three answers shape every call Ivy makes. Be honest — the more specific you are, the better Ivy can support you.
         </p>
       </div>
 
       <div className="space-y-6">
         <div className="space-y-2">
-          <Label htmlFor="primaryGoal" className="text-base font-semibold">
-            What's your primary goal for the next 8 weeks?
+          <Label htmlFor="goal" className="text-base font-semibold">
+            What's your goal for the next 12 weeks?
           </Label>
           <p className="text-sm text-muted-foreground mb-2">
-            Be specific. Instead of "get fit", try "run 3 miles without stopping" or "do 10 push-ups".
+            Be specific. "Run 5k without stopping" lands better than "get fit."
           </p>
           <Input
-            id="primaryGoal"
-            placeholder="e.g., Exercise 4 times per week consistently"
-            value={primaryGoal}
-            onChange={(e) => setPrimaryGoal(e.target.value)}
+            id="goal"
+            placeholder="e.g., Run 5k without stopping, meditate every morning, be in bed by 10:30pm"
+            value={goal}
+            onChange={(e) => setGoal(e.target.value)}
             onBlur={saveGoals}
             className="text-base"
           />
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="whyItMatters" className="text-base font-semibold">
-            Why does this goal matter to you?
+          <Label htmlFor="giftFrame" className="text-base font-semibold">
+            Who are you doing this for — or what changes if you get there?
           </Label>
           <p className="text-sm text-muted-foreground mb-2">
-            Understanding your motivation helps Ivy keep you accountable during tough moments.
+            Ivy uses this on hard days when you're about to give up. "My kids" or "I want energy back" both work.
           </p>
-          <Textarea
-            id="whyItMatters"
-            placeholder="e.g., I want to have more energy to play with my kids and set a good example for them..."
-            value={whyItMatters}
-            onChange={(e) => setWhyItMatters(e.target.value)}
-            rows={4}
-            className="text-base resize-none"
+          <Input
+            id="giftFrame"
+            placeholder="e.g., My kids, my partner, myself — I want to feel like myself again"
+            value={giftFrame}
+            onChange={(e) => setGiftFrame(e.target.value)}
+            onBlur={saveGoals}
+            className="text-base"
           />
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="successLooksLike" className="text-base font-semibold">
-            How will you know you've succeeded?
+          <Label htmlFor="minimumMode" className="text-base font-semibold">
+            What's the minimum you'd accept on a terrible day?
           </Label>
           <p className="text-sm text-muted-foreground mb-2">
-            Define success in concrete, measurable terms.
+            This is your floor — it still counts, it still earns the donation. Be realistic about what's always possible.
           </p>
-          <Textarea
-            id="successLooksLike"
-            placeholder="e.g., I'll feel proud when I complete all 4 workouts per week for 6 out of 8 weeks..."
-            value={successLooksLike}
-            onChange={(e) => setSuccessLooksLike(e.target.value)}
-            rows={4}
-            className="text-base resize-none"
+          <Input
+            id="minimumMode"
+            placeholder="e.g., A 10-minute walk, one chapter, 5 minutes of breathing"
+            value={minimumMode}
+            onChange={(e) => setMinimumMode(e.target.value)}
+            onBlur={saveGoals}
+            className="text-base"
           />
         </div>
       </div>
@@ -91,9 +90,9 @@ export function GoalSettingStep() {
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
           </svg>
           <div>
-            <p className="text-sm font-medium text-indigo-900 mb-1">Ivy's approach to goals</p>
+            <p className="text-sm font-medium text-indigo-900 mb-1">How Ivy uses these</p>
             <p className="text-sm text-indigo-800">
-              Your AI coach will reference these goals during your calls, celebrate progress, and help you stay accountable. You can update them anytime from your dashboard.
+              Your goal shapes the daily check-ins. The gift frame comes up in rescue calls when you're close to skipping. The minimum is what Ivy offers when "all or nothing" isn't working.
             </p>
           </div>
         </div>

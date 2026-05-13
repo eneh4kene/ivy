@@ -128,9 +128,18 @@ export async function handleMissedCall(userId: string): Promise<void> {
   })
   if (!user?.phone) return
 
-  const message = `Hey${user.firstName ? ` ${user.firstName}` : ''}, bad time? You can just reply here — did you get your session in today? 💬`
-  await messagingService.sendWhatsAppMessage(userId, message, 'nudge')
+  const name = user.firstName ? ` ${user.firstName}` : ''
+  const message = [
+    `Hey${name}, bad time?`,
+    ``,
+    `Reply:`,
+    `• CALL — try me again in 15 mins`,
+    `• TEXT — let’s keep it here today`,
+    ``,
+    `Or just tell me how today went 💬`,
+  ].join('\n')
 
+  await messagingService.sendWhatsAppMessage(userId, message, 'nudge')
   logger.info(`Missed call fallback text sent to ${userId}`)
 }
 

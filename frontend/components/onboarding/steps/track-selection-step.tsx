@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -51,10 +51,13 @@ const TRACK_DETAIL_PLACEHOLDER: Record<string, string> = {
 export function TrackSelectionStep() {
   const [selectedTrack, setSelectedTrack] = useState<string | null>(null)
   const [trackDetail, setTrackDetail] = useState('')
+  const [detailSaved, setDetailSaved] = useState(false)
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const handleTrackSelect = async (trackId: string) => {
     setSelectedTrack(trackId)
     setTrackDetail('')
+    setDetailSaved(false)
     try {
       await usersApi.updateProfile({ track: trackId as any, trackDetail: undefined })
     } catch (e) {
@@ -62,14 +65,19 @@ export function TrackSelectionStep() {
     }
   }
 
-  const handleDetailBlur = async () => {
-    const detail = trackDetail.trim()
-    if (!detail || !selectedTrack) return
-    try {
-      await usersApi.updateProfile({ trackDetail: detail })
-    } catch (e) {
-      console.error('Failed to save track detail:', e)
-    }
+  const handleDetailChange = (value: string) => {
+    setTrackDetail(value)
+    setDetailSaved(false)
+    if (!selectedTrack || !value.trim()) return
+    if (debounceRef.current) clearTimeout(debounceRef.current)
+    debounceRef.current = setTimeout(async () => {
+      try {
+        await usersApi.updateProfile({ trackDetail: value.trim() })
+        setDetailSaved(true)
+      } catch (e) {
+        console.error('Failed to save track detail:', e)
+      }
+    }, 600)
   }
 
   return (
@@ -133,10 +141,9 @@ export function TrackSelectionStep() {
             <Input
               placeholder={TRACK_DETAIL_PLACEHOLDER[selectedTrack]}
               value={trackDetail}
-              onChange={(e) => setTrackDetail(e.target.value)}
-              onBlur={handleDetailBlur}
+              onChange={(e) => handleDetailChange(e.target.value)}
             />
-            {trackDetail.trim() && (
+            {detailSaved && (
               <p className="text-xs text-emerald-600">✓ Saved</p>
             )}
           </div>

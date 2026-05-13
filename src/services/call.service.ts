@@ -239,12 +239,13 @@ class CallService {
             })
           : Promise.resolve(null),
 
-        // Layer 2: rolling recent — last 4 completed calls with summaries
+        // Layer 2: rolling recent — last 4 completed or missed calls with summaries
+        // NO_ANSWER calls are included so the brief knows if this is a retry
         prisma.call.findMany({
-          where: { userId, status: 'COMPLETED', NOT: { callSummary: null } },
+          where: { userId, status: { in: ['COMPLETED', 'NO_ANSWER'] }, NOT: { callSummary: null } },
           orderBy: { scheduledAt: 'desc' },
           take: 4,
-          select: { callType: true, callSummary: true, scheduledAt: true },
+          select: { callType: true, callSummary: true, scheduledAt: true, status: true },
         }),
 
         // Layer 3: long-term curated memories
@@ -264,7 +265,8 @@ class CallService {
           .map((c) => {
             const daysAgo = differenceInDays(now, c.scheduledAt);
             const label = daysAgo === 0 ? 'today' : daysAgo === 1 ? 'yesterday' : `${daysAgo}d ago`;
-            return `[${c.callType.toLowerCase()} ${label}]: "${c.callSummary}"`;
+            const missed = c.status === 'NO_ANSWER' ? ' missed' : '';
+            return `[${c.callType.toLowerCase()}${missed} ${label}]: "${c.callSummary}"`;
           })
           .join('\n');
       }
@@ -394,6 +396,11 @@ class CallService {
       high_risk_signals: (user?.inferredProfile as any)?.high_risk_signals ?? [],
       preferred_register: (user?.inferredProfile as any)?.preferred_register ?? null,
       behavioural_modifiers: (user?.inferredProfile as any)?.behavioural_modifiers ?? null,
+
+      // Communication preference (learned from call answer rate + explicit signals)
+      call_answer_rate: (user?.inferredProfile as any)?.call_answer_rate ?? null,
+      contact_preference: (user?.inferredProfile as any)?.contact_preference ?? null,
+      contact_pattern_note: (user?.inferredProfile as any)?.contact_pattern_note ?? null,
     };
   }
 
@@ -439,9 +446,13 @@ class CallService {
       throw new NotFoundError('Call not found');
     }
 
-    // Update call status
-    await this.updateCallStatus(callId, 'NO_ANSWER', {
-      outcome: 'no_answer',
+    // Update call status and write a brief summary so the retry call's brief
+    // sees this miss in Layer 2 memory and can acknowledge it naturally
+    const missedAt = new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+    await this.updateCallStatus(callId, 'NO_ANSWER', { outcome: 'no_answer' });
+    await prisma.call.update({
+      where: { id: callId },
+      data: { callSummary: `No answer at ${missedAt} — retry scheduled.` },
     });
 
     // Schedule retry in 15 minutes

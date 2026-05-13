@@ -164,40 +164,125 @@ class MessagingService {
   }
 
   /**
-   * Process incoming message for quick replies
+   * Process incoming message for quick replies and preference signals.
+   * Handles: CALL/TEXT preference replies, rescue triggers, completion confirmations.
    */
   private async processIncomingMessage(userId: string, content: string, messageId: string) {
     const lowerContent = content.toLowerCase().trim();
 
-    // Check for rescue trigger words
+    // ── Communication preference signals ─────────────────────────────────────
+    // User explicitly asked to be called back
+    if (
+      lowerContent === 'call' ||
+      lowerContent === 'call me' ||
+      lowerContent === 'call me back' ||
+      lowerContent.includes('try again') ||
+      lowerContent.includes('call me now')
+    ) {
+      logger.info(`Call-back request from user ${userId}`);
+      await this.scheduleCallbackCall(userId);
+      return messageId;
+    }
+
+    // User explicitly prefers text going forward
+    if (
+      lowerContent === 'text' ||
+      lowerContent === 'texts' ||
+      lowerContent === 'just text' ||
+      lowerContent.includes('prefer text') ||
+      lowerContent.includes('prefer texts') ||
+      lowerContent.includes('text me') ||
+      lowerContent.includes('keep it here')
+    ) {
+      logger.info(`Text preference confirmed by user ${userId}`);
+      // Cancel any queued retry calls so they don't ring anyway
+      await this.cancelUpcomingCallsForUser(userId);
+      await prisma.user.update({
+        where: { id: userId },
+        data: { commStyle: 'TEXTS' },
+      });
+      await this.sendWhatsAppMessage(
+        userId,
+        "Got it — I'll keep it in writing from now on. You can always say \"call me\" if something big comes up.",
+        'nudge',
+      );
+      return messageId;
+    }
+
+    // ── Rescue trigger words ──────────────────────────────────────────────────
     if (
       lowerContent.includes('skip') ||
-      lowerContent.includes('can\'t') ||
+      lowerContent.includes("can't") ||
       lowerContent.includes('tired') ||
       lowerContent.includes('help')
     ) {
       logger.info(`Rescue trigger detected for user ${userId}`);
-      // Could trigger a rescue call here
       const user = await prisma.user.findUnique({
         where: { id: userId },
         select: { minimumMode: true },
       });
-
       if (user?.minimumMode) {
         await this.sendRescueSupport(userId, user.minimumMode);
       }
     }
 
-    // Check for completion confirmation
+    // ── Completion confirmation ───────────────────────────────────────────────
     if (
       lowerContent.includes('done') ||
       lowerContent.includes('completed') ||
       lowerContent.includes('finished')
     ) {
-      await this.sendCelebration(userId, 'You completed your workout');
+      await this.sendCelebration(userId, 'You completed your session');
     }
 
     return messageId;
+  }
+
+  /**
+   * Schedule a callback call in ~2 minutes when user explicitly requests one via text.
+   * Cancels any queued auto-retry first so calls don't stack.
+   * Uses the same call type as the most recent missed call.
+   */
+  private async scheduleCallbackCall(userId: string): Promise<void> {
+    try {
+      const { default: callService } = await import('./call.service');
+      const user = await prisma.user.findUnique({
+        where: { id: userId },
+        select: { isActive: true },
+      });
+      if (!user?.isActive) return;
+
+      // Cancel the auto-retry that's already queued
+      await this.cancelUpcomingCallsForUser(userId);
+
+      // Match the call type of the most recent missed call
+      const lastMissed = await prisma.call.findFirst({
+        where: { userId, status: 'NO_ANSWER' },
+        orderBy: { scheduledAt: 'desc' },
+        select: { callType: true },
+      });
+      const callType = (lastMissed?.callType ?? 'MORNING_PLANNING') as any;
+
+      const scheduledAt = new Date(Date.now() + 2 * 60 * 1000);
+      await callService.scheduleCall(userId, callType, scheduledAt);
+      await this.sendWhatsAppMessage(userId, "On my way — I'll call you in 2 minutes.", 'nudge');
+    } catch (err) {
+      logger.error(`Failed to schedule callback call for user ${userId}:`, err);
+    }
+  }
+
+  /**
+   * Cancel all upcoming (SCHEDULED) calls for a user — used when the user
+   * explicitly changes communication preference via text.
+   */
+  private async cancelUpcomingCallsForUser(userId: string): Promise<void> {
+    try {
+      const { default: callService } = await import('./call.service');
+      const upcoming = await callService.getUpcomingCallsForUser(userId);
+      await Promise.all(upcoming.map((c) => callService.cancelCall(c.id).catch(() => {})));
+    } catch (err) {
+      logger.warn(`Failed to cancel upcoming calls for user ${userId}:`, err);
+    }
   }
 
   /**

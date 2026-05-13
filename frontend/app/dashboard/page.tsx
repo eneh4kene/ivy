@@ -221,7 +221,7 @@ export default function DashboardPage() {
           <div className="flex items-center justify-between mb-5">
             <div>
               <h2 className="font-semibold">Workout Progress</h2>
-              <p className="text-xs text-muted-foreground mt-0.5">Your fitness breakdown</p>
+              <p className="text-xs text-muted-foreground mt-0.5">Your {user?.track ?? 'workout'} breakdown</p>
             </div>
             <BarChart3 className="w-5 h-5 text-muted-foreground" />
           </div>
