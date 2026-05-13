@@ -60,6 +60,18 @@ cron.schedule('0 1 * * *', async () => {
   await seasonService.advanceStatuses();
 });
 
+// Every day at 3am UTC — recover calls stuck in IN_PROGRESS (Retell outage safety net)
+cron.schedule('0 3 * * *', async () => {
+  const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000);
+  const result = await prisma.call.updateMany({
+    where: { status: 'IN_PROGRESS', startedAt: { lt: twoHoursAgo } },
+    data: { status: 'FAILED', outcome: 'stuck_recovered' },
+  });
+  if (result.count > 0) {
+    logger.warn(`Recovered ${result.count} stuck IN_PROGRESS call(s)`);
+  }
+});
+
 // Graceful shutdown
 const gracefulShutdown = async (signal: string) => {
   logger.info(`${signal} received. Starting graceful shutdown...`);

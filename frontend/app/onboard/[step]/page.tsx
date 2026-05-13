@@ -32,6 +32,7 @@ export default function OnboardingStepPage() {
   const [flow, setFlow] = useState<OnboardingFlow | null>(null)
   const [currentStep, setCurrentStep] = useState<OnboardingStep | null>(null)
   const [canProceedPrefs, setCanProceedPrefs] = useState(false)
+  const [canProceedCharity, setCanProceedCharity] = useState(false)
 
   // Unblock preferences step immediately if phone already set
   useEffect(() => {
@@ -76,7 +77,7 @@ export default function OnboardingStepPage() {
       case 'goal-setting':
         return <GoalSettingStep />
       case 'charity-selection':
-        return <CharitySelectionStep />
+        return <CharitySelectionStep onCharityReady={setCanProceedCharity} />
       case 'preferences':
         return <PreferencesStep onPhoneReady={setCanProceedPrefs} />
       case 'complete':
@@ -108,7 +109,10 @@ export default function OnboardingStepPage() {
     }
   }
 
-  const canProceed = currentStep.component === 'preferences' ? canProceedPrefs : true
+  const canProceed =
+    currentStep.component === 'preferences' ? canProceedPrefs :
+    currentStep.component === 'charity-selection' ? canProceedCharity :
+    true
 
   return (
     <OnboardingWizard flow={flow} currentStep={currentStep} canProceed={canProceed}>

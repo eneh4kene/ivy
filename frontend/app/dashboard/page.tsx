@@ -10,7 +10,7 @@ import api, { seasonsApi } from '@/lib/api'
 import type { Stats, Season, Streak } from '@/lib/types'
 import {
   Zap, Heart, TrendingUp, ArrowRight, Plus, CheckCircle,
-  BarChart3, Flame, Trophy, ChevronRight, Target, Shield
+  BarChart3, Flame, Trophy, ChevronRight, Target, Shield, Phone
 } from 'lucide-react'
 
 function StatCard({ label, value, sub, icon: Icon, accent = false }: {
@@ -116,6 +116,20 @@ export default function DashboardPage() {
   const [streak, setStreak] = useState<Streak | null>(null)
   const [activeSeason, setActiveSeason] = useState<Season | null>(null)
   const [isLoading, setIsLoading] = useState(true)
+  const [callingIvy, setCallingIvy] = useState(false)
+  const [callRequested, setCallRequested] = useState(false)
+
+  const handleCallIvy = async () => {
+    setCallingIvy(true)
+    try {
+      await api.calls.requestRescueCall()
+      setCallRequested(true)
+    } catch {
+      // silent — user can try again
+    } finally {
+      setCallingIvy(false)
+    }
+  }
 
   useEffect(() => {
     Promise.all([
@@ -337,6 +351,24 @@ export default function DashboardPage() {
                 <ArrowRight className="w-4 h-4 text-muted-foreground group-hover:text-pink-400 transition-colors" />
               </button>
             </Link>
+
+            <button
+              onClick={handleCallIvy}
+              disabled={callingIvy || callRequested}
+              className="flex items-center gap-4 w-full p-4 rounded-xl border transition-all text-left disabled:opacity-60 disabled:cursor-not-allowed border-emerald-500/30 bg-emerald-500/5 hover:bg-emerald-500/10"
+            >
+              <div className="w-10 h-10 rounded-xl bg-emerald-500/15 flex items-center justify-center flex-shrink-0">
+                <Phone className="w-5 h-5 text-emerald-400" />
+              </div>
+              <div className="flex-1">
+                <p className="text-sm font-medium text-emerald-400">
+                  {callRequested ? 'Ivy is calling you…' : callingIvy ? 'Requesting…' : 'Talk to Ivy'}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  {callRequested ? 'She\'ll ring you in about 2 minutes' : 'She\'ll call you in ~2 minutes'}
+                </p>
+              </div>
+            </button>
           </div>
         </div>
       </div>

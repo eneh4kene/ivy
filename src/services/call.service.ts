@@ -3,6 +3,7 @@ import { callScheduleQueue } from '../config/queues';
 import logger from '../utils/logger';
 import { NotFoundError } from '../utils/errors';
 import { addMinutes, isBefore, differenceInDays, startOfMonth, startOfDay, endOfDay, subDays } from 'date-fns';
+import { fromZonedTime } from 'date-fns-tz';
 import seasonService from './season.service';
 import circleService from './circle.service';
 
@@ -104,49 +105,41 @@ class CallService {
       throw new NotFoundError('User not found');
     }
 
-    // Respect preferred call days if set
+    const tz = user.timezone || 'Europe/London';
+
+    // Respect preferred call days — evaluated in the user's timezone
     if (user.preferredDays) {
       const preferredDays: string[] = JSON.parse(user.preferredDays);
       if (preferredDays.length > 0) {
-        const dayName = date.toLocaleDateString('en-US', { weekday: 'long' }).toLowerCase();
+        const dayName = date.toLocaleDateString('en-US', { weekday: 'long', timeZone: tz }).toLowerCase();
         if (!preferredDays.includes(dayName)) {
           return [];
         }
       }
     }
 
+    const now = new Date();
     const calls = [];
 
-    // Schedule morning call
-    if (user.morningCallTime) {
-      const [hours, minutes] = user.morningCallTime.split(':').map(Number);
-      const morningTime = new Date(date);
-      morningTime.setHours(hours, minutes, 0, 0);
+    // Helper: convert HH:MM in user's timezone to a UTC Date
+    const toUTC = (hhmm: string): Date => {
+      // en-CA gives YYYY-MM-DD — reliable across Node versions
+      const localDateStr = date.toLocaleDateString('en-CA', { timeZone: tz });
+      return fromZonedTime(`${localDateStr}T${hhmm}:00`, tz);
+    };
 
-      if (isBefore(new Date(), morningTime)) {
-        const morningCall = await this.scheduleCall(
-          userId,
-          'MORNING_PLANNING',
-          morningTime,
-          await this.getUserContext(userId)
-        );
+    if (user.morningCallTime) {
+      const morningUTC = toUTC(user.morningCallTime);
+      if (isBefore(now, morningUTC)) {
+        const morningCall = await this.scheduleCall(userId, 'MORNING_PLANNING', morningUTC, await this.getUserContext(userId));
         calls.push(morningCall);
       }
     }
 
-    // Schedule evening call
     if (user.eveningCallTime) {
-      const [hours, minutes] = user.eveningCallTime.split(':').map(Number);
-      const eveningTime = new Date(date);
-      eveningTime.setHours(hours, minutes, 0, 0);
-
-      if (isBefore(new Date(), eveningTime)) {
-        const eveningCall = await this.scheduleCall(
-          userId,
-          'EVENING_REVIEW',
-          eveningTime,
-          await this.getUserContext(userId)
-        );
+      const eveningUTC = toUTC(user.eveningCallTime);
+      if (isBefore(now, eveningUTC)) {
+        const eveningCall = await this.scheduleCall(userId, 'EVENING_REVIEW', eveningUTC, await this.getUserContext(userId));
         calls.push(eveningCall);
       }
     }

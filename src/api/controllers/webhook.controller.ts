@@ -10,7 +10,7 @@ import paymentService from '../../services/payment.service';
 import insightService from '../../services/insight.service';
 import { logUsage } from '../../services/usage.service';
 import { serverAnalytics } from '../../lib/analytics';
-import { handleMissedCall as handleMissedCallComms } from '../../services/communication.service';
+import { handleMissedCall as handleMissedCallComms, handleDroppedCall } from '../../services/communication.service';
 import { flattenContext } from '../../utils/retell';
 import { sendSuccess } from '../../utils/response';
 import logger from '../../utils/logger';
@@ -67,15 +67,27 @@ class WebhookController {
           }
           break;
 
-        case 'call_ended':
+        case 'call_ended': {
+          const durationSecs: number = call.call_analysis?.call_duration ?? 0;
+          const reason: string = call.disconnection_reason ?? 'completed';
+
           if (dbCallId) {
             await callService.updateCallStatus(dbCallId, 'COMPLETED', {
               endedAt: new Date(),
-              duration: call.call_analysis?.call_duration || 0,
-              outcome: call.disconnection_reason || 'completed',
+              duration: durationSecs,
+              outcome: reason,
             });
           }
+
+          // Dropped call detection: short duration + abnormal disconnect reason
+          const normalEndings = ['user_hangup', 'agent_hangup', 'max_duration_reached', 'call_transfer'];
+          if (dbUserId && durationSecs < 45 && !normalEndings.includes(reason)) {
+            handleDroppedCall(dbUserId, dbCallType).catch((err) =>
+              logger.error('Dropped call follow-up failed:', err)
+            );
+          }
           break;
+        }
 
         case 'call_analyzed': {
           const durationSecs = call.call_analysis?.call_duration ?? 0;

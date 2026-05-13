@@ -120,6 +120,40 @@ export async function dispatchInteraction(
   }
 }
 
+// Fires when a call drops before it could complete (duration < 45s, abnormal disconnect).
+// Message is aware of what kind of call was interrupted.
+export async function handleDroppedCall(userId: string, callType: string): Promise<void> {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { firstName: true, phone: true },
+  })
+  if (!user?.phone) return
+
+  const name = user.firstName ? ` ${user.firstName}` : ''
+
+  const messages: Record<string, string> = {
+    MORNING_PLANNING:
+      `Hey${name}, looks like we got cut off — what's the plan today? Activity + time. Just reply here.`,
+    EVENING_REVIEW:
+      `Hey${name}, we got cut off — did you get it done today? Just reply here.`,
+    RESCUE:
+      `Hey${name} — we got cut off. Are you okay? Talk to me here.`,
+    WEEKLY_PLANNING:
+      `Hey${name}, we got cut off on your weekly planning — which days are you working out this week?`,
+    SEASON_CLOSE:
+      `Hey${name}, we got cut off on your season close — that deserves a proper ending. Reply CALL and I'll ring you back.`,
+    MONTHLY_CHECKIN:
+      `Hey${name}, we got cut off — quick one: energy and mood this week, 1-10? Reply here.`,
+    ONBOARDING:
+      `Hey${name}, we got cut off during setup — head back to the app to finish getting started.`,
+  }
+
+  const message = messages[callType] ?? `Hey${name}, looks like we got cut off. Talk to me here.`
+
+  await messagingService.sendWhatsAppMessage(userId, message, 'nudge')
+  logger.info(`Dropped call follow-up sent to ${userId} (${callType})`)
+}
+
 // Handles missed call — fires within 5 minutes of a no-answer
 export async function handleMissedCall(userId: string): Promise<void> {
   const user = await prisma.user.findUnique({

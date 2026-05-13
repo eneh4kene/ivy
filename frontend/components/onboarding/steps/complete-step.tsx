@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { SubscriptionTier } from '@/lib/types'
 import { getTierName } from '@/lib/permissions'
-import { usersApi, seasonsApi } from '@/lib/api'
+import { usersApi } from '@/lib/api'
 
 interface CompleteStepProps {
   tier: SubscriptionTier
@@ -24,18 +24,10 @@ export function CompleteStep({ tier }: CompleteStepProps) {
 
     try {
       await usersApi.markAsOnboarded()
+      // Season 1 creation and first call scheduling are handled server-side
+      // in markUserAsOnboarded — no need to duplicate here
     } catch (e) {
       console.error('Failed to mark as onboarded:', e)
-    }
-
-    // Create Season 1 for individual users — non-blocking, failure doesn't stop navigation
-    if (!isBusiness) {
-      try {
-        const profile = await usersApi.getCurrentProfile()
-        await seasonsApi.create({ goal: profile.goal || 'Build consistent habits this season' })
-      } catch (e) {
-        console.error('Failed to create Season 1:', e)
-      }
     }
 
     setLoading(false)

@@ -42,7 +42,11 @@ const CATEGORY_EMOJI: Record<string, string> = {
   animals: '🐾',
 }
 
-export function CharitySelectionStep() {
+interface CharitySelectionStepProps {
+  onCharityReady?: (ready: boolean) => void
+}
+
+export function CharitySelectionStep({ onCharityReady }: CharitySelectionStepProps) {
   const { user } = useAuthStore()
   const currency = useCurrencyStore((s) => s.currency)
   const region = user?.region ?? 'GB'
@@ -82,6 +86,7 @@ export function CharitySelectionStep() {
       }
     }
     setSelected(next)
+    onCharityReady?.(next.length > 0)
     if (next.length === 0) return
     setSaving(true)
     try {
