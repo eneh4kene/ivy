@@ -188,6 +188,45 @@ class DonationController {
   }
 
   /**
+   * Import a charity from Every.org into our DB (upsert by everyOrgSlug).
+   * POST /api/donations/charities/import
+   *
+   * Used when a user searches Every.org and selects a charity not in our curated list.
+   * Returns the DB charity record so its ID can be used in setUserCharities.
+   */
+  async importCharity(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { slug, name, description, logoUrl, websiteUrl } = req.body as {
+        slug: string; name: string; description?: string; logoUrl?: string; websiteUrl?: string
+      }
+      if (!slug || !name) {
+        res.status(400).json({ success: false, error: 'slug and name are required' }); return
+      }
+
+      // Check if already imported
+      const existing = await prisma.charity.findFirst({ where: { everyOrgSlug: slug } })
+      if (existing) {
+        sendSuccess(res, existing); return
+      }
+
+      const charity = await prisma.charity.create({
+        data: {
+          name,
+          description: description || name,
+          category: 'community',
+          impactMetric: 'donations',
+          impactPerPound: 'Your donation goes directly to this cause',
+          everyOrgSlug: slug,
+          logoUrl: logoUrl ?? null,
+          website: websiteUrl ?? null,
+          isActive: true,
+        },
+      })
+      sendCreated(res, charity)
+    } catch (error) { next(error) }
+  }
+
+  /**
    * Get charity by ID
    * GET /api/donations/charities/:id
    */

@@ -221,7 +221,11 @@ function SignupForm() {
                 </Button>
 
                 <p className="text-xs text-muted-foreground text-center pt-1">
-                  By signing up you agree to our terms. No credit card required.
+                  By signing up you agree to our{' '}
+                  <a href="/terms" className="underline underline-offset-2 hover:text-foreground transition-colors">Terms of Service</a>
+                  {' '}and{' '}
+                  <a href="/privacy" className="underline underline-offset-2 hover:text-foreground transition-colors">Privacy Policy</a>.
+                  No credit card required.
                 </p>
               </form>
 

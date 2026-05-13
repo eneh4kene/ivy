@@ -18,6 +18,7 @@ const router = Router();
 // authenticate first so region/tier are available for filtering
 router.get('/charities', authenticate, donationController.getCharities);
 router.get('/charities/search', authenticate, donationController.searchCharities);
+router.post('/charities/import', authenticate, donationController.importCharity);
 router.get('/charities/:id', authenticate, donationController.getCharityById);
 
 // User charity selections (multi-charity wallet split)

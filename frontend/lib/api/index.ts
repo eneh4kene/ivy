@@ -75,6 +75,11 @@ export const usersApi = {
     const response = await client.post<ApiResponse>('/api/users/me/onboard')
     return response.data
   },
+
+  deleteAccount: async () => {
+    const response = await client.delete<ApiResponse>('/api/users/me')
+    return response.data
+  },
 }
 
 // Workouts API
@@ -120,6 +125,11 @@ export const donationsApi = {
   searchCharities: async (q: string) => {
     const response = await client.get<ApiResponse<any[]>>('/api/donations/charities/search', { params: { q } })
     return response.data.data ?? []
+  },
+
+  importCharity: async (data: { slug: string; name: string; description?: string; logoUrl?: string; websiteUrl?: string }) => {
+    const response = await client.post<ApiResponse<Charity>>('/api/donations/charities/import', data)
+    return response.data.data!
   },
 
   setUserCharities: async (charityIds: string[]) => {

@@ -100,7 +100,11 @@ export default function SettingsPage() {
     callFrequency: user?.callFrequency || 7,
     track: user?.track || 'fitness',
     goal: user?.goal || '',
+    minimumMode: user?.minimumMode || '',
+    giftFrame: user?.giftFrame || '',
   })
+  const [deletingAccount, setDeletingAccount] = useState(false)
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
 
   useEffect(() => {
     buddyApi.get().then((b) => setBuddy(b ?? null)).catch(console.error).finally(() => setBuddyLoading(false))
@@ -127,6 +131,8 @@ export default function SettingsPage() {
         callFrequency: user.callFrequency || 7,
         track: user.track || 'fitness',
         goal: user.goal || '',
+        minimumMode: user.minimumMode || '',
+        giftFrame: user.giftFrame || '',
       })
     }
   }, [user])
@@ -173,6 +179,19 @@ export default function SettingsPage() {
     } catch (err: any) {
       showToast(err.message || 'Failed to save buddy', 'error')
     } finally { setBuddySaving(false) }
+  }
+
+  const handleDeleteAccount = async () => {
+    setDeletingAccount(true)
+    try {
+      await api.users.deleteAccount()
+      // Clear auth and redirect — account is gone
+      window.location.href = '/'
+    } catch (err: any) {
+      showToast(err.message || 'Failed to delete account', 'error')
+      setDeletingAccount(false)
+      setDeleteConfirmOpen(false)
+    }
   }
 
   const handleBuddyRemove = async () => {
@@ -300,6 +319,24 @@ export default function SettingsPage() {
                 placeholder="e.g., Run a marathon by end of year"
                 value={preferencesData.goal}
                 onChange={(e) => setPreferencesData({ ...preferencesData, goal: e.target.value })}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium">Minimum acceptable on a bad day</label>
+              <p className="text-xs text-muted-foreground">Ivy offers this when you're about to give up — make it realistic.</p>
+              <Input
+                placeholder="e.g., A 10-minute walk, one chapter, 5 minutes of breathing"
+                value={preferencesData.minimumMode}
+                onChange={(e) => setPreferencesData({ ...preferencesData, minimumMode: e.target.value })}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium">Who you're doing this for</label>
+              <p className="text-xs text-muted-foreground">Ivy uses this in rescue calls. "My kids", "myself", "I want energy back" — be honest.</p>
+              <Input
+                placeholder="e.g., My kids, my partner, myself"
+                value={preferencesData.giftFrame}
+                onChange={(e) => setPreferencesData({ ...preferencesData, giftFrame: e.target.value })}
               />
             </div>
             <Button type="submit" disabled={isLoading} size="sm">
@@ -536,12 +573,46 @@ export default function SettingsPage() {
               <Download className="w-4 h-4 mr-2 text-muted-foreground" />
               Export My Data
             </Button>
-            <Button variant="outline" className="w-full justify-start text-destructive hover:text-destructive hover:border-destructive/30 hover:bg-destructive/5" size="sm" disabled>
+            <Button
+              variant="outline"
+              className="w-full justify-start text-destructive hover:text-destructive hover:border-destructive/30 hover:bg-destructive/5"
+              size="sm"
+              onClick={() => setDeleteConfirmOpen(true)}
+            >
               <Trash2 className="w-4 h-4 mr-2" />
               Delete Account
             </Button>
           </div>
         </SectionCard>
+
+        {/* Delete Account Confirmation Modal */}
+        {deleteConfirmOpen && (
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+            <div className="w-full max-w-sm bg-card border border-destructive/30 rounded-2xl shadow-2xl p-6 space-y-4">
+              <h2 className="font-bold text-lg">Delete your account?</h2>
+              <p className="text-sm text-muted-foreground">
+                This permanently deletes your account, call history, streak, donations history, and all personal data. Your pending charity donations will still be dispatched. This cannot be undone.
+              </p>
+              <div className="flex gap-3 pt-2">
+                <Button
+                  variant="outline"
+                  className="flex-1"
+                  onClick={() => setDeleteConfirmOpen(false)}
+                  disabled={deletingAccount}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  className="flex-1 bg-destructive hover:bg-destructive/90 text-destructive-foreground"
+                  onClick={handleDeleteAccount}
+                  disabled={deletingAccount}
+                >
+                  {deletingAccount ? 'Deleting…' : 'Yes, delete'}
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {toast && <Toast message={toast.message} type={toast.type} />}

@@ -1,8 +1,8 @@
 #!/bin/sh
 set -e
 
-echo "==> Running prisma db push..."
-npx prisma db push --accept-data-loss
+echo "==> Running prisma migrations..."
+npx prisma migrate deploy
 
 echo "==> Starting server..."
 exec node dist/index.js
