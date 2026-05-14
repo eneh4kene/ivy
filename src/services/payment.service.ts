@@ -5,6 +5,7 @@ import logger from '../utils/logger';
 import { NotFoundError, BadRequestError } from '../utils/errors';
 import { SubscriptionTier } from '@prisma/client';
 import { getStripePriceId, IMPACT_WALLET_MONTHLY, type Currency } from '../config/pricing';
+import emailService from './email.service';
 
 class PaymentService {
   private stripe: Stripe | null = null;
@@ -277,6 +278,14 @@ class PaymentService {
 
     await this.updateSubscriptionTier(userId, tier, subscription.id);
 
+    // Send confirmation email — non-blocking
+    prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, firstName: true, email: true, subscriptionTier: true, currency: true },
+    }).then((user) => {
+      if (user) emailService.sendSubscriptionConfirmation(user).catch(() => {});
+    }).catch(() => {});
+
     logger.info(`Subscription created: ${subscription.id} for user ${userId}`);
   }
 
@@ -419,7 +428,11 @@ class PaymentService {
 
       logger.error(`Payment failed for user ${user.id} - invoice ${invoice.id}`);
 
-      // TODO: Send notification email to user
+      emailService.sendPaymentFailed({
+        id: user.id,
+        firstName: user.firstName,
+        email: user.email,
+      }).catch(() => {});
     }
   }
 }
