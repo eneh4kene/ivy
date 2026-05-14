@@ -80,6 +80,16 @@ export const usersApi = {
     const response = await client.delete<ApiResponse>('/api/users/me')
     return response.data
   },
+
+  requestPhoneOtp: async (phone: string) => {
+    const response = await client.post<ApiResponse>('/api/users/phone/request-otp', { phone })
+    return response.data
+  },
+
+  verifyPhoneOtp: async (code: string): Promise<string> => {
+    const response = await client.post<ApiResponse<{ phone: string }>>('/api/users/phone/verify', { code })
+    return response.data.data!.phone
+  },
 }
 
 // Workouts API

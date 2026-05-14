@@ -9,7 +9,7 @@ import { getTierName, getTierPrice } from '@/lib/permissions'
 import { useCurrencyStore } from '@/lib/store/currency.store'
 import api, { buddyApi, donationsApi } from '@/lib/api'
 import type { UpdateProfileInput, AccountabilityBuddy } from '@/lib/types'
-import { User, Phone, Clock, Target, CreditCard, Trash2, Download, CheckCircle2, AlertCircle, ChevronRight, Users, Bell, BellOff, Heart } from 'lucide-react'
+import { User, Phone, Clock, Target, CreditCard, Trash2, Download, CheckCircle2, AlertCircle, ChevronRight, Users, Bell, BellOff, Heart, Loader2, ShieldCheck } from 'lucide-react'
 import { usePushNotifications } from '@/hooks/usePushNotifications'
 
 function SectionCard({ title, description, icon: Icon, children }: {
@@ -87,12 +87,19 @@ export default function SettingsPage() {
     setTimeout(() => setToast(null), 3000)
   }
 
-  const [profileData, setProfileData] = useState<UpdateProfileInput>({
+  const [profileData, setProfileData] = useState({
     firstName: user?.firstName || '',
     lastName: user?.lastName || '',
-    phone: user?.phone || '',
     timezone: user?.timezone || 'Europe/London',
   })
+
+  // Phone verification flow state
+  const [phoneStep, setPhoneStep] = useState<'idle' | 'enter' | 'code'>('idle')
+  const [newPhone, setNewPhone] = useState('')
+  const [otpCode, setOtpCode] = useState('')
+  const [phoneSending, setPhoneSending] = useState(false)
+  const [phoneVerifying, setPhoneVerifying] = useState(false)
+  const [phoneError, setPhoneError] = useState('')
 
   const [preferencesData, setPreferencesData] = useState({
     morningCallTime: user?.morningCallTime || '07:00',
@@ -122,7 +129,6 @@ export default function SettingsPage() {
       setProfileData({
         firstName: user.firstName || '',
         lastName: user.lastName || '',
-        phone: user.phone || '',
         timezone: user.timezone || 'Europe/London',
       })
       setPreferencesData({
@@ -147,6 +153,32 @@ export default function SettingsPage() {
     } catch (err: any) {
       showToast(err.message || 'Failed to update profile', 'error')
     } finally { setIsLoading(false) }
+  }
+
+  const handleRequestOtp = async () => {
+    setPhoneError('')
+    setPhoneSending(true)
+    try {
+      await api.users.requestPhoneOtp(newPhone)
+      setPhoneStep('code')
+    } catch (err: any) {
+      setPhoneError(err.response?.data?.error || err.message || 'Failed to send code')
+    } finally { setPhoneSending(false) }
+  }
+
+  const handleVerifyOtp = async () => {
+    setPhoneError('')
+    setPhoneVerifying(true)
+    try {
+      const verified = await api.users.verifyPhoneOtp(otpCode)
+      setUser({ ...user!, phone: verified })
+      setPhoneStep('idle')
+      setNewPhone('')
+      setOtpCode('')
+      showToast('Phone number updated')
+    } catch (err: any) {
+      setPhoneError(err.response?.data?.error || err.message || 'Incorrect code')
+    } finally { setPhoneVerifying(false) }
   }
 
   const handlePreferencesUpdate = async (e: React.FormEvent) => {
@@ -236,17 +268,119 @@ export default function SettingsPage() {
                 />
               </div>
             </div>
+            {/* Phone — handled separately with OTP verification */}
             <div className="space-y-1.5">
               <label className="text-sm font-medium flex items-center gap-1.5">
                 <Phone className="w-3.5 h-3.5 text-muted-foreground" />
                 Phone Number
               </label>
-              <Input
-                type="tel"
-                placeholder="+44 20 1234 5678"
-                value={profileData.phone}
-                onChange={(e) => setProfileData({ ...profileData, phone: e.target.value })}
-              />
+
+              {phoneStep === 'idle' && (
+                <div className="flex items-center gap-3 px-3 py-2.5 rounded-xl border border-border bg-muted/30">
+                  {user?.phone ? (
+                    <>
+                      <div className="flex items-center gap-1.5 flex-1">
+                        <ShieldCheck className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                        <span className="text-sm text-foreground">{user.phone}</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => { setPhoneStep('enter'); setPhoneError('') }}
+                        className="text-xs text-primary hover:underline shrink-0"
+                      >
+                        Change
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <span className="text-sm text-muted-foreground flex-1">No phone number set</span>
+                      <button
+                        type="button"
+                        onClick={() => { setPhoneStep('enter'); setPhoneError('') }}
+                        className="text-xs text-primary hover:underline shrink-0"
+                      >
+                        Add number
+                      </button>
+                    </>
+                  )}
+                </div>
+              )}
+
+              {phoneStep === 'enter' && (
+                <div className="space-y-2">
+                  <div className="flex gap-2">
+                    <Input
+                      type="tel"
+                      placeholder="+447911123456"
+                      value={newPhone}
+                      onChange={(e) => setNewPhone(e.target.value)}
+                      className="flex-1"
+                      autoFocus
+                    />
+                    <Button
+                      type="button"
+                      size="sm"
+                      disabled={phoneSending || !newPhone.trim()}
+                      onClick={handleRequestOtp}
+                    >
+                      {phoneSending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : 'Send code'}
+                    </Button>
+                    <button
+                      type="button"
+                      onClick={() => { setPhoneStep('idle'); setNewPhone(''); setPhoneError('') }}
+                      className="text-xs text-muted-foreground hover:text-foreground px-1"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                  <p className="text-xs text-muted-foreground">Include your country code, e.g. +447911123456</p>
+                  {phoneError && <p className="text-xs text-destructive">{phoneError}</p>}
+                </div>
+              )}
+
+              {phoneStep === 'code' && (
+                <div className="space-y-2">
+                  <p className="text-xs text-muted-foreground">Enter the 6-digit code sent to <strong>{newPhone}</strong></p>
+                  <div className="flex gap-2">
+                    <Input
+                      type="text"
+                      inputMode="numeric"
+                      placeholder="123456"
+                      maxLength={6}
+                      value={otpCode}
+                      onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, ''))}
+                      className="flex-1 tracking-widest text-center"
+                      autoFocus
+                    />
+                    <Button
+                      type="button"
+                      size="sm"
+                      disabled={phoneVerifying || otpCode.length < 6}
+                      onClick={handleVerifyOtp}
+                    >
+                      {phoneVerifying ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : 'Verify'}
+                    </Button>
+                  </div>
+                  <div className="flex gap-3">
+                    <button
+                      type="button"
+                      onClick={() => { setPhoneStep('enter'); setOtpCode(''); setPhoneError('') }}
+                      className="text-xs text-muted-foreground hover:text-foreground"
+                    >
+                      ← Wrong number
+                    </button>
+                    <button
+                      type="button"
+                      disabled={phoneSending}
+                      onClick={handleRequestOtp}
+                      className="text-xs text-muted-foreground hover:text-foreground disabled:opacity-40"
+                    >
+                      Resend code
+                    </button>
+                  </div>
+                  {phoneError && <p className="text-xs text-destructive">{phoneError}</p>}
+                </div>
+              )}
             </div>
             <div className="space-y-1.5">
               <label className="text-sm font-medium">Timezone</label>

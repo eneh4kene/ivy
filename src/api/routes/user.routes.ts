@@ -1,8 +1,9 @@
-import { Router } from 'express';
+import { Router, Request, Response, NextFunction } from 'express';
 import userController from '../controllers/user.controller';
 import { validate } from '../../middleware/validate';
-import { authenticate } from '../../middleware/auth';
+import { authenticate, AuthRequest } from '../../middleware/auth';
 import { createUserSchema, updateUserSchema, getUserByIdSchema } from '../../types/user.schema';
+import phoneVerifyService from '../../services/phone-verify.service';
 
 const router = Router();
 
@@ -71,6 +72,42 @@ router.delete(
   '/me',
   authenticate,
   userController.deleteMyAccount
+);
+
+/**
+ * @route   POST /api/users/phone/request-otp
+ * @desc    Send a 6-digit OTP to a new phone number for verification
+ * @access  Private
+ */
+router.post(
+  '/phone/request-otp',
+  authenticate,
+  async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const { phone } = req.body;
+      if (!phone) { res.status(400).json({ success: false, error: 'phone is required' }); return; }
+      await phoneVerifyService.requestOtp(req.user!.id, phone);
+      res.json({ success: true, data: { message: 'Verification code sent' } });
+    } catch (err) { next(err); }
+  }
+);
+
+/**
+ * @route   POST /api/users/phone/verify
+ * @desc    Verify OTP and update phone number
+ * @access  Private
+ */
+router.post(
+  '/phone/verify',
+  authenticate,
+  async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const { code } = req.body;
+      if (!code) { res.status(400).json({ success: false, error: 'code is required' }); return; }
+      const newPhone = await phoneVerifyService.verifyOtp(req.user!.id, code);
+      res.json({ success: true, data: { phone: newPhone } });
+    } catch (err) { next(err); }
+  }
 );
 
 /**
