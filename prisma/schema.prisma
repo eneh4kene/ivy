@@ -92,6 +92,7 @@ model User {
   pushSubscriptions   PushSubscription[]
   charities           UserCharity[]
   callMemories        CallMemory[]
+  circleGameEvents    CircleGameEvent[]
 
   @@index([email])
   @@index([companyId])
@@ -535,6 +536,7 @@ model IvyCircle {
   members     IvyCircleMember[]
   sessions    CircleSprintSession[]
   sprintGoals CircleSprintGoal[]
+  games       CircleGame[]
 
   @@index([companyId])
   @@map("ivy_circles")
@@ -652,6 +654,8 @@ model Sprint {
 
   // Sprint Close
   ivyCircleSessionId String? // CircleSprintSession that closed this sprint
+
+  games CircleGame[]
 
   @@index([seasonId])
   @@map("sprints")
@@ -773,6 +777,76 @@ model CircleSprintSession {
   @@index([sprintId])
   @@index([circleId])
   @@map("circle_sprint_sessions")
+}
+
+// ============================================
+// CIRCLE GAMES
+// ============================================
+
+model CircleGame {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  circleId  String
+  circle    IvyCircle @relation(fields: [circleId], references: [id], onDelete: Cascade)
+
+  sprintId  String?
+  sprint    Sprint?   @relation(fields: [sprintId], references: [id], onDelete: SetNull)
+
+  // Identity
+  name        String
+  description String?
+
+  // Template type hints to the state processor which mechanics to apply
+  templateType String @default("custom")
+  // relay — baton passes to next member on workout_completed; missed = baton drops to random
+  // points_race — each workout_completed awards points; first to target wins
+  // collective — whole circle unlocks reward when group total hits target
+  // custom — Ivy reads ivyInstruction and manages everything conversationally
+
+  // Template-specific parameters (e.g. turn_order, window_hours, scoring, win_condition)
+  rules Json @default("{}")
+
+  // Plain English for Ivy — the *only* thing Ivy reads to understand how to run the game
+  ivyInstruction String @db.Text
+
+  // Mechanical runtime state — updated by backend on every workout event
+  state Json @default("{}")
+  // relay:    { current_holder_id, baton_held_since, passes_today }
+  // points:   { scores: { userId: Int } }
+  // collective:{ total: Int, target: Int, contributors: [userId] }
+  // custom:   freeform, set by the game creator
+
+  status    String   @default("active") // active | completed | paused
+  startedAt DateTime @default(now())
+  completedAt DateTime?
+
+  events CircleGameEvent[]
+
+  @@index([circleId, status])
+  @@index([sprintId])
+  @@map("circle_games")
+}
+
+model CircleGameEvent {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
+
+  gameId String
+  game   CircleGame @relation(fields: [gameId], references: [id], onDelete: Cascade)
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // workout_completed | workout_missed | baton_passed | points_awarded | streak_extended | game_won
+  eventType String
+  payload   Json   @default("{}")
+  note      String? // plain sentence Ivy can surface in a call
+
+  @@index([gameId, createdAt])
+  @@index([userId])
+  @@map("circle_game_events")
 }
 
 // ============================================

@@ -6,6 +6,7 @@ import { startOfDay, differenceInDays } from 'date-fns';
 import donationService from './donation.service';
 import { sendPushToUser, pushTemplates } from './push.service';
 import { serverAnalytics } from '../lib/analytics';
+import circleGameService from './circle-game.service';
 
 class WorkoutService {
   /**
@@ -230,6 +231,11 @@ class WorkoutService {
         await this.resetStreak(userId);
       }
     }
+
+    // Fire circle game event — non-blocking
+    circleGameService.processWorkoutEvent(userId, data.status as any).catch((err) =>
+      logger.warn(`Circle game event failed for workout ${workoutId}`, err)
+    );
 
     logger.info(`Workout completed: ${workoutId} with status ${data.status}`);
 

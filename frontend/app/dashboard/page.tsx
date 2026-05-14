@@ -352,6 +352,21 @@ export default function DashboardPage() {
               </button>
             </Link>
 
+            {['ELITE', 'CONCIERGE', 'B2B'].includes(user?.subscriptionTier ?? '') && (
+              <Link href="/circles">
+                <button className="flex items-center gap-4 w-full p-4 rounded-xl border border-border hover:border-amber-500/30 hover:bg-amber-500/5 transition-all group text-left">
+                  <div className="w-10 h-10 rounded-xl bg-amber-500/10 flex items-center justify-center flex-shrink-0 group-hover:bg-amber-500/15">
+                    <Trophy className="w-5 h-5 text-amber-400" />
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-sm font-medium">Circle Games</p>
+                    <p className="text-xs text-muted-foreground">Games your group plays with Ivy</p>
+                  </div>
+                  <ArrowRight className="w-4 h-4 text-muted-foreground group-hover:text-amber-400 transition-colors" />
+                </button>
+              </Link>
+            )}
+
             <button
               onClick={handleCallIvy}
               disabled={callingIvy || callRequested}

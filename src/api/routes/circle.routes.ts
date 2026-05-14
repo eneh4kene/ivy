@@ -2,6 +2,9 @@ import { Router, Request, Response, NextFunction } from 'express'
 import { authenticate } from '../../middleware/auth'
 import circleService from '../../services/circle.service'
 import { AuthRequest } from '../../middleware/auth'
+import {
+  listTemplates, createGame, listGames, getGame, getActiveGame, pauseGame, endGame
+} from '../controllers/circle-game.controller'
 
 const router = Router()
 router.use(authenticate)
@@ -94,5 +97,28 @@ router.get('/:id/consistency', async (req: Request, res: Response, next: NextFun
     res.json({ success: true, data: stats })
   } catch (err) { next(err) }
 })
+
+// ── Circle Games ──────────────────────────────────────────────────────────────
+
+// GET /api/circles/games/templates
+router.get('/games/templates', listTemplates)
+
+// GET /api/circles/games/active — active game for calling user's circle
+router.get('/games/active', getActiveGame)
+
+// GET /api/circles/:circleId/games
+router.get('/:circleId/games', listGames)
+
+// POST /api/circles/:circleId/games
+router.post('/:circleId/games', createGame)
+
+// GET /api/circles/games/:gameId
+router.get('/games/:gameId', getGame)
+
+// PATCH /api/circles/games/:gameId/pause
+router.patch('/games/:gameId/pause', pauseGame)
+
+// PATCH /api/circles/games/:gameId/end
+router.patch('/games/:gameId/end', endGame)
 
 export default router

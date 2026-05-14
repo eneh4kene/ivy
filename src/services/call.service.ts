@@ -6,6 +6,7 @@ import { addMinutes, isBefore, differenceInDays, startOfMonth, startOfDay, endOf
 import { fromZonedTime } from 'date-fns-tz';
 import seasonService from './season.service';
 import circleService from './circle.service';
+import circleGameService from './circle-game.service';
 
 export type CallType = 'MORNING_PLANNING' | 'EVENING_REVIEW' | 'RESCUE' | 'WEEKLY_PLANNING' | 'MONTHLY_CHECKIN' | 'ONBOARDING' | 'SEASON_CLOSE';
 
@@ -386,6 +387,13 @@ class CallService {
       circle_season_theme: circleContext?.seasonTheme ?? null,
       circle_sprint_pledge: circleContext?.sprintPledge ?? null,
       circle_consistency_rate: circleContext?.groupConsistencyRate ?? null,
+
+      // Circle game (null when no active game)
+      ...((await circleGameService.getGameContextForUser(userId).catch(() => null)) ?? {
+        circle_game_name: null,
+        circle_game_state_summary: null,
+        circle_game_ivy_instruction: null,
+      }),
 
       // B2B
       company_wellness_theme: circleContext?.companyWellnessTheme ?? null,

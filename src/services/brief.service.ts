@@ -36,6 +36,7 @@ WHAT TO INCLUDE:
 - If contact_preference is "texts" but the call IS high-stakes: note "she/he usually prefers texts — if they answer, acknowledge it once: 'I know you usually prefer texts — I wanted to catch you for this one.'"
 - If contact_pattern_note is set: include a one-line directive reflecting it
 - How to close
+- If circle_game_name is set: include a brief directive about the game. Quote circle_game_state_summary as the current state. If circle_game_ivy_instruction is provided, let that guide the game interaction — do not invent mechanics not described there. Keep game mentions brief (1-2 sentences max) — it should feel like a natural aside, not a separate agenda item.
 
 WHAT TO AVOID:
 - Generic instructions that could apply to anyone
@@ -114,6 +115,11 @@ class BriefService {
       call_answer_rate: ctx.call_answer_rate,
       contact_preference: ctx.contact_preference,
       contact_pattern_note: ctx.contact_pattern_note,
+
+      // Circle game (if active)
+      circle_game_name: ctx.circle_game_name,
+      circle_game_state_summary: ctx.circle_game_state_summary,
+      circle_game_ivy_instruction: ctx.circle_game_ivy_instruction,
 
       // Track schema
       track_config: {

@@ -337,6 +337,54 @@ export const circlesApi = {
   },
 }
 
+// Circle Games API
+interface GameTemplate {
+  type: string; name: string; description: string
+  defaultRules: Record<string, any>; defaultInstruction: string
+}
+interface CircleGame {
+  id: string; circleId: string; sprintId?: string
+  name: string; description?: string
+  templateType: string; rules: Record<string, any>
+  ivyInstruction: string; state: Record<string, any>
+  status: string; startedAt: string; completedAt?: string
+  events: { id: string; eventType: string; note?: string; createdAt: string }[]
+}
+
+export const circleGamesApi = {
+  getTemplates: async (): Promise<GameTemplate[]> => {
+    const response = await client.get<ApiResponse<GameTemplate[]>>('/api/circles/games/templates')
+    return response.data.data ?? []
+  },
+  getActiveGame: async (): Promise<{ game: CircleGame; stateSummary: string } | null> => {
+    const response = await client.get<ApiResponse<{ game: CircleGame; stateSummary: string } | null>>('/api/circles/games/active')
+    return response.data.data ?? null
+  },
+  listGames: async (circleId: string): Promise<CircleGame[]> => {
+    const response = await client.get<ApiResponse<CircleGame[]>>(`/api/circles/${circleId}/games`)
+    return response.data.data ?? []
+  },
+  createGame: async (circleId: string, data: {
+    name: string; description?: string; templateType: string
+    rules?: Record<string, any>; ivyInstruction: string; sprintId?: string
+  }): Promise<CircleGame> => {
+    const response = await client.post<ApiResponse<CircleGame>>(`/api/circles/${circleId}/games`, data)
+    return response.data.data!
+  },
+  getGame: async (gameId: string): Promise<CircleGame> => {
+    const response = await client.get<ApiResponse<CircleGame>>(`/api/circles/games/${gameId}`)
+    return response.data.data!
+  },
+  pauseGame: async (gameId: string): Promise<CircleGame> => {
+    const response = await client.patch<ApiResponse<CircleGame>>(`/api/circles/games/${gameId}/pause`)
+    return response.data.data!
+  },
+  endGame: async (gameId: string): Promise<CircleGame> => {
+    const response = await client.patch<ApiResponse<CircleGame>>(`/api/circles/games/${gameId}/end`)
+    return response.data.data!
+  },
+}
+
 // Admin API (B2B company admins)
 interface AdminStats {
   season: { name: string; startDate: string | null; endDate: string | null; daysRemaining: number | null }
@@ -417,6 +465,7 @@ export const api = {
   buddy: buddyApi,
   push: pushApi,
   circles: circlesApi,
+  circleGames: circleGamesApi,
   admin: adminApi,
 }
 
