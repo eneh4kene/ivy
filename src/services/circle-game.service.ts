@@ -1,5 +1,6 @@
 import prisma from '../utils/prisma';
 import logger from '../utils/logger';
+import { sendPushToUser, pushTemplates } from './push.service';
 
 // ─── Template definitions ─────────────────────────────────────────────────────
 // Each template describes the mechanical rules Ivy's backend enforces.
@@ -260,6 +261,12 @@ class CircleGameService {
       note = `Baton passed from ${userId} to ${nextHolder}`;
       extraEventType = 'baton_passed';
       extraPayload = { from: userId, to: nextHolder };
+
+      // Notify the new holder
+      const passer = await prisma.user.findUnique({ where: { id: userId }, select: { firstName: true } });
+      const windowHours: number = (rules.window_hours as number) ?? 24;
+      sendPushToUser(nextHolder, pushTemplates.batonPassed(passer?.firstName ?? 'Someone', windowHours))
+        .catch((err) => logger.warn('Baton push failed', err));
     } else if (userId === holderId && !isSuccess) {
       // Baton dropped — deduct a life, pass anyway
       const nextIndex = (currentIndex + 1) % turnOrder.length;

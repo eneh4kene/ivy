@@ -130,4 +130,11 @@ export const pushTemplates = {
     tag: 'impact-story',
     url: '/donations',
   }),
+
+  batonPassed: (fromName: string, windowHours: number): PushPayload => ({
+    title: "🏃 Baton's with you",
+    body: `${fromName} just passed it. Complete your workout in the next ${windowHours}h to keep the relay alive.`,
+    tag: 'baton-passed',
+    url: '/circles',
+  }),
 }
