@@ -1,6 +1,7 @@
 import { Response, NextFunction } from 'express';
 import { AuthRequest } from '../../middleware/auth';
-import circleGameService, { GAME_TEMPLATES, TemplateType } from '../../services/circle-game.service';
+import circleGameService, { GAME_TEMPLATES, TemplateType } from '../../services/circle-game.service'
+import gameSuggestionService from '../../services/game-suggestion.service';
 
 export async function listTemplates(_req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
   try {
@@ -18,7 +19,7 @@ export async function listTemplates(_req: AuthRequest, res: Response, next: Next
 export async function createGame(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
   try {
     const { circleId } = req.params;
-    const { name, description, templateType, rules, ivyInstruction, sprintId } = req.body;
+    const { name, description, templateType, rules, ivyInstruction, sprintId, suggestionId } = req.body;
 
     if (!name || !templateType || !ivyInstruction) {
       res.status(400).json({ success: false, error: 'name, templateType, and ivyInstruction are required' });
@@ -37,6 +38,10 @@ export async function createGame(req: AuthRequest, res: Response, next: NextFunc
       ivyInstruction,
       sprintId,
     });
+
+    // Track adoption of a suggestion
+    if (suggestionId) gameSuggestionService.incrementUsage(suggestionId);
+
     res.status(201).json({ success: true, data: game });
   } catch (err) { next(err) }
 }

@@ -361,6 +361,41 @@ interface CircleGame {
   events: { id: string; eventType: string; note?: string; createdAt: string }[]
 }
 
+// Game Suggestions API (public read + superadmin write)
+export interface GameSuggestion {
+  id: string; title: string; description: string; templateType: string
+  ivyInstruction: string; tracks: string[]; tags: string[]
+  published: boolean; usageCount: number; createdByEmail?: string
+  createdAt: string; updatedAt: string
+}
+
+export const gameSuggestionsApi = {
+  // Public — for circles browsing inspiration
+  listPublished: async (track?: string, tag?: string): Promise<GameSuggestion[]> => {
+    const params: Record<string, string> = {};
+    if (track) params.track = track;
+    if (tag) params.tag = tag;
+    const response = await client.get<ApiResponse<GameSuggestion[]>>('/api/circles/games/suggestions', { params });
+    return response.data.data ?? [];
+  },
+  // Superadmin CRUD
+  listAll: async (): Promise<GameSuggestion[]> => {
+    const response = await client.get<ApiResponse<GameSuggestion[]>>('/api/admin/game-suggestions');
+    return response.data.data ?? [];
+  },
+  create: async (data: Omit<GameSuggestion, 'id' | 'usageCount' | 'createdAt' | 'updatedAt'>): Promise<GameSuggestion> => {
+    const response = await client.post<ApiResponse<GameSuggestion>>('/api/admin/game-suggestions', data);
+    return response.data.data!;
+  },
+  update: async (id: string, data: Partial<GameSuggestion>): Promise<GameSuggestion> => {
+    const response = await client.patch<ApiResponse<GameSuggestion>>(`/api/admin/game-suggestions/${id}`, data);
+    return response.data.data!;
+  },
+  delete: async (id: string): Promise<void> => {
+    await client.delete(`/api/admin/game-suggestions/${id}`);
+  },
+}
+
 export const circleGamesApi = {
   getTemplates: async (): Promise<GameTemplate[]> => {
     const response = await client.get<ApiResponse<GameTemplate[]>>('/api/circles/games/templates')
@@ -376,7 +411,7 @@ export const circleGamesApi = {
   },
   createGame: async (circleId: string, data: {
     name: string; description?: string; templateType: string
-    rules?: Record<string, any>; ivyInstruction: string; sprintId?: string
+    rules?: Record<string, any>; ivyInstruction: string; sprintId?: string; suggestionId?: string
   }): Promise<CircleGame> => {
     const response = await client.post<ApiResponse<CircleGame>>(`/api/circles/${circleId}/games`, data)
     return response.data.data!
@@ -476,6 +511,7 @@ export const api = {
   push: pushApi,
   circles: circlesApi,
   circleGames: circleGamesApi,
+  gameSuggestions: gameSuggestionsApi,
   admin: adminApi,
 }
 

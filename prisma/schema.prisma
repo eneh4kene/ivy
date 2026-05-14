@@ -67,6 +67,9 @@ model User {
   // Behavioural intelligence
   inferredProfile Json?  // Synthesized pattern profile from call history — see insight.service.ts
 
+  // Role
+  role           String  @default("user") // "user" | "superadmin"
+
   // Status
   isActive       Boolean @default(true)
   isOnboarded    Boolean @default(false)
@@ -777,6 +780,35 @@ model CircleSprintSession {
   @@index([sprintId])
   @@index([circleId])
   @@map("circle_sprint_sessions")
+}
+
+// ============================================
+// GAME SUGGESTIONS (global library, curated by Ivy superadmin)
+// ============================================
+
+model GameSuggestion {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  title       String
+  description String   // one-liner shown in the card
+  templateType String  @default("custom") // relay | points_race | collective | custom
+
+  // Pre-written Ivy instruction — circles can adopt as-is or edit
+  ivyInstruction String @db.Text
+
+  // Filtering metadata
+  tracks String @default("[]") @db.Text // JSON: ["fitness","focus","sleep","balance"] — empty = all
+  tags   String @default("[]") @db.Text // JSON: ["seasonal","christmas","outdoor","social","focus","reading"]
+
+  published  Boolean @default(false)
+  usageCount Int     @default(0) // incremented each time a circle starts a game from this suggestion
+
+  createdByEmail String? // who added it (audit trail)
+
+  @@index([published])
+  @@map("game_suggestions")
 }
 
 // ============================================

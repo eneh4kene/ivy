@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/lib/store/auth.store'
+import { isSuperAdmin } from '@/lib/permissions'
 
 const navigation = [
   {
@@ -99,6 +100,27 @@ export function AdminSidebar() {
             </Link>
           )
         })}
+
+        {/* Superadmin-only section */}
+        {isSuperAdmin(user) && (
+          <div className="pt-3 mt-3 border-t border-indigo-700/60 space-y-1">
+            <p className="px-4 text-[10px] font-medium text-indigo-300 uppercase tracking-wider mb-1">Ivy Global</p>
+            <Link
+              href="/admin/suggestions"
+              className={cn(
+                'flex items-center gap-3 px-4 py-3 rounded-lg transition-colors',
+                pathname.startsWith('/admin/suggestions')
+                  ? 'bg-white/20 text-white'
+                  : 'text-indigo-100 hover:bg-white/10 hover:text-white'
+              )}
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+              </svg>
+              <span className="font-medium">Game Suggestions</span>
+            </Link>
+          </div>
+        )}
 
         <div className="pt-4 border-t border-indigo-700 mt-4">
           <Link

@@ -13,6 +13,7 @@ export interface AuthRequest<
   user?: {
     id: string;
     email: string;
+    role: string;
     subscriptionTier: string;
     subscriptionStatus: string;
     stripeSubscriptionId: string | null;
@@ -46,6 +47,7 @@ export const authenticate = async (
       select: {
         id: true,
         email: true,
+        role: true,
         subscriptionTier: true,
         subscriptionStatus: true,
         stripeSubscriptionId: true,
@@ -62,6 +64,7 @@ export const authenticate = async (
     req.user = {
       id: user.id,
       email: user.email,
+      role: user.role,
       subscriptionTier: user.subscriptionTier,
       subscriptionStatus: user.subscriptionStatus,
       stripeSubscriptionId: user.stripeSubscriptionId,
@@ -76,6 +79,14 @@ export const authenticate = async (
       next(error);
     }
   }
+};
+
+export const requireSuperAdmin = (req: AuthRequest, _res: Response, next: NextFunction): void => {
+  if (!req.user || req.user.role !== 'superadmin') {
+    next(new UnauthorizedError('Superadmin access required'));
+    return;
+  }
+  next();
 };
 
 export const requireTier = (...tiers: string[]) => {

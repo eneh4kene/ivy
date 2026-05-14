@@ -5,6 +5,7 @@ import { AuthRequest } from '../../middleware/auth'
 import {
   listTemplates, createGame, listGames, getGame, getActiveGame, pauseGame, endGame
 } from '../controllers/circle-game.controller'
+import gameSuggestionService from '../../services/game-suggestion.service'
 
 const router = Router()
 router.use(authenticate)
@@ -99,6 +100,15 @@ router.get('/:id/consistency', async (req: Request, res: Response, next: NextFun
 })
 
 // ── Circle Games ──────────────────────────────────────────────────────────────
+
+// GET /api/circles/games/suggestions?track=fitness&tag=seasonal
+router.get('/games/suggestions', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { track, tag } = req.query as { track?: string; tag?: string };
+    const suggestions = await gameSuggestionService.listPublished(track, tag);
+    res.json({ success: true, data: suggestions });
+  } catch (err) { next(err); }
+})
 
 // GET /api/circles/games/templates
 router.get('/games/templates', listTemplates)

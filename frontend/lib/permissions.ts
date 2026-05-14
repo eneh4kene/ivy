@@ -85,6 +85,11 @@ export function isAdmin(user: User | null): boolean {
   return role === 'admin' || role === 'superadmin'
 }
 
+export function isSuperAdmin(user: User | null): boolean {
+  if (!user) return false
+  return user.role === 'superadmin'
+}
+
 /**
  * Check if user is company admin (has companyId and admin role)
  */

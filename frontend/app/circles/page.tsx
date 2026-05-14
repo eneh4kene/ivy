@@ -2,7 +2,8 @@
 
 import { useState, useEffect } from 'react'
 import { circlesApi, circleGamesApi } from '@/lib/api'
-import { Trophy, Zap, Users, Plus, ChevronRight, Pause, CheckCircle2, Loader2 } from 'lucide-react'
+import { Trophy, Zap, Users, Plus, ChevronRight, Pause, CheckCircle2, Loader2, Sparkles } from 'lucide-react'
+import { gameSuggestionsApi, type GameSuggestion } from '@/lib/api'
 import Link from 'next/link'
 
 interface Circle { id: string; name: string; track: string; size: number; maxSize: number }
@@ -197,6 +198,7 @@ export default function CirclesPage() {
       {showCreate && selectedCircleId && (
         <CreateGameModal
           circleId={selectedCircleId}
+          circleTrack={selectedCircle?.track}
           onClose={() => setShowCreate(false)}
           onCreated={(game) => {
             setGames((prev) => [game, ...prev])
@@ -215,14 +217,17 @@ interface Template {
   defaultRules: Record<string, any>; defaultInstruction: string
 }
 
-function CreateGameModal({ circleId, onClose, onCreated }: {
+function CreateGameModal({ circleId, circleTrack, onClose, onCreated }: {
   circleId: string
+  circleTrack?: string
   onClose: () => void
   onCreated: (game: Game) => void
 }) {
   const [templates, setTemplates] = useState<Template[]>([])
-  const [step, setStep] = useState<'template' | 'details'>('template')
+  const [suggestions, setSuggestions] = useState<GameSuggestion[]>([])
+  const [step, setStep] = useState<'pick' | 'details'>('pick')
   const [selectedTemplate, setSelectedTemplate] = useState<Template | null>(null)
+  const [selectedSuggestionId, setSelectedSuggestionId] = useState<string | undefined>()
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
   const [ivyInstruction, setIvyInstruction] = useState('')
@@ -230,12 +235,29 @@ function CreateGameModal({ circleId, onClose, onCreated }: {
   const [error, setError] = useState('')
 
   useEffect(() => {
-    circleGamesApi.getTemplates().then(setTemplates as any).catch(console.error)
-  }, [])
+    Promise.all([
+      circleGamesApi.getTemplates(),
+      gameSuggestionsApi.listPublished(circleTrack),
+    ]).then(([t, s]) => {
+      setTemplates(t as unknown as Template[])
+      setSuggestions(s)
+    }).catch(console.error)
+  }, [circleTrack])
+
+  const pickSuggestion = (s: GameSuggestion) => {
+    setSelectedSuggestionId(s.id)
+    setSelectedTemplate(null)
+    setName(s.title)
+    setDescription(s.description)
+    setIvyInstruction(s.ivyInstruction)
+    setStep('details')
+  }
 
   const pickTemplate = (t: Template) => {
+    setSelectedSuggestionId(undefined)
     setSelectedTemplate(t)
     setName(t.name)
+    setDescription('')
     setIvyInstruction(t.defaultInstruction)
     setStep('details')
   }
@@ -253,6 +275,7 @@ function CreateGameModal({ circleId, onClose, onCreated }: {
         description: description.trim() || undefined,
         templateType: selectedTemplate?.type ?? 'custom',
         ivyInstruction: ivyInstruction.trim(),
+        suggestionId: selectedSuggestionId,
       })
       onCreated(game as unknown as Game)
     } catch (e: any) {
@@ -270,39 +293,63 @@ function CreateGameModal({ circleId, onClose, onCreated }: {
       >
         <div className="flex items-center justify-between mb-5">
           <h2 className="text-base font-semibold">
-            {step === 'template' ? 'Pick a game type' : 'Set up the game'}
+            {step === 'pick' ? 'Start a game' : 'Set up the game'}
           </h2>
           <button onClick={onClose} className="text-muted-foreground hover:text-foreground text-xl leading-none">×</button>
         </div>
 
-        {step === 'template' && (
-          <div className="space-y-2.5">
-            {templates.length === 0 && (
-              <div className="h-24 rounded-xl bg-muted/30 animate-pulse" />
-            )}
-            {templates.map((t) => (
-              <button
-                key={t.type}
-                onClick={() => pickTemplate(t)}
-                className="w-full text-left flex items-start gap-3 p-4 rounded-xl border border-border hover:border-primary/40 hover:bg-primary/5 transition-colors"
-              >
-                <span className="text-2xl leading-none mt-0.5">{TEMPLATE_ICONS[t.type] ?? '🎮'}</span>
-                <div>
-                  <p className="text-sm font-medium">{t.name}</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">{t.description}</p>
+        {step === 'pick' && (
+          <div className="space-y-5">
+            {/* Suggestions from Ivy */}
+            {suggestions.length > 0 && (
+              <div>
+                <div className="flex items-center gap-2 mb-2.5">
+                  <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                  <p className="text-xs font-medium text-amber-400 uppercase tracking-wider">Suggested by Ivy</p>
                 </div>
-              </button>
-            ))}
+                <div className="space-y-2">
+                  {suggestions.map((s) => (
+                    <button key={s.id} onClick={() => pickSuggestion(s)}
+                      className="w-full text-left flex items-start gap-3 p-3.5 rounded-xl border border-amber-500/20 bg-amber-500/5 hover:border-amber-500/40 hover:bg-amber-500/8 transition-colors">
+                      <span className="text-xl leading-none mt-0.5">{TEMPLATE_ICONS[s.templateType] ?? '✨'}</span>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium">{s.title}</p>
+                        <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{s.description}</p>
+                        {s.usageCount > 0 && (
+                          <p className="text-[10px] text-amber-400/70 mt-1">Used by {s.usageCount} circle{s.usageCount === 1 ? '' : 's'}</p>
+                        )}
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Blank templates */}
+            <div>
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2.5">Start from scratch</p>
+              <div className="space-y-2">
+                {templates.length === 0 && <div className="h-16 rounded-xl bg-muted/30 animate-pulse" />}
+                {templates.map((t) => (
+                  <button key={t.type} onClick={() => pickTemplate(t)}
+                    className="w-full text-left flex items-start gap-3 p-3.5 rounded-xl border border-border hover:border-primary/40 hover:bg-primary/5 transition-colors">
+                    <span className="text-xl leading-none mt-0.5">{TEMPLATE_ICONS[t.type] ?? '🎮'}</span>
+                    <div>
+                      <p className="text-sm font-medium">{t.name}</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">{t.description}</p>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
         )}
 
-        {step === 'details' && selectedTemplate && (
+        {step === 'details' && (
           <div className="space-y-4">
-            <button
-              onClick={() => setStep('template')}
-              className="text-xs text-muted-foreground hover:text-foreground"
-            >
-              ← Change type
+            <button onClick={() => setStep('pick')}
+              className="text-xs text-muted-foreground hover:text-foreground">
+              ← Back
             </button>
 
             <div>
