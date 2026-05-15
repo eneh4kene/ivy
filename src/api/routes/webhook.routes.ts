@@ -32,6 +32,16 @@ router.post('/whatsapp', webhookController.handleWhatsAppWebhook);
 router.post('/stripe', webhookController.handleStripeWebhook);
 
 /**
+ * @route   POST /webhooks/twilio-sms
+ * @desc    Twilio Messaging webhook — handles inbound SMS replies on the Twilio number
+ * @access  Public
+ *
+ * Configure in Twilio: Phone Numbers → your number → Messaging → Webhook → this URL (POST)
+ * This handles replies when WhatsApp isn't configured and messages go out as SMS.
+ */
+router.post('/twilio-sms', webhookController.handleTwilioSms);
+
+/**
  * @route   POST /webhooks/twilio-inbound
  * @desc    Twilio Voice webhook — forwards the inbound call to Retell via SIP
  * @access  Public

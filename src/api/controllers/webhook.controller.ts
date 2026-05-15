@@ -275,6 +275,39 @@ class WebhookController {
   }
 
   /**
+   * Handle inbound SMS replies on the Twilio number.
+   * POST /webhooks/twilio-sms
+   *
+   * Twilio Messaging webhook — fires when someone texts your Twilio number.
+   * Configure in Twilio: Phone Numbers → your number → Messaging → Webhook → this URL (POST).
+   *
+   * Twilio sends: Body (message text), From (E.164 sender phone), To (your Twilio number).
+   * We look up the user by From, feed the text into processIncomingMessage, and return
+   * an empty TwiML response (no auto-reply — Ivy sends any reply via the queue).
+   */
+  async handleTwilioSms(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const body: string = req.body.Body ?? '';
+      const from: string = req.body.From ?? '';
+
+      if (!from || !body.trim()) {
+        res.type('application/xml').send('<?xml version="1.0" encoding="UTF-8"?><Response/>');
+        return;
+      }
+
+      // Non-blocking — don't hold Twilio's webhook waiting for the full processing chain
+      messagingService.handleIncomingMessage(from, body.trim(), 'SMS').catch((err) =>
+        logger.error('SMS inbound processing failed', err)
+      );
+
+      // Twilio expects a valid TwiML response — empty means no auto-reply
+      res.type('application/xml').send('<?xml version="1.0" encoding="UTF-8"?><Response/>');
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  /**
    * Handle inbound calls on the Twilio phone number.
    * POST /webhooks/twilio-inbound
    *

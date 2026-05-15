@@ -130,31 +130,25 @@ class MessagingService {
   /**
    * Process incoming WhatsApp message
    */
-  async handleIncomingMessage(phone: string, content: string) {
-    // Find user by phone
-    const user = await prisma.user.findUnique({
-      where: { phone },
-    });
+  async handleIncomingMessage(phone: string, content: string, channel: MessageChannel = 'WHATSAPP') {
+    const user = await prisma.user.findUnique({ where: { phone } });
 
     if (!user) {
       logger.warn(`Received message from unknown number: ${phone}`);
       return null;
     }
 
-    // Create message record
     const message = await prisma.message.create({
       data: {
         userId: user.id,
-        channel: 'WHATSAPP',
+        channel,
         direction: 'INBOUND',
         content,
         status: 'DELIVERED',
       },
     });
 
-    // Process message for quick replies or triggers
     await this.processIncomingMessage(user.id, content, message.id);
-
     return message;
   }
 
