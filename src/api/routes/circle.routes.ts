@@ -2,10 +2,13 @@ import { Router, Request, Response, NextFunction } from 'express'
 import { authenticate } from '../../middleware/auth'
 import circleService from '../../services/circle.service'
 import { AuthRequest } from '../../middleware/auth'
+import prisma from '../../utils/prisma'
+import logger from '../../utils/logger'
 import {
   listTemplates, createGame, listGames, getGame, getActiveGame, pauseGame, endGame
 } from '../controllers/circle-game.controller'
 import gameSuggestionService from '../../services/game-suggestion.service'
+import circleCatchupService from '../../services/circle-catchup.service'
 
 const router = Router()
 router.use(authenticate)
@@ -96,6 +99,46 @@ router.get('/:id/consistency', async (req: Request, res: Response, next: NextFun
   try {
     const stats = await circleService.getGroupConsistency(req.params.id)
     res.json({ success: true, data: stats })
+  } catch (err) { next(err) }
+})
+
+// ── Sprint Sessions ───────────────────────────────────────────────────────────
+
+// PATCH /api/circles/sessions/:id/complete — mark session done, trigger catch-ups
+router.patch('/sessions/:id/complete', async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const { collectivePledge, highlights, participantUserIds } = req.body
+    if (!collectivePledge) {
+      res.status(400).json({ success: false, error: 'collectivePledge is required' }); return
+    }
+
+    const session = await prisma.circleSprintSession.update({
+      where: { id: req.params.id },
+      data: {
+        status: 'completed',
+        conductedAt: new Date(),
+        collectivePledge,
+        highlights: highlights ?? null,
+        participantUserIds: JSON.stringify(participantUserIds ?? []),
+      },
+    })
+
+    // Non-blocking — write catch-up records for absent members
+    circleCatchupService.createCatchupsForAbsentees(session.id)
+      .catch((err) => logger.warn('Catch-up creation failed', err))
+
+    res.json({ success: true, data: session })
+  } catch (err) { next(err) }
+})
+
+// GET /api/circles/:circleId/sessions — list sessions for a circle
+router.get('/:circleId/sessions', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const sessions = await prisma.circleSprintSession.findMany({
+      where: { circleId: req.params.circleId },
+      orderBy: { scheduledAt: 'desc' },
+    })
+    res.json({ success: true, data: sessions })
   } catch (err) { next(err) }
 })
 

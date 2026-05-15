@@ -36,6 +36,7 @@ WHAT TO INCLUDE:
 - If contact_preference is "texts" but the call IS high-stakes: note "she/he usually prefers texts — if they answer, acknowledge it once: 'I know you usually prefer texts — I wanted to catch you for this one.'"
 - If contact_pattern_note is set: include a one-line directive reflecting it
 - How to close
+- If missed_sprint_session is true: this person missed their circle's sprint session. Open naturally — don't lead with guilt. Briefly acknowledge it ("you missed the session"), share what the group pledged (catchup_group_pledge), surface any highlights (catchup_highlights) in one line, then get their own sprint commitment. Close them aligned with the group. This takes priority over standard daily planning for this call.
 - If circle_game_name is set: include a brief directive about the game. Quote circle_game_state_summary as the current state. If circle_game_ivy_instruction is provided, let that guide the game interaction — do not invent mechanics not described there. Keep game mentions brief (1-2 sentences max) — it should feel like a natural aside, not a separate agenda item.
 
 WHAT TO AVOID:
@@ -120,6 +121,12 @@ class BriefService {
       circle_game_name: ctx.circle_game_name,
       circle_game_state_summary: ctx.circle_game_state_summary,
       circle_game_ivy_instruction: ctx.circle_game_ivy_instruction,
+
+      // Circle catch-up (if user missed last sprint session)
+      missed_sprint_session: ctx.missed_sprint_session,
+      catchup_sprint_number: ctx.catchup_sprint_number,
+      catchup_group_pledge: ctx.catchup_group_pledge,
+      catchup_highlights: ctx.catchup_highlights,
 
       // Track schema
       track_config: {

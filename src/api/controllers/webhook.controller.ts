@@ -11,6 +11,7 @@ import insightService from '../../services/insight.service';
 import { logUsage } from '../../services/usage.service';
 import { serverAnalytics } from '../../lib/analytics';
 import { handleMissedCall as handleMissedCallComms, handleDroppedCall } from '../../services/communication.service';
+import circleCatchupService from '../../services/circle-catchup.service';
 import { flattenContext } from '../../utils/retell';
 import { sendSuccess } from '../../utils/response';
 import logger from '../../utils/logger';
@@ -116,6 +117,12 @@ class WebhookController {
               dbCallType,
               dbUserId,
             ).catch((err) => logger.error('Insight extraction error:', err));
+          }
+
+          // Clear any pending circle catch-up — Ivy covered it in this call
+          if (dbUserId) {
+            circleCatchupService.markCovered(dbUserId)
+              .catch((err) => logger.warn('Catch-up clear failed', err));
           }
           break;
         }

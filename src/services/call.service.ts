@@ -7,6 +7,7 @@ import { fromZonedTime } from 'date-fns-tz';
 import seasonService from './season.service';
 import circleService from './circle.service';
 import circleGameService from './circle-game.service';
+import circleCatchupService from './circle-catchup.service';
 
 export type CallType = 'MORNING_PLANNING' | 'EVENING_REVIEW' | 'RESCUE' | 'WEEKLY_PLANNING' | 'MONTHLY_CHECKIN' | 'ONBOARDING' | 'SEASON_CLOSE';
 
@@ -394,6 +395,14 @@ class CallService {
         circle_game_state_summary: null,
         circle_game_ivy_instruction: null,
       }),
+
+      // Circle catch-up (set when user missed their last sprint session)
+      ...await (async () => {
+        const catchup = await circleCatchupService.getPendingCatchup(userId).catch(() => null);
+        return catchup
+          ? { missed_sprint_session: true, catchup_sprint_number: catchup.sprintNumber, catchup_group_pledge: catchup.collectivePledge, catchup_highlights: catchup.highlights }
+          : { missed_sprint_session: false, catchup_sprint_number: null, catchup_group_pledge: null, catchup_highlights: null };
+      })(),
 
       // B2B
       company_wellness_theme: circleContext?.companyWellnessTheme ?? null,

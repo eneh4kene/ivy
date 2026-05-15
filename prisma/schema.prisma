@@ -96,6 +96,7 @@ model User {
   charities           UserCharity[]
   callMemories        CallMemory[]
   circleGameEvents    CircleGameEvent[]
+  circleCatchups      CircleCatchup[]
 
   @@index([email])
   @@index([companyId])
@@ -777,9 +778,39 @@ model CircleSprintSession {
   collectivePledge String? // what the group committed to next sprint
   highlights       String? @db.Text // JSON — key moments Ivy surfaces in individual calls
 
+  catchups CircleCatchup[]
+
   @@index([sprintId])
   @@index([circleId])
   @@map("circle_sprint_sessions")
+}
+
+// ============================================
+// CIRCLE CATCH-UP (for members who miss a sprint session)
+// ============================================
+
+model CircleCatchup {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
+
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  sessionId String
+  session   CircleSprintSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  // What Ivy needs to cover in the catch-up call
+  sprintNumber    Int
+  collectivePledge String   @db.Text
+  highlights      String?  @db.Text // key moments from the session
+
+  // Cleared once Ivy covers it in a call, or after 48h (stale)
+  coveredAt  DateTime?
+  expiresAt  DateTime  // createdAt + 48h
+
+  @@unique([userId, sessionId])
+  @@index([userId, coveredAt])
+  @@map("circle_catchups")
 }
 
 // ============================================
