@@ -22,12 +22,26 @@ interface SMSJobData {
   content: string;
 }
 
+async function fallbackToSms(job: Job<WhatsAppJobData>, reason: string) {
+  logger.warn(`WhatsApp ${reason} for message ${job.data.messageId} — falling back to SMS`);
+  await prisma.message.update({
+    where: { id: job.data.messageId },
+    data: { channel: 'SMS' },
+  });
+  await messageQueue.add('send-sms', {
+    messageId: job.data.messageId,
+    userId: job.data.userId,
+    phone: job.data.phone,
+    content: job.data.content,
+  });
+}
+
 messageQueue.process('send-whatsapp', async (job: Job<WhatsAppJobData>) => {
   const { messageId, phone, content } = job.data;
 
   if (!config.whatsapp.accessToken || !config.whatsapp.phoneNumberId) {
-    logger.warn(`WhatsApp not configured — message ${messageId} not sent`);
-    return { skipped: true };
+    await fallbackToSms(job, 'not configured');
+    return { fallback: 'sms' };
   }
 
   try {
@@ -38,7 +52,6 @@ messageQueue.process('send-whatsapp', async (job: Job<WhatsAppJobData>) => {
     );
 
     const waId = response.data.messages?.[0]?.id;
-    // Status moves from SENT → DELIVERED via the WhatsApp delivery webhook
     await prisma.message.update({
       where: { id: messageId },
       data: { status: 'SENT', whatsappId: waId },
@@ -49,8 +62,9 @@ messageQueue.process('send-whatsapp', async (job: Job<WhatsAppJobData>) => {
     return { success: true, waId };
   } catch (err: any) {
     logger.error(`WhatsApp failed for ${phone}:`, err?.response?.data ?? err);
-    await prisma.message.update({ where: { id: messageId }, data: { status: 'FAILED' } });
-    throw err;
+    // Fall back to SMS on delivery failure rather than leaving the user in silence
+    await fallbackToSms(job, 'delivery failed');
+    return { fallback: 'sms' };
   }
 });
 

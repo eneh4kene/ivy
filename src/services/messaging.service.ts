@@ -2,11 +2,23 @@ import prisma from '../utils/prisma';
 import { messageQueue } from '../config/queues';
 import logger from '../utils/logger';
 import { NotFoundError } from '../utils/errors';
+import { config } from '../config';
 
 export type MessageChannel = 'SMS' | 'WHATSAPP' | 'EMAIL';
 export type MessageType = 'reminder' | 'nudge' | 'rescue_response' | 'celebration' | 'quick_reply';
 
 class MessagingService {
+  /**
+   * Send a message via WhatsApp — auto-falls back to SMS if WhatsApp not configured
+   * or if the processor encounters a delivery failure. Use this for all user-facing messages.
+   */
+  async sendMessage(userId: string, content: string, messageType: MessageType = 'nudge') {
+    const whatsappReady = !!(config.whatsapp.accessToken && config.whatsapp.phoneNumberId);
+    return whatsappReady
+      ? this.sendWhatsAppMessage(userId, content, messageType)
+      : this.sendSMSMessage(userId, content, messageType);
+  }
+
   /**
    * Send a WhatsApp message
    */
@@ -95,41 +107,24 @@ class MessagingService {
    */
   async sendWorkoutReminder(userId: string, workoutDetails: string) {
     const content = `Hey! Just a reminder about your workout today: ${workoutDetails}. You've got this! 💪`;
-
-    return this.sendWhatsAppMessage(userId, content, 'reminder');
+    return this.sendMessage(userId, content, 'reminder');
   }
 
-  /**
-   * Send motivational nudge
-   */
   async sendMotivationalNudge(userId: string, currentStreak: number) {
     const nudges = [
       `You're on a ${currentStreak}-day streak! Keep the momentum going 🔥`,
       `${currentStreak} days strong! That's commitment 💪`,
       `Your ${currentStreak}-day streak is inspiring. Let's make it ${currentStreak + 1}!`,
     ];
-
-    const content = nudges[Math.floor(Math.random() * nudges.length)];
-
-    return this.sendWhatsAppMessage(userId, content, 'nudge');
+    return this.sendMessage(userId, nudges[Math.floor(Math.random() * nudges.length)], 'nudge');
   }
 
-  /**
-   * Send celebration message
-   */
   async sendCelebration(userId: string, achievement: string) {
-    const content = `🎉 Amazing! ${achievement}. You're making real progress!`;
-
-    return this.sendWhatsAppMessage(userId, content, 'celebration');
+    return this.sendMessage(userId, `🎉 Amazing! ${achievement}. You're making real progress!`, 'celebration');
   }
 
-  /**
-   * Send rescue support message
-   */
   async sendRescueSupport(userId: string, minimumAction: string) {
-    const content = `I hear you. Days like this happen. How about just ${minimumAction}? Even that counts. What do you think?`;
-
-    return this.sendWhatsAppMessage(userId, content, 'rescue_response');
+    return this.sendMessage(userId, `I hear you. Days like this happen. How about just ${minimumAction}? Even that counts. What do you think?`, 'rescue_response');
   }
 
   /**

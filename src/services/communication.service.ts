@@ -150,7 +150,7 @@ export async function handleDroppedCall(userId: string, callType: string): Promi
 
   const message = messages[callType] ?? `Hey${name}, looks like we got cut off. Talk to me here.`
 
-  await messagingService.sendWhatsAppMessage(userId, message, 'nudge')
+  await messagingService.sendMessage(userId, message, 'nudge')
   logger.info(`Dropped call follow-up sent to ${userId} (${callType})`)
 }
 
@@ -168,12 +168,12 @@ export async function handleMissedCall(userId: string): Promise<void> {
     ``,
     `Reply:`,
     `• CALL — try me again in 15 mins`,
-    `• TEXT — let’s keep it here today`,
+    `• TEXT — let's keep it here today`,
     ``,
     `Or just tell me how today went 💬`,
   ].join('\n')
 
-  await messagingService.sendWhatsAppMessage(userId, message, 'nudge')
+  await messagingService.sendMessage(userId, message, 'nudge')
   logger.info(`Missed call fallback text sent to ${userId}`)
 }
 
@@ -268,7 +268,7 @@ async function sendTextCheckin(
     message += `\n\nMind if I call instead? This feels like a moment that deserves more than a text. Reply "call me" and I'll ring you now.`
   }
 
-  await messagingService.sendWhatsAppMessage(userId, message, 'nudge')
+  await messagingService.sendMessage(userId, message, 'nudge')
 }
 
 async function sendTextualNudge(userId: string, situation: string): Promise<void> {
