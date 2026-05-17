@@ -345,6 +345,32 @@ export const circlesApi = {
     const response = await client.get<ApiResponse<ConsistencyResult>>(`/api/circles/${circleId}/consistency`)
     return response.data.data!
   },
+  getSessions: async (circleId: string): Promise<CircleSession[]> => {
+    const response = await client.get<ApiResponse<CircleSession[]>>(`/api/circles/${circleId}/sessions`)
+    return response.data.data ?? []
+  },
+  completeSession: async (sessionId: string, data: {
+    collectivePledge: string
+    highlights?: string
+    participantUserIds: string[]
+  }): Promise<CircleSession> => {
+    const response = await client.patch<ApiResponse<CircleSession>>(`/api/circles/sessions/${sessionId}/complete`, data)
+    return response.data.data!
+  },
+}
+
+interface CircleSession {
+  id: string
+  circleId: string
+  sprintNumber: number | null
+  sprintId: string | null
+  scheduledAt: string
+  conductedAt: string | null
+  status: string
+  facilitatorType: string
+  collectivePledge: string | null
+  highlights: string | null
+  participantUserIds: string
 }
 
 // Circle Games API
