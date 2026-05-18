@@ -185,7 +185,7 @@ model Charity {
   impactPerPound    String   // e.g., "2 meals per £1"
   logoUrl           String?
   website           String?
-  everyOrgSlug      String?  // Every.org nonprofit slug for payment dispatch
+  everyOrgSlug      String?  @unique // Every.org nonprofit slug for payment dispatch
 
   // Filtering
   regions  String @default("[\"global\"]") @db.Text // JSON: ["GB","US","global"]

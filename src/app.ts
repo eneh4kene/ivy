@@ -28,7 +28,24 @@ const app: Application = express();
 // Security middleware
 app.use(helmet());
 app.use(cors({
-  origin: process.env.FRONTEND_URL || '*',
+  origin: (origin, callback) => {
+    const allowed = process.env.FRONTEND_URL;
+    // In production, require an explicit FRONTEND_URL — never open to all origins
+    if (process.env.NODE_ENV === 'production') {
+      if (!allowed) {
+        callback(new Error('FRONTEND_URL must be set in production'));
+        return;
+      }
+      if (!origin || origin === allowed) {
+        callback(null, true);
+      } else {
+        callback(new Error(`CORS: origin ${origin} not allowed`));
+      }
+    } else {
+      // Development: allow all origins for local testing
+      callback(null, true);
+    }
+  },
   credentials: true,
 }));
 
