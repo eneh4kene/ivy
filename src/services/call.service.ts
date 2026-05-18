@@ -101,6 +101,7 @@ class CallService {
         timezone: true,
         preferredDays: true,
         callFrequency: true,
+        coachId: true, // coach clients get one call/day (morning only) to halve voice COGS
       },
     });
 
@@ -155,7 +156,8 @@ class CallService {
       }
     }
 
-    if (user.eveningCallTime) {
+    // Coach clients get morning only — halves voice COGS while still delivering daily accountability
+    if (!user.coachId && user.eveningCallTime) {
       const eveningUTC = toUTC(user.eveningCallTime);
       if (isBefore(now, eveningUTC)) {
         const eveningCall = await this.scheduleCall(userId, 'EVENING_REVIEW', eveningUTC, await this.getUserContext(userId));
