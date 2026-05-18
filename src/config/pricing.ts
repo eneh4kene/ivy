@@ -17,6 +17,18 @@ export const B2B_PRICES: Record<string, Record<Currency, number>> = {
   CHAMPION: { GBP: 65, USD: 79 },
 }
 
+// Coach tier: per-seat pricing based on client count
+// STRIPE_PRICE_COACH_5_GBP, STRIPE_PRICE_COACH_10_GBP, STRIPE_PRICE_COACH_20_GBP
+export const COACH_PRICES: Record<string, Record<Currency, number>> = {
+  COACH_5:  { GBP: 35,  USD: 45  }, // up to 5 clients
+  COACH_10: { GBP: 60,  USD: 75  }, // up to 10 clients
+  COACH_20: { GBP: 100, USD: 125 }, // up to 20 clients
+}
+
+export const COACH_CLIENT_LIMITS: Record<string, number> = {
+  COACH_5: 5, COACH_10: 10, COACH_20: 20,
+}
+
 export const IMPACT_WALLET_MONTHLY: Record<string, Record<Currency, number>> = {
   PRO:       { GBP: 30, USD: 37 },
   ELITE:     { GBP: 45, USD: 55 },
@@ -34,6 +46,7 @@ const TIER_ENV_NAME: Record<string, string> = {
   ELITE:     'IVY_PLUS',
   CONCIERGE: 'IVY_CONCIERGE',
   B2B:       'B2B',
+  COACH:     'COACH',
 }
 
 export function getStripePriceId(tier: string, currency: Currency): string | undefined {

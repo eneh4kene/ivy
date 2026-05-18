@@ -16,7 +16,7 @@ import {
 const paidTiers: SubscriptionTier[] = ['PRO', 'ELITE', 'CONCIERGE']
 
 function getTierLevel(tier: SubscriptionTier): number {
-  return { FREE: 0, PRO: 1, ELITE: 2, CONCIERGE: 3, B2B: 2 }[tier]
+  return ({ FREE: 0, PRO: 1, ELITE: 2, CONCIERGE: 3, B2B: 2, COACH: 2 } as Record<SubscriptionTier, number>)[tier]
 }
 
 const tierConfig: Record<string, {

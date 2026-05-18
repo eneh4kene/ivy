@@ -10,6 +10,7 @@ import buddyService from './services/buddy.service';
 import { dispatchPendingDonations } from './services/every-org.service';
 import callService from './services/call.service';
 import seasonService from './services/season.service';
+import coachService from './services/coach.service';
 import './workers/call.processor';    // start call Bull worker
 import './workers/message.processor'; // start message Bull worker
 
@@ -26,6 +27,12 @@ const server = app.listen(PORT, () => {
 cron.schedule('0 9 * * 0', async () => {
   logger.info('Running weekly buddy digest...');
   await buddyService.sendWeeklyDigests();
+});
+
+// Every Monday at 8am UTC — weekly coach client digest
+cron.schedule('0 8 * * 1', async () => {
+  logger.info('Running weekly coach digest...');
+  await coachService.sendWeeklyDigestToAllCoaches();
 });
 
 // 1st of every month at 2am UTC — dispatch accumulated wallet donations to charities

@@ -1,5 +1,5 @@
 // User types
-export type SubscriptionTier = 'FREE' | 'PRO' | 'ELITE' | 'CONCIERGE' | 'B2B'
+export type SubscriptionTier = 'FREE' | 'PRO' | 'ELITE' | 'CONCIERGE' | 'B2B' | 'COACH'
 export type CommStyle = 'CALLS' | 'TEXTS' | 'ADAPTIVE'
 
 export interface User {

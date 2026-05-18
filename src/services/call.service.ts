@@ -8,6 +8,7 @@ import seasonService from './season.service';
 import circleService from './circle.service';
 import circleGameService from './circle-game.service';
 import circleCatchupService from './circle-catchup.service';
+import coachService from './coach.service';
 
 export type CallType = 'MORNING_PLANNING' | 'EVENING_REVIEW' | 'RESCUE' | 'WEEKLY_PLANNING' | 'MONTHLY_CHECKIN' | 'ONBOARDING' | 'SEASON_CLOSE';
 
@@ -396,6 +397,11 @@ class CallService {
         circle_game_ivy_instruction: null,
       }),
 
+      // Coach context (set when user has a PT/coach)
+      ...await coachService.getCoachContextForClient(userId).catch(() => ({
+        coach_name: null, coach_programme: null, coach_notes: null, coach_style: null, brand_name: null,
+      })),
+
       // Circle catch-up (set when user missed their last sprint session)
       ...await (async () => {
         const catchup = await circleCatchupService.getPendingCatchup(userId).catch(() => null);
@@ -480,6 +486,9 @@ class CallService {
       where: { id: callId },
       data: { callSummary: `No answer at ${missedAt} — retry scheduled.` },
     });
+
+    // Alert coach if client is consistently missing (non-blocking)
+    coachService.checkAndAlertCoach(call.userId).catch(() => {});
 
     // Schedule retry in 15 minutes
     const retryTime = addMinutes(new Date(), 15);

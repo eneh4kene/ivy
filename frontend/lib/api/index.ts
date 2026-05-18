@@ -510,6 +510,51 @@ export const adminApi = {
   },
 }
 
+// Coach API
+export interface CoachProfile {
+  id: string; userId: string
+  programmeName: string; coachingStyle?: string; programmeNotes?: string
+  whitelabelEnabled: boolean; brandName?: string; brandLogoUrl?: string
+  alertOnMissedCalls: number; weeklyDigestEnabled: boolean
+}
+export interface CoachClient {
+  id: string; firstName: string; lastName: string; email: string
+  track: string; goal: string; coachNotes?: string
+  isOnboarded: boolean; lastCallAt?: string
+  currentStreak: number; lastCallSentiment?: string
+  recentMissedCount: number; needsAttention: boolean
+  calls: { callType: string; status: string; sentiment?: string; scheduledAt: string; callSummary?: string }[]
+}
+
+export const coachApi = {
+  getProfile: async (): Promise<CoachProfile | null> => {
+    const response = await client.get<ApiResponse<CoachProfile | null>>('/api/coach/profile')
+    return response.data.data ?? null
+  },
+  updateProfile: async (data: Partial<CoachProfile>): Promise<CoachProfile> => {
+    const response = await client.patch<ApiResponse<CoachProfile>>('/api/coach/profile', data)
+    return response.data.data!
+  },
+  getClients: async (): Promise<CoachClient[]> => {
+    const response = await client.get<ApiResponse<CoachClient[]>>('/api/coach/clients')
+    return response.data.data ?? []
+  },
+  getClient: async (id: string): Promise<any> => {
+    const response = await client.get<ApiResponse<any>>(`/api/coach/clients/${id}`)
+    return response.data.data!
+  },
+  updateClientNotes: async (id: string, coachNotes: string): Promise<void> => {
+    await client.patch(`/api/coach/clients/${id}/notes`, { coachNotes })
+  },
+  inviteClient: async (email: string): Promise<{ status: string; email: string }> => {
+    const response = await client.post<ApiResponse<{ status: string; email: string }>>('/api/coach/clients/invite', { email })
+    return response.data.data!
+  },
+  removeClient: async (id: string): Promise<void> => {
+    await client.delete(`/api/coach/clients/${id}`)
+  },
+}
+
 // Push notifications API
 export const pushApi = {
   subscribe: async (subscription: any) => {
@@ -539,6 +584,7 @@ export const api = {
   circleGames: circleGamesApi,
   gameSuggestions: gameSuggestionsApi,
   admin: adminApi,
+  coach: coachApi,
 }
 
 export default api

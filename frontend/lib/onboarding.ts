@@ -329,6 +329,21 @@ export const ONBOARDING_FLOWS: Record<SubscriptionTier, OnboardingFlow> = {
     steps: B2B_STEPS,
     totalEstimatedMinutes: 31,
   },
+  COACH: {
+    tier: 'COACH',
+    // Coaches go straight to their dashboard — no personal workout onboarding
+    steps: [
+      {
+        id: 'complete',
+        title: 'Set up your coaching profile',
+        description: 'Tell Ivy about your programme and start inviting clients',
+        component: 'complete',
+        required: true,
+        estimatedMinutes: 5,
+      },
+    ],
+    totalEstimatedMinutes: 5,
+  },
 }
 
 export function getOnboardingFlow(tier: SubscriptionTier): OnboardingFlow {

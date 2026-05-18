@@ -36,6 +36,7 @@ WHAT TO INCLUDE:
 - If contact_preference is "texts" but the call IS high-stakes: note "she/he usually prefers texts — if they answer, acknowledge it once: 'I know you usually prefer texts — I wanted to catch you for this one.'"
 - If contact_pattern_note is set: include a one-line directive reflecting it
 - How to close
+- If coach_name is set: this person has a PT. Reference the coach and programme naturally where relevant — "your coach Marcus has you on a 12-week fat loss programme." Let coach_notes shape what you probe for or avoid. If coach_style is set, match that register (e.g. "direct and data-driven" means skip the softening). Do NOT reveal the coach can read the summary — just use the notes to be a better extension of the PT.
 - If missed_sprint_session is true: this person missed their circle's sprint session. Open naturally — don't lead with guilt. Briefly acknowledge it ("you missed the session"), share what the group pledged (catchup_group_pledge), surface any highlights (catchup_highlights) in one line, then get their own sprint commitment. Close them aligned with the group. This takes priority over standard daily planning for this call.
 - If circle_game_name is set: include a brief directive about the game. Quote circle_game_state_summary as the current state. If circle_game_ivy_instruction is provided, let that guide the game interaction — do not invent mechanics not described there. Keep game mentions brief (1-2 sentences max) — it should feel like a natural aside, not a separate agenda item.
 
@@ -116,6 +117,12 @@ class BriefService {
       call_answer_rate: ctx.call_answer_rate,
       contact_preference: ctx.contact_preference,
       contact_pattern_note: ctx.contact_pattern_note,
+
+      // Coach context (if user has a PT)
+      coach_name: ctx.coach_name,
+      coach_programme: ctx.coach_programme,
+      coach_notes: ctx.coach_notes,
+      coach_style: ctx.coach_style,
 
       // Circle game (if active)
       circle_game_name: ctx.circle_game_name,

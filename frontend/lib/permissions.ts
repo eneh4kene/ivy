@@ -27,7 +27,8 @@ const TIER_HIERARCHY: Record<SubscriptionTier, number> = {
   PRO: 1,
   ELITE: 2,
   CONCIERGE: 3,
-  B2B: 2, // B2B has Ivy Plus-level features
+  B2B: 2,
+  COACH: 2,
 }
 
 /**
@@ -136,6 +137,7 @@ export function getTierName(tier: SubscriptionTier): string {
     ELITE: 'Ivy Plus',
     CONCIERGE: 'Ivy Concierge',
     B2B: 'Ivy Business',
+    COACH: 'Ivy Coach',
   }
   return names[tier]
 }
@@ -205,6 +207,16 @@ export function getTierFeatures(tier: SubscriptionTier, currency: Currency = 'GB
       'Season management',
       'Employee invitations',
       'Privacy-first reporting',
+    ],
+    COACH: [
+      'Daily AI accountability calls for all clients',
+      'Full call transcripts and Ivy insights per client',
+      'Coach notes — feed context directly into every call',
+      'Client dashboard with streak and sentiment tracking',
+      'Automatic coach alerts when clients go quiet',
+      'Weekly client digest every Monday',
+      'Optional white-labelling (your brand, not Ivy)',
+      'Client invite links',
     ],
   }
   return features[tier]

@@ -21,6 +21,7 @@ import buddyRoutes from './api/routes/buddy.routes';
 import pushRoutes from './api/routes/push.routes';
 import circleRoutes from './api/routes/circle.routes';
 import adminRoutes from './api/routes/admin.routes';
+import coachRoutes from './api/routes/coach.routes';
 
 const app: Application = express();
 
@@ -82,6 +83,7 @@ app.use('/api/buddy', buddyRoutes);
 app.use('/api/push', pushRoutes);
 app.use('/api/circles', circleRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/coach', coachRoutes);
 app.use('/webhooks', webhookRoutes);
 
 // 404 handler
