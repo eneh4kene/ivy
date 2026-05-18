@@ -525,6 +525,7 @@ export interface CoachProfile {
   ponderCallEnabled: boolean
   ponderCallDay?: number
   ponderCallTime?: string
+  ponderCallFrequency?: string
 }
 export interface CoachClient {
   id: string; firstName: string; lastName: string; email: string

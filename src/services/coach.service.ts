@@ -425,7 +425,7 @@ class CoachService {
       },
       select: {
         id: true, firstName: true, phone: true,
-        coachProfile: { select: { ponderCallTime: true } },
+        coachProfile: { select: { ponderCallTime: true, ponderCallFrequency: true } },
       },
     });
 
@@ -445,7 +445,8 @@ class CoachService {
 
       if (lastPonder) {
         const daysSince = (now.getTime() - lastPonder.scheduledAt.getTime()) / (1000 * 60 * 60 * 24);
-        if (daysSince < 13) continue;
+        const minGap = coach.coachProfile?.ponderCallFrequency === 'fortnightly' ? 13 : 6;
+        if (daysSince < minGap) continue;
       }
 
       await this.initiateCoachPonderCall(coach as { id: string; firstName: string; phone: string }).catch((err) =>

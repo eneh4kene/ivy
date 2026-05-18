@@ -824,9 +824,10 @@ model CoachProfile {
   // Alert preferences
   alertOnMissedCalls Int @default(3) // notify coach after N consecutive missed calls
   weeklyDigestEnabled Boolean @default(true)
-  ponderCallEnabled Boolean @default(false)
-  ponderCallDay     Int?    // 0=Sun 1=Mon 2=Tue 3=Wed 4=Thu 5=Fri 6=Sat
-  ponderCallTime    String? // HH:MM
+  ponderCallEnabled   Boolean @default(false)
+  ponderCallDay       Int?    // 0=Sun 1=Mon 2=Tue 3=Wed 4=Thu 5=Fri 6=Sat
+  ponderCallTime      String? // HH:MM
+  ponderCallFrequency String  @default("weekly") // "weekly" | "fortnightly"
 
   @@map("coach_profiles")
 }

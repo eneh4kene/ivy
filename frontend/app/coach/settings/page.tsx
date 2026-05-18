@@ -18,6 +18,7 @@ export default function CoachSettingsPage() {
     ponderCallEnabled: false,
     ponderCallDay: 1,
     ponderCallTime: '09:00',
+    ponderCallFrequency: 'weekly',
   })
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -156,6 +157,20 @@ export default function CoachSettingsPage() {
                   </div>
                 </div>
                 <div>
+                  <label className={labelClass}>Frequency</label>
+                  <div className="flex gap-2">
+                    {([['weekly', 'Weekly'], ['fortnightly', 'Every two weeks']] as const).map(([val, label]) => (
+                      <button key={val} type="button"
+                        onClick={() => setProfile({ ...profile, ponderCallFrequency: val })}
+                        className={`px-4 py-2 text-sm font-medium rounded-lg border transition-colors ${
+                          (profile.ponderCallFrequency ?? 'weekly') === val
+                            ? 'border-primary bg-primary/10 text-foreground'
+                            : 'border-border text-muted-foreground hover:border-border/80'
+                        }`}>{label}</button>
+                    ))}
+                  </div>
+                </div>
+                <div>
                   <label className={labelClass}>Preferred time</label>
                   <input
                     type="time"
@@ -163,7 +178,9 @@ export default function CoachSettingsPage() {
                     onChange={(e) => setProfile({ ...profile, ponderCallTime: e.target.value })}
                     className={inputClass}
                   />
-                  <p className="text-xs text-muted-foreground mt-1">Ivy will call you at approximately this time every two weeks.</p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Ivy will call you at approximately this time{profile.ponderCallFrequency === 'fortnightly' ? ' every two weeks' : ' every week'}.
+                  </p>
                 </div>
               </div>
             )}
