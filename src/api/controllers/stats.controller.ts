@@ -9,203 +9,63 @@ import {
 } from '../../types/stats.schema';
 import { AuthRequest } from '../../middleware/auth';
 
+// All routes in this controller are behind the authenticate middleware —
+// req.user is guaranteed to be set at this point.
+
 class StatsController {
-  /**
-   * Get user's comprehensive statistics
-   * GET /api/stats
-   */
-  async getUserStats(
-    req: AuthRequest,
-    res: Response,
-    next: NextFunction
-  ): Promise<void> {
+  async getUserStats(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
     try {
-      if (!req.user) {
-        throw new Error('User not authenticated');
-      }
-
-      const stats = await statsService.getUserStats(req.user.id);
-
-      sendSuccess(res, stats);
-    } catch (error) {
-      next(error);
-    }
+      sendSuccess(res, await statsService.getUserStats(req.user!.id));
+    } catch (err) { next(err); }
   }
 
-  /**
-   * Get user's current streak
-   * GET /api/stats/streak
-   */
-  async getStreak(
-    req: AuthRequest,
-    res: Response,
-    next: NextFunction
-  ): Promise<void> {
+  async getStreak(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
     try {
-      if (!req.user) {
-        throw new Error('User not authenticated');
-      }
-
-      const streak = await statsService.getStreak(req.user.id);
-
-      sendSuccess(res, streak);
-    } catch (error) {
-      next(error);
-    }
+      sendSuccess(res, await statsService.getStreak(req.user!.id));
+    } catch (err) { next(err); }
   }
 
-  /**
-   * Get weekly summary
-   * GET /api/stats/weekly
-   */
-  async getWeeklySummary(
-    req: AuthRequest,
-    res: Response,
-    next: NextFunction
-  ): Promise<void> {
+  async getWeeklySummary(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
     try {
-      if (!req.user) {
-        throw new Error('User not authenticated');
-      }
-
-      const summary = await statsService.getWeeklySummary(req.user.id);
-
-      sendSuccess(res, summary);
-    } catch (error) {
-      next(error);
-    }
+      sendSuccess(res, await statsService.getWeeklySummary(req.user!.id));
+    } catch (err) { next(err); }
   }
 
-  /**
-   * Get monthly summary
-   * GET /api/stats/monthly
-   */
-  async getMonthlySummary(
-    req: AuthRequest,
-    res: Response,
-    next: NextFunction
-  ): Promise<void> {
+  async getMonthlySummary(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
     try {
-      if (!req.user) {
-        throw new Error('User not authenticated');
-      }
-
-      const summary = await statsService.getMonthlySummary(req.user.id);
-
-      sendSuccess(res, summary);
-    } catch (error) {
-      next(error);
-    }
+      sendSuccess(res, await statsService.getMonthlySummary(req.user!.id));
+    } catch (err) { next(err); }
   }
 
-  /**
-   * Create transformation score
-   * POST /api/stats/transformation
-   */
-  async createTransformationScore(
-    req: AuthRequest,
-    res: Response,
-    next: NextFunction
-  ): Promise<void> {
+  async createTransformationScore(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
     try {
-      if (!req.user) {
-        throw new Error('User not authenticated');
-      }
-
-      const score = await statsService.createTransformationScore(req.user.id, req.body as CreateTransformationScoreInput);
-
-      sendCreated(res, score);
-    } catch (error) {
-      next(error);
-    }
+      sendCreated(res, await statsService.createTransformationScore(req.user!.id, req.body as CreateTransformationScoreInput));
+    } catch (err) { next(err); }
   }
 
-  /**
-   * Get transformation scores
-   * GET /api/stats/transformation
-   */
-  async getTransformationScores(
-    req: AuthRequest,
-    res: Response,
-    next: NextFunction
-  ): Promise<void> {
+  async getTransformationScores(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
     try {
-      if (!req.user) {
-        throw new Error('User not authenticated');
-      }
-
-      const result = await statsService.getTransformationScores(req.user.id, req.query as GetTransformationScoresQueryInput);
-
-      sendSuccess(res, result);
-    } catch (error) {
-      next(error);
-    }
+      sendSuccess(res, await statsService.getTransformationScores(req.user!.id, req.query as GetTransformationScoresQueryInput));
+    } catch (err) { next(err); }
   }
 
-  /**
-   * Get latest transformation score
-   * GET /api/stats/transformation/latest
-   */
-  async getLatestTransformationScore(
-    req: AuthRequest,
-    res: Response,
-    next: NextFunction
-  ): Promise<void> {
+  async getLatestTransformationScore(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
     try {
-      if (!req.user) {
-        throw new Error('User not authenticated');
-      }
-
-      const score = await statsService.getLatestTransformationScore(req.user.id);
-
-      sendSuccess(res, score);
-    } catch (error) {
-      next(error);
-    }
+      sendSuccess(res, await statsService.getLatestTransformationScore(req.user!.id));
+    } catch (err) { next(err); }
   }
 
-  /**
-   * Create life marker
-   * POST /api/stats/life-markers
-   */
-  async createLifeMarker(
-    req: AuthRequest,
-    res: Response,
-    next: NextFunction
-  ): Promise<void> {
+  async createLifeMarker(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
     try {
-      if (!req.user) {
-        throw new Error('User not authenticated');
-      }
-
-      const marker = await statsService.createLifeMarker(req.user.id, req.body as CreateLifeMarkerInput);
-
-      sendCreated(res, marker);
-    } catch (error) {
-      next(error);
-    }
+      sendCreated(res, await statsService.createLifeMarker(req.user!.id, req.body as CreateLifeMarkerInput));
+    } catch (err) { next(err); }
   }
 
-  /**
-   * Get life markers
-   * GET /api/stats/life-markers
-   */
-  async getLifeMarkers(
-    req: AuthRequest,
-    res: Response,
-    next: NextFunction
-  ): Promise<void> {
+  async getLifeMarkers(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
     try {
-      if (!req.user) {
-        throw new Error('User not authenticated');
-      }
-
-      const result = await statsService.getLifeMarkers(req.user.id, req.query as GetLifeMarkersQueryInput);
-
+      const result = await statsService.getLifeMarkers(req.user!.id, req.query as GetLifeMarkersQueryInput);
       sendSuccess(res, result.markers, 200, result.meta);
-    } catch (error) {
-      next(error);
-    }
+    } catch (err) { next(err); }
   }
 }
 

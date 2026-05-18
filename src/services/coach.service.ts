@@ -142,15 +142,18 @@ class CoachService {
     }
 
     // New user — create stub and send coach-branded invite email
+    // firstName/lastName left blank until client completes onboarding.
+    // getUserContext guards against empty name — falls back to 'there' in messaging,
+    // and the onboarding call fires before any personalised calls are scheduled.
     const stub = await prisma.user.create({
       data: {
         email,
-        firstName: '',
+        firstName: 'Friend', // placeholder — overwritten when client completes onboarding
         lastName: '',
         track: 'fitness',
         goal: '',
         coachId,
-        subscriptionTier: 'PRO', // coach is paying — client gets full call experience
+        subscriptionTier: 'PRO',
         isActive: true,
         isOnboarded: false,
       },

@@ -58,11 +58,7 @@ class UserController {
     next: NextFunction
   ): Promise<void> {
     try {
-      if (!req.user) {
-        throw new Error('User not authenticated');
-      }
-
-      const user = await userService.getUserById(req.user.id);
+      const user = await userService.getUserById(req.user!.id);
 
       sendSuccess(res, user);
     } catch (error) {
@@ -98,11 +94,7 @@ class UserController {
     next: NextFunction
   ): Promise<void> {
     try {
-      if (!req.user) {
-        throw new Error('User not authenticated');
-      }
-
-      const user = await userService.updateUser(req.user.id, req.body as UpdateUserInput);
+      const user = await userService.updateUser(req.user!.id, req.body as UpdateUserInput);
 
       sendSuccess(res, user);
     } catch (error) {
@@ -120,11 +112,7 @@ class UserController {
     next: NextFunction
   ): Promise<void> {
     try {
-      if (!req.user) {
-        throw new Error('User not authenticated');
-      }
-
-      const user = await userService.markUserAsOnboarded(req.user.id);
+      const user = await userService.markUserAsOnboarded(req.user!.id);
 
       sendSuccess(res, user);
     } catch (error) {
