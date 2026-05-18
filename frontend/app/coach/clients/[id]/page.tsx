@@ -28,11 +28,18 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
   const [notesSaved, setNotesSaved] = useState(false)
   const [removing, setRemoving] = useState(false)
   const [confirmRemove, setConfirmRemove] = useState(false)
-  const [tab, setTab] = useState<'calls' | 'insights' | 'notes'>('calls')
+  const [tab, setTab] = useState<'calls' | 'notes' | 'programme' | 'insights'>('calls')
+  const [areas, setAreas] = useState<Array<{ id: string; area: string; instruction: string }>>([])
+  const [areasSaving, setAreasSaving] = useState(false)
+  const [areasSaved, setAreasSaved] = useState(false)
 
   useEffect(() => {
     coachApi.getClient(id)
-      .then((c) => { setClient(c); setNotes(c.coachNotes ?? '') })
+      .then((c) => {
+        setClient(c)
+        setNotes(c.coachNotes ?? '')
+        setAreas(Array.isArray(c.programmeAreas) ? c.programmeAreas : [])
+      })
       .catch(console.error)
       .finally(() => setLoading(false))
   }, [id])
@@ -43,6 +50,16 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
       await coachApi.removeClient(id)
       router.push('/coach')
     } catch (e) { console.error(e); setRemoving(false); setConfirmRemove(false) }
+  }
+
+  const handleSaveAreas = async () => {
+    setAreasSaving(true)
+    try {
+      await coachApi.updateProgrammeAreas(id, areas)
+      setAreasSaved(true)
+      setTimeout(() => setAreasSaved(false), 2000)
+    } catch (e) { console.error(e) }
+    finally { setAreasSaving(false) }
   }
 
   const handleSaveNotes = async () => {
@@ -153,7 +170,7 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
 
         {/* Tabs */}
         <div className="flex gap-1 mb-5 p-1 bg-muted/30 rounded-xl">
-          {(['calls', 'notes', 'insights'] as const).map((t) => (
+          {(['calls', 'notes', 'programme', 'insights'] as const).map((t) => (
             <button key={t} onClick={() => setTab(t)}
               className={`flex-1 py-2 text-sm font-medium rounded-lg transition-colors capitalize ${
                 tab === t ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
@@ -226,6 +243,62 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
                 : notesSaved
                 ? <span className="text-emerald-300">✓ Saved</span>
                 : <><Save className="w-4 h-4" /> Save notes</>}
+            </button>
+          </div>
+        )}
+
+        {/* Programme areas tab */}
+        {tab === 'programme' && (
+          <div className="space-y-3">
+            <div>
+              <p className="text-xs font-medium text-foreground/80 mb-1">Programme check-in areas</p>
+              <p className="text-xs text-muted-foreground mb-3">
+                Define what Ivy checks in on with {client.firstName} — nutrition, sleep, stress, journaling, business metrics, anything. Write the instruction in plain language.
+              </p>
+            </div>
+            <div className="space-y-2.5">
+              {areas.map((area, i) => (
+                <div key={area.id} className="p-3 rounded-xl border border-border bg-card space-y-2">
+                  <div className="flex items-center gap-2">
+                    <input
+                      value={area.area}
+                      onChange={(e) => setAreas(areas.map((a, j) => j === i ? { ...a, area: e.target.value } : a))}
+                      placeholder="Area name (e.g. Nutrition)"
+                      className="flex-1 px-2.5 py-1.5 text-sm bg-muted/40 border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-primary"
+                    />
+                    <button
+                      onClick={() => setAreas(areas.filter((_, j) => j !== i))}
+                      className="text-muted-foreground hover:text-red-400 transition-colors p-1"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                  <textarea
+                    value={area.instruction}
+                    onChange={(e) => setAreas(areas.map((a, j) => j === i ? { ...a, instruction: e.target.value } : a))}
+                    rows={2}
+                    placeholder="Instruction for Ivy (e.g. Client is cutting — 180g protein daily. Ask about adherence and any slip-ups.)"
+                    className="w-full px-2.5 py-1.5 text-xs bg-muted/40 border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-primary resize-none"
+                  />
+                </div>
+              ))}
+            </div>
+            <button
+              onClick={() => setAreas([...areas, { id: crypto.randomUUID(), area: '', instruction: '' }])}
+              className="w-full py-2.5 text-sm text-muted-foreground border border-dashed border-border rounded-xl hover:border-primary/40 hover:text-foreground transition-colors"
+            >
+              + Add area
+            </button>
+            <button
+              onClick={handleSaveAreas}
+              disabled={areasSaving}
+              className="flex items-center gap-2 px-4 py-2.5 bg-primary text-primary-foreground text-sm font-medium rounded-lg hover:opacity-90 disabled:opacity-40 transition-opacity"
+            >
+              {areasSaving
+                ? <Loader2 className="w-4 h-4 animate-spin" />
+                : areasSaved
+                ? <span className="text-emerald-300">✓ Saved</span>
+                : <><Save className="w-4 h-4" /> Save areas</>}
             </button>
           </div>
         )}

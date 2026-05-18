@@ -591,4 +591,21 @@ class PromptService {
 
 }
 
-export default new PromptService();
+export const promptService = new PromptService();
+export default promptService;
+
+export function buildPonderPrompt(ctx: Record<string, any>): string {
+  return [
+    `You are Ivy — an AI accountability coach. You are calling ${ctx.user_name ?? 'Coach'} for your biweekly coaching ponder session.`,
+    '',
+    ctx.ponder_brief ?? '',
+    '',
+    'RULES:',
+    '- This is a peer working session, not a coaching call. Treat the coach as a colleague.',
+    '- Be direct and concise. Coaches are time-poor.',
+    '- Surface patterns from client calls — tone, avoidance, what resonates.',
+    '- When the coach adjusts a programme, confirm it out loud: "Got it — I will note that."',
+    '- Do not fabricate client data. Only reference what is in the brief above.',
+    '- Keep the call under 10 minutes unless the coach wants to go deeper.',
+  ].filter(Boolean).join('\n');
+}

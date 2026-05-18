@@ -56,6 +56,16 @@ router.patch('/clients/:id/notes', requireCoach, async (req: AuthRequest, res: R
   } catch (err) { next(err); }
 });
 
+// PATCH /api/coach/clients/:id/programme-areas
+router.patch('/clients/:id/programme-areas', requireCoach, async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const { areas } = req.body;
+    if (!Array.isArray(areas)) { res.status(400).json({ success: false, error: 'areas must be an array' }); return; }
+    const updated = await coachService.updateProgrammeAreas(req.user!.id, req.params.id, areas);
+    res.json({ success: true, data: updated });
+  } catch (err) { next(err); }
+});
+
 // POST /api/coach/clients/invite
 router.post('/clients/invite', requireCoach, async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {

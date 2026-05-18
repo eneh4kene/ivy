@@ -12,6 +12,7 @@ import { logUsage } from '../../services/usage.service';
 import { serverAnalytics } from '../../lib/analytics';
 import { handleMissedCall as handleMissedCallComms, handleDroppedCall } from '../../services/communication.service';
 import circleCatchupService from '../../services/circle-catchup.service';
+import coachService from '../../services/coach.service';
 import { flattenContext } from '../../utils/retell';
 import { sendSuccess } from '../../utils/response';
 import logger from '../../utils/logger';
@@ -123,6 +124,27 @@ class WebhookController {
           if (dbUserId) {
             circleCatchupService.markCovered(dbUserId)
               .catch((err) => logger.warn('Catch-up clear failed', err));
+          }
+
+          // Ponder call post-processing
+          if (dbCallType === 'COACH_PONDER' && dbUserId) {
+            const summary = call.call_analysis?.call_summary ?? (call.transcript?.slice(0, 800) ?? '');
+            if (summary) {
+              coachService.extractAndApplyProgrammeUpdates(dbUserId, summary)
+                .catch((err) => logger.warn('Ponder programme update failed:', err));
+
+              // Send WhatsApp summary to coach
+              prisma.user.findUnique({ where: { id: dbUserId }, select: { phone: true } })
+                .then((coach) => {
+                  if (coach?.phone) {
+                    messagingService.sendMessage(
+                      dbUserId,
+                      `Ivy ponder summary:\n\n${summary.slice(0, 600)}\n\nAny programme area updates from our chat have been applied.`
+                    ).catch(() => {});
+                  }
+                })
+                .catch(() => {});
+            }
           }
           break;
         }

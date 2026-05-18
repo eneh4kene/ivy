@@ -35,6 +35,13 @@ cron.schedule('0 8 * * 1', async () => {
   await coachService.sendWeeklyDigestToAllCoaches();
 });
 
+// Every 30 minutes — schedule ponder calls for due coaches
+cron.schedule('*/30 * * * *', async () => {
+  await coachService.schedulePonderCallsForDueCoaches().catch((err) =>
+    logger.warn('Ponder scheduler error:', err)
+  );
+});
+
 // 1st of every month at 2am UTC — dispatch accumulated wallet donations to charities
 cron.schedule('0 2 1 * *', async () => {
   logger.info('Running monthly charity donation dispatch...');

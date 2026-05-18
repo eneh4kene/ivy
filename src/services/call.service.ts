@@ -10,7 +10,7 @@ import circleGameService from './circle-game.service';
 import circleCatchupService from './circle-catchup.service';
 import coachService from './coach.service';
 
-export type CallType = 'MORNING_PLANNING' | 'EVENING_REVIEW' | 'RESCUE' | 'WEEKLY_PLANNING' | 'MONTHLY_CHECKIN' | 'ONBOARDING' | 'SEASON_CLOSE';
+export type CallType = 'MORNING_PLANNING' | 'EVENING_REVIEW' | 'RESCUE' | 'WEEKLY_PLANNING' | 'MONTHLY_CHECKIN' | 'ONBOARDING' | 'SEASON_CLOSE' | 'COACH_PONDER';
 
 class CallService {
   /**
@@ -401,7 +401,7 @@ class CallService {
 
       // Coach context (set when user has a PT/coach)
       ...await coachService.getCoachContextForClient(userId).catch(() => ({
-        coach_name: null, coach_programme: null, coach_notes: null, coach_style: null, brand_name: null,
+        coach_name: null, coach_programme: null, coach_notes: null, coach_style: null, brand_name: null, programme_areas: null,
       })),
 
       // Circle catch-up (set when user missed their last sprint session)
@@ -624,6 +624,22 @@ class CallService {
         },
       },
     });
+  }
+
+  async getCoachPonderContext(coachId: string): Promise<Record<string, any>> {
+    const coach = await prisma.user.findUnique({
+      where: { id: coachId },
+      select: { id: true, firstName: true, subscriptionTier: true },
+    });
+    const ponderBrief = await coachService.generatePonderBrief(coachId);
+    return {
+      user_name: coach?.firstName,
+      subscription_tier: coach?.subscriptionTier,
+      is_coach_ponder: true,
+      ponder_brief: ponderBrief,
+      track: 'coach',
+      call_type: 'coach_ponder',
+    };
   }
 }
 

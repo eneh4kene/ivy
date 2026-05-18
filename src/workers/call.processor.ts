@@ -2,7 +2,7 @@ import { Job } from 'bull';
 import { callScheduleQueue } from '../config/queues';
 import callService from '../services/call.service';
 import retellService from '../services/retell.service';
-import promptService from '../services/prompt.service';
+import promptService, { buildPonderPrompt } from '../services/prompt.service';
 import briefService from '../services/brief.service';
 import { getTrackConfig } from '../config/tracks';
 import { flattenContext } from '../utils/retell';
@@ -33,7 +33,11 @@ callScheduleQueue.process('initiate-call', async (job: Job<CallJobData>) => {
     // happened after this job was scheduled (e.g. morning summary for evening call)
     let ctx = contextData ?? {};
     try {
-      ctx = await callService.getUserContext(userId, callType);
+      if (callType === 'COACH_PONDER') {
+        ctx = await callService.getCoachPonderContext(userId);
+      } else {
+        ctx = await callService.getUserContext(userId, callType);
+      }
     } catch (err) {
       logger.warn(`Fresh context fetch failed for ${callId} — falling back to scheduled snapshot:`, err);
     }
@@ -42,10 +46,12 @@ callScheduleQueue.process('initiate-call', async (job: Job<CallJobData>) => {
     const agentId = getAgentId(callType, isB2B);
 
     // Generate a call-specific brief via Haiku — falls back to static flow if unavailable
-    const trackConfig = getTrackConfig(ctx.track);
-    const brief = await briefService.generateCallBrief(callType, ctx, trackConfig);
-
-    const systemPrompt = promptService.buildSystemPrompt(callType, ctx, isB2B, brief ?? undefined);
+    const isPonder = callType === 'COACH_PONDER';
+    const trackConfig = isPonder ? null : getTrackConfig(ctx.track);
+    const brief = isPonder ? null : await briefService.generateCallBrief(callType, ctx, trackConfig!);
+    const systemPrompt = isPonder
+      ? buildPonderPrompt(ctx)
+      : promptService.buildSystemPrompt(callType, ctx, isB2B, brief ?? undefined);
 
     const retellCall = await retellService.initiateCall({
       phoneNumber: phone,

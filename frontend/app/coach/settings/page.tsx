@@ -15,6 +15,9 @@ export default function CoachSettingsPage() {
     brandLogoUrl: '',
     alertOnMissedCalls: 3,
     weeklyDigestEnabled: true,
+    ponderCallEnabled: false,
+    ponderCallDay: 1,
+    ponderCallTime: '09:00',
   })
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -122,6 +125,48 @@ export default function CoachSettingsPage() {
                 <p className="text-xs text-muted-foreground">Email every Monday with each client's week at a glance</p>
               </div>
             </div>
+          </div>
+
+          {/* Ponder sessions */}
+          <div className="p-5 rounded-xl border border-border bg-card space-y-4">
+            <div>
+              <h2 className="text-sm font-semibold mb-0.5">Coaching ponder sessions</h2>
+              <p className="text-xs text-muted-foreground">Ivy calls you every two weeks to discuss your clients — what's working, what to adjust, and how to improve each programme.</p>
+            </div>
+            <div className="flex items-center gap-3">
+              <button type="button"
+                onClick={() => setProfile({ ...profile, ponderCallEnabled: !profile.ponderCallEnabled })}
+                className={`relative w-10 h-5 rounded-full transition-colors ${profile.ponderCallEnabled ? 'bg-primary' : 'bg-muted border border-border'}`}>
+                <span className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${profile.ponderCallEnabled ? 'translate-x-5' : ''}`} />
+              </button>
+              <span className="text-sm">{profile.ponderCallEnabled ? 'Ponder sessions on' : 'Ponder sessions off'}</span>
+            </div>
+            {profile.ponderCallEnabled && (
+              <div className="space-y-3 pt-1">
+                <div>
+                  <label className={labelClass}>Preferred day</label>
+                  <div className="flex gap-1.5 flex-wrap">
+                    {['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map((d, i) => (
+                      <button key={i} type="button"
+                        onClick={() => setProfile({ ...profile, ponderCallDay: i })}
+                        className={`px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors ${
+                          profile.ponderCallDay === i ? 'border-primary bg-primary/10 text-foreground' : 'border-border text-muted-foreground hover:border-border/80'
+                        }`}>{d}</button>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <label className={labelClass}>Preferred time</label>
+                  <input
+                    type="time"
+                    value={profile.ponderCallTime ?? '09:00'}
+                    onChange={(e) => setProfile({ ...profile, ponderCallTime: e.target.value })}
+                    className={inputClass}
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">Ivy will call you at approximately this time every two weeks.</p>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* White-label */}

@@ -522,6 +522,9 @@ export interface CoachProfile {
   programmeName: string; coachingStyle?: string; programmeNotes?: string
   whitelabelEnabled: boolean; brandName?: string; brandLogoUrl?: string
   alertOnMissedCalls: number; weeklyDigestEnabled: boolean
+  ponderCallEnabled: boolean
+  ponderCallDay?: number
+  ponderCallTime?: string
 }
 export interface CoachClient {
   id: string; firstName: string; lastName: string; email: string
@@ -558,6 +561,9 @@ export const coachApi = {
   },
   removeClient: async (id: string): Promise<void> => {
     await client.delete(`/api/coach/clients/${id}`)
+  },
+  updateProgrammeAreas: async (id: string, areas: Array<{ id: string; area: string; instruction: string }>): Promise<void> => {
+    await client.patch(`/api/coach/clients/${id}/programme-areas`, { areas })
   },
 }
 
