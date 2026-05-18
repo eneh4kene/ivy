@@ -77,10 +77,10 @@ class AuthService {
    * Create a magic link token and return the URL without sending an email.
    * Used by coach invite flow to get the URL for a branded email.
    */
-  async createMagicLinkUrl(email: string): Promise<string> {
+  async createMagicLinkUrl(email: string, ttlMs: number = 48 * 60 * 60 * 1000): Promise<string> {
     const token = this.generateMagicLinkToken();
     await prisma.magicLink.create({
-      data: { token, email: email.toLowerCase(), expiresAt: new Date(Date.now() + 15 * 60 * 1000) },
+      data: { token, email: email.toLowerCase(), expiresAt: new Date(Date.now() + ttlMs) },
     });
     return `${config.frontend.url}/auth/verify?token=${token}`;
   }

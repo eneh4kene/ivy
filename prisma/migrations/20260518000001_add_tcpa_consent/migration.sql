@@ -1,0 +1,2 @@
+ALTER TABLE "users" ADD COLUMN "tcpaConsent" BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE "users" ADD COLUMN "tcpaConsentAt" TIMESTAMP(3);

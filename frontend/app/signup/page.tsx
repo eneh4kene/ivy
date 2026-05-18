@@ -47,6 +47,7 @@ function SignupForm() {
         goal: '',
         region,
         currency,
+        ...(region === 'US' && { tcpaConsent }),
       })
       // Send magic link with promo code and plan if present
       await authApi.sendMagicLink({ email, promoCode, plan })

@@ -45,7 +45,7 @@ cron.schedule('0 2 1 * *', async () => {
 cron.schedule('0 0 * * *', async () => {
   logger.info('Scheduling daily calls...');
   const users = await prisma.user.findMany({
-    where: { isActive: true, isOnboarded: true, subscriptionTier: { not: 'FREE' } },
+    where: { isActive: true, isOnboarded: true, subscriptionTier: { notIn: ['FREE', 'COACH'] } },
     select: { id: true },
   });
   const today = new Date();

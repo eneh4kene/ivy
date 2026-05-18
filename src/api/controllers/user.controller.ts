@@ -5,6 +5,8 @@ import { sendSuccess, sendCreated } from '../../utils/response';
 import { CreateUserInput, UpdateUserInput, GetUserByIdInput } from '../../types/user.schema';
 import { AuthRequest } from '../../middleware/auth';
 import { serverAnalytics } from '../../lib/analytics';
+import paymentService from '../../services/payment.service';
+import logger from '../../utils/logger';
 
 class UserController {
   /**
@@ -183,6 +185,12 @@ class UserController {
   async deleteMyAccount(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
     try {
       const userId = req.user!.id
+
+      // Cancel Stripe subscription first — fire and forget, don't block deletion if it fails
+      await paymentService.cancelSubscription(userId).catch((err) =>
+        logger.warn(`Stripe cancellation failed for ${userId} during account deletion:`, err)
+      )
+
       await prisma.user.delete({ where: { id: userId } })
       serverAnalytics.identify(userId, { deleted: true })
       res.json({ success: true, data: { message: 'Account permanently deleted. All data has been erased.' } })

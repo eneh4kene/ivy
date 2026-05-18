@@ -74,6 +74,10 @@ model User {
   // Role
   role           String  @default("user") // "user" | "superadmin"
 
+  // Legal consent
+  tcpaConsent        Boolean   @default(false) // US users — TCPA consent for AI calls
+  tcpaConsentAt      DateTime? // timestamp of consent — required for TCPA compliance record
+
   // Status
   isActive       Boolean @default(true)
   isOnboarded    Boolean @default(false)

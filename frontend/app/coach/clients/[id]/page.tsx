@@ -3,9 +3,10 @@
 import { useState, useEffect, use } from 'react'
 import { coachApi } from '@/lib/api'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import {
   ArrowLeft, Flame, Phone, PhoneOff, Loader2,
-  Save, BookOpen, TrendingUp, AlertTriangle
+  Save, AlertTriangle, Trash2
 } from 'lucide-react'
 
 const CALL_TYPE_LABEL: Record<string, string> = {
@@ -19,11 +20,14 @@ const SENTIMENT_COLOUR: Record<string, string> = {
 
 export default function ClientDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
+  const router = useRouter()
   const [client, setClient] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [notes, setNotes] = useState('')
   const [notesSaving, setNotesSaving] = useState(false)
   const [notesSaved, setNotesSaved] = useState(false)
+  const [removing, setRemoving] = useState(false)
+  const [confirmRemove, setConfirmRemove] = useState(false)
   const [tab, setTab] = useState<'calls' | 'insights' | 'notes'>('calls')
 
   useEffect(() => {
@@ -32,6 +36,14 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
       .catch(console.error)
       .finally(() => setLoading(false))
   }, [id])
+
+  const handleRemove = async () => {
+    setRemoving(true)
+    try {
+      await coachApi.removeClient(id)
+      router.push('/coach')
+    } catch (e) { console.error(e); setRemoving(false); setConfirmRemove(false) }
+  }
 
   const handleSaveNotes = async () => {
     setNotesSaving(true)
@@ -68,6 +80,24 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
             <h1 className="text-lg font-bold">{client.firstName} {client.lastName}</h1>
             <p className="text-xs text-muted-foreground capitalize">{client.track} track · {client.goal}</p>
           </div>
+          {!confirmRemove ? (
+            <button onClick={() => setConfirmRemove(true)}
+              className="p-2 rounded-lg border border-border hover:border-red-500/40 hover:bg-red-500/5 transition-colors text-muted-foreground hover:text-red-400">
+              <Trash2 className="w-4 h-4" />
+            </button>
+          ) : (
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-muted-foreground">Remove client?</span>
+              <button onClick={handleRemove} disabled={removing}
+                className="text-xs font-medium text-red-400 hover:text-red-300 border border-red-500/30 rounded-lg px-2.5 py-1.5 disabled:opacity-40">
+                {removing ? <Loader2 className="w-3 h-3 animate-spin" /> : 'Yes, remove'}
+              </button>
+              <button onClick={() => setConfirmRemove(false)}
+                className="text-xs text-muted-foreground hover:text-foreground">
+                Cancel
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Stats */}

@@ -56,6 +56,7 @@ export const usersApi = {
     subscriptionTier?: string
     region?: string
     currency?: string
+    tcpaConsent?: boolean
   }) => {
     const response = await client.post<ApiResponse<User>>('/api/users', data)
     return response.data.data!

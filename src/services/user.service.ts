@@ -11,7 +11,7 @@ class UserService {
    * Create a new user
    */
   async createUser(data: CreateUserInput) {
-    const { email, ...rest } = data;
+    const { email, tcpaConsent, ...rest } = data;
     const normalizedEmail = email.toLowerCase();
 
     // Check if user already exists
@@ -31,6 +31,11 @@ class UserService {
         subscriptionTier: 'FREE',
         isActive: true,
         isOnboarded: false,
+        // Store TCPA consent with timestamp for compliance record-keeping
+        ...(tcpaConsent !== undefined && {
+          tcpaConsent,
+          tcpaConsentAt: tcpaConsent ? new Date() : null,
+        }),
       },
       select: {
         id: true,
@@ -166,6 +171,12 @@ class UserService {
       data: { isOnboarded: true, onboardedAt: new Date() },
       select: { id: true, isOnboarded: true, onboardedAt: true },
     });
+
+    // Coaches don't have a personal season arc or accountability calls
+    if (fullUser?.subscriptionTier === 'COACH') {
+      logger.info(`Coach onboarded: ${user.id} — skipping season and call setup`);
+      return user;
+    }
 
     // Create Season 1 from the user's goal (non-blocking)
     if (fullUser?.goal) {

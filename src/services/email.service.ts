@@ -186,7 +186,7 @@ class EmailService {
         You're invited
       </h1>
       <p style="margin:0 0 24px;font-size:15px;color:#9ca3af;line-height:1.6;">${greeting}</p>
-      <p style="margin:0 0 8px;font-size:14px;color:#9ca3af;">Click below to set up your account. The link expires in 15 minutes.</p>
+      <p style="margin:0 0 8px;font-size:14px;color:#9ca3af;">Click below to set up your account. The link expires in 48 hours.</p>
       <a href="${params.magicUrl}"
          style="display:inline-block;background:#34d399;color:#0a0a0a;font-size:14px;font-weight:600;padding:12px 24px;border-radius:10px;text-decoration:none;margin-bottom:20px;">
         Get started →

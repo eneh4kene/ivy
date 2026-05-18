@@ -12,6 +12,7 @@ export const createUserSchema = z.object({
     track: z.string().default('fitness'),
     goal: z.string().default(''),
     preferredCharityId: z.string().uuid().optional(),
+    tcpaConsent: z.boolean().optional(), // required for US users
   }),
 });
 
