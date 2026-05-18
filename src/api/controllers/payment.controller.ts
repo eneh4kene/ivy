@@ -62,6 +62,31 @@ class PaymentController {
   }
 
   /**
+   * Create coach checkout session
+   * POST /payments/coach-checkout
+   */
+  async createCoachCheckoutSession(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const userId = req.user?.id;
+      if (!userId) { res.status(401).json({ success: false, error: 'Unauthorized' }); return; }
+
+      const { coachPlan, currency, successUrl, cancelUrl } = req.body;
+      const validPlans = ['COACH_5', 'COACH_10', 'COACH_20'];
+      if (!validPlans.includes(coachPlan)) {
+        res.status(400).json({ success: false, error: 'Invalid coach plan' }); return;
+      }
+
+      const session = await paymentService.createCoachCheckoutSession(
+        userId, coachPlan,
+        successUrl || `${process.env.FRONTEND_URL}/coach?setup=1`,
+        cancelUrl || `${process.env.FRONTEND_URL}/pricing`,
+        currency || 'GBP',
+      );
+      res.json({ success: true, data: session });
+    } catch (err) { next(err); }
+  }
+
+  /**
    * Create customer portal session
    * POST /payments/portal
    */

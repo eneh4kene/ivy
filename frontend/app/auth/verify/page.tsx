@@ -27,7 +27,15 @@ function VerifyContent() {
         setToken(accessToken)
         setUser(user)
         setStatus('success')
-        setTimeout(() => router.push('/dashboard'), 1000)
+
+        // Route based on tier and onboarding state
+        let destination = '/dashboard'
+        if (user.subscriptionTier === 'COACH') {
+          destination = user.isOnboarded ? '/coach' : '/coach/settings'
+        } else if (!user.isOnboarded) {
+          destination = `/onboard/${user.subscriptionTier === 'B2B' ? 'welcome' : 'welcome'}`
+        }
+        setTimeout(() => router.push(destination), 1000)
       } catch (err: any) {
         setStatus('error')
         setError(err.message || 'Failed to verify magic link')
@@ -61,7 +69,7 @@ function VerifyContent() {
                 </svg>
               </div>
               <h1 className="text-2xl font-bold mb-2 text-green-600">Success!</h1>
-              <p className="text-muted-foreground">Redirecting to your dashboard...</p>
+              <p className="text-muted-foreground">Redirecting...</p>
             </div>
           )}
 

@@ -23,6 +23,12 @@ export const B2B_PRICES: Record<string, Record<Currency, number>> = {
   CHAMPION: { GBP: 65, USD: 79 },
 }
 
+export const COACH_PRICES: Record<string, Record<Currency, number>> = {
+  COACH_5:  { GBP: 35,  USD: 45  },
+  COACH_10: { GBP: 60,  USD: 75  },
+  COACH_20: { GBP: 100, USD: 125 },
+}
+
 export function formatPrice(amount: number, currency: Currency): string {
   return `${CURRENCY_SYMBOL[currency]}${amount}`
 }

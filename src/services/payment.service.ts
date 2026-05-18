@@ -137,6 +137,51 @@ class PaymentService {
   }
 
   /**
+   * Create Stripe checkout for coach plans (COACH_5 / COACH_10 / COACH_20)
+   */
+  async createCoachCheckoutSession(
+    userId: string,
+    coachPlan: 'COACH_5' | 'COACH_10' | 'COACH_20',
+    successUrl: string,
+    cancelUrl: string,
+    currency: Currency = 'GBP',
+  ) {
+    if (!this.stripe) throw new BadRequestError('Payment service not configured');
+
+    const priceEnvKey = `STRIPE_PRICE_${coachPlan}_${currency}`;
+    const priceId = process.env[priceEnvKey];
+    if (!priceId) throw new BadRequestError(`Coach price not configured: ${priceEnvKey}`);
+
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+    if (!user) throw new NotFoundError('User not found');
+
+    let customerId = user.stripeCustomerId;
+    if (!customerId) {
+      const customer = await this.stripe.customers.create({ email: user.email, metadata: { userId } });
+      customerId = customer.id;
+      await prisma.user.update({ where: { id: userId }, data: { stripeCustomerId: customerId } });
+    }
+
+    const session = await this.stripe.checkout.sessions.create({
+      customer: customerId,
+      mode: 'subscription',
+      payment_method_types: ['card'],
+      currency: currency.toLowerCase(),
+      line_items: [{ price: priceId, quantity: 1 }],
+      allow_promotion_codes: true,
+      subscription_data: {
+        metadata: { userId, tier: 'COACH', coachPlan, currency },
+      },
+      success_url: successUrl,
+      cancel_url: cancelUrl,
+      metadata: { userId, tier: 'COACH', coachPlan, currency },
+    });
+
+    logger.info(`Coach checkout session created for user ${userId} — ${coachPlan}`);
+    return { sessionId: session.id, url: session.url };
+  }
+
+  /**
    * Create customer portal session for managing subscription
    */
   async createCustomerPortalSession(userId: string, returnUrl: string) {

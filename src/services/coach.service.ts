@@ -128,15 +128,20 @@ class CoachService {
       if (existing.coachId && existing.coachId !== coachId) {
         throw new BadRequestError('This user already has a coach');
       }
-      await prisma.user.update({ where: { id: existing.id }, data: { coachId } });
+      await prisma.user.update({
+        where: { id: existing.id },
+        data: {
+          coachId,
+          // Upgrade FREE users so they get daily calls — coach is paying
+          subscriptionTier: existing.subscriptionTier === 'FREE' ? 'PRO' : existing.subscriptionTier,
+        },
+      });
       await authService.sendMagicLink(email);
       logger.info(`Existing user ${existing.id} linked to coach ${coachId}`);
       return { status: 'linked', email };
     }
 
-    // New user — send invite magic link (they'll complete onboarding after clicking)
-    // We store the coachId in a pending state via a magic link with metadata
-    // For now: create a stub user and send them a magic link
+    // New user — create stub and send coach-branded invite email
     const stub = await prisma.user.create({
       data: {
         email,
@@ -145,13 +150,31 @@ class CoachService {
         track: 'fitness',
         goal: '',
         coachId,
-        subscriptionTier: 'FREE', // upgraded when coach confirms
+        subscriptionTier: 'PRO', // coach is paying — client gets full call experience
         isActive: true,
         isOnboarded: false,
       },
     });
 
-    await authService.sendMagicLink(email);
+    // Generate magic link URL and send coach-branded invite (white-label aware)
+    const magicUrl = await authService.createMagicLinkUrl(email);
+    const coachUser = await prisma.user.findUnique({
+      where: { id: coachId },
+      select: { firstName: true, coachProfile: true },
+    });
+    const profile = coachUser?.coachProfile as any;
+    const brand = (profile?.whitelabelEnabled && profile?.brandName)
+      ? { name: profile.brandName, logoUrl: profile.brandLogoUrl ?? null }
+      : undefined;
+
+    const { emailService } = await import('./email.service');
+    await emailService.sendClientMagicLink({
+      clientEmail: email,
+      magicUrl,
+      brand,
+      coachName: brand ? undefined : coachUser?.firstName, // only show coach name if not white-labelled
+    });
+
     logger.info(`Client invite sent to ${email} for coach ${coachId} — stub user ${stub.id}`);
     return { status: 'invited', email };
   }
@@ -161,7 +184,12 @@ class CoachService {
     if (!client) throw new NotFoundError('Client not found');
     await prisma.user.update({
       where: { id: clientId },
-      data: { coachId: null, coachNotes: null },
+      data: {
+        coachId: null,
+        coachNotes: null,
+        // Revert to FREE — coach is no longer covering their subscription
+        subscriptionTier: 'FREE',
+      },
     });
   }
 

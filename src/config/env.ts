@@ -52,6 +52,13 @@ const envSchema = z.object({
   STRIPE_SECRET_KEY: z.string().optional(),
   STRIPE_PUBLISHABLE_KEY: z.string().optional(),
   STRIPE_WEBHOOK_SECRET: z.string().optional(),
+  // Coach plan price IDs (STRIPE_PRICE_COACH_5_GBP, STRIPE_PRICE_COACH_10_GBP, etc.)
+  STRIPE_PRICE_COACH_5_GBP: z.string().optional(),
+  STRIPE_PRICE_COACH_5_USD: z.string().optional(),
+  STRIPE_PRICE_COACH_10_GBP: z.string().optional(),
+  STRIPE_PRICE_COACH_10_USD: z.string().optional(),
+  STRIPE_PRICE_COACH_20_GBP: z.string().optional(),
+  STRIPE_PRICE_COACH_20_USD: z.string().optional(),
 
   // Email
   SMTP_HOST: z.string().default('smtp.gmail.com'),

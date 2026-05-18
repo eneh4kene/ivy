@@ -237,6 +237,11 @@ export const paymentsApi = {
     const response = await client.post<ApiResponse>('/api/payments/cancel')
     return response.data
   },
+
+  createCoachCheckoutSession: async (coachPlan: 'COACH_5' | 'COACH_10' | 'COACH_20', currency: string = 'GBP') => {
+    const response = await client.post<ApiResponse<{ sessionId: string; url: string }>>('/api/payments/coach-checkout', { coachPlan, currency })
+    return response.data.data!
+  },
 }
 
 // Calls API

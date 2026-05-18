@@ -10,8 +10,9 @@ import { paymentsApi } from '@/lib/api'
 import type { SubscriptionTier } from '@/lib/types'
 import {
   Check, Leaf, ArrowLeft, Zap, Crown, Star, Users, ArrowRight, HelpCircle,
-  Phone, Shield, Calendar, Heart, TrendingUp, MessageCircle, Flame, Sparkles
+  Phone, Shield, Calendar, Heart, TrendingUp, MessageCircle, Flame, Sparkles, Dumbbell
 } from 'lucide-react'
+import { COACH_PRICES } from '@/lib/pricing'
 
 const paidTiers: SubscriptionTier[] = ['PRO', 'ELITE', 'CONCIERGE']
 
@@ -400,6 +401,66 @@ export default function PricingPage() {
               </Button>
               <p className="text-sm text-muted-foreground">20–200 employees · 4-week seasons · Privacy-first</p>
             </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Coach / PT */}
+      <section className="max-w-5xl mx-auto px-4 pb-20">
+        <div className="relative rounded-2xl border border-amber-500/20 bg-amber-500/5 p-8 sm:p-10 overflow-hidden">
+          <div className="absolute top-0 right-0 w-64 h-64 bg-amber-500/8 rounded-full blur-3xl" />
+          <div className="relative">
+            <div className="flex items-center gap-3 mb-2">
+              <div className="w-10 h-10 rounded-xl bg-amber-500/15 border border-amber-500/25 flex items-center justify-center">
+                <Dumbbell className="w-5 h-5 text-amber-400" />
+              </div>
+              <div>
+                <h2 className="text-2xl font-bold tracking-tight">Ivy for Coaches</h2>
+                <p className="text-sm text-muted-foreground">Daily AI accountability for your clients — between every session</p>
+              </div>
+            </div>
+            <p className="text-sm text-muted-foreground mb-8 max-w-2xl">
+              Ivy calls your clients every morning and evening, extracts what they said, and surfaces it in your dashboard. Your coaching notes feed directly into every call. Optional: present it as your own brand.
+            </p>
+            <div className="grid sm:grid-cols-3 gap-4 mb-8">
+              {([
+                { planKey: 'COACH_5' as const, label: 'Starter', clients: 5 },
+                { planKey: 'COACH_10' as const, label: 'Growth', clients: 10 },
+                { planKey: 'COACH_20' as const, label: 'Pro', clients: 20 },
+              ]).map((plan) => {
+                const price = COACH_PRICES[plan.planKey]?.[currency]
+                return (
+                  <div key={plan.planKey} className="bg-background/50 border border-border/60 rounded-xl p-5">
+                    <h3 className="font-bold mb-1">{plan.label}</h3>
+                    <div className="flex items-baseline gap-1 mb-1">
+                      <span className="text-2xl font-bold text-amber-400">{CURRENCY_SYMBOL[currency]}{price}</span>
+                      <span className="text-xs text-muted-foreground">/mo</span>
+                    </div>
+                    <p className="text-xs text-muted-foreground mb-4">Up to {plan.clients} clients</p>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="w-full border-amber-500/30 text-amber-400 hover:bg-amber-500/10"
+                      onClick={async () => {
+                        try {
+                          const session = await paymentsApi.createCoachCheckoutSession(plan.planKey, currency)
+                          if (session?.url) window.location.href = session.url
+                        } catch (e) { console.error(e) }
+                      }}
+                    >
+                      Get started
+                    </Button>
+                  </div>
+                )
+              })}
+            </div>
+            <ul className="grid sm:grid-cols-2 gap-2">
+              {getTierFeatures('COACH').map((f) => (
+                <li key={f} className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Check className="w-3.5 h-3.5 text-amber-400 flex-shrink-0" />{f}
+                </li>
+              ))}
+            </ul>
           </div>
         </div>
       </section>

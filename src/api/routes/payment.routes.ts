@@ -15,6 +15,13 @@ router.use(authenticate);
 router.post('/checkout', paymentController.createCheckoutSession);
 
 /**
+ * @route   POST /payments/coach-checkout
+ * @desc    Create Stripe checkout for coach plans (COACH_5 / COACH_10 / COACH_20)
+ * @access  Private
+ */
+router.post('/coach-checkout', paymentController.createCoachCheckoutSession);
+
+/**
  * @route   POST /payments/portal
  * @desc    Create customer portal session for managing subscription
  * @access  Private
