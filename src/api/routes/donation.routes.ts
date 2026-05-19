@@ -30,46 +30,10 @@ router.post('/user-charities', authenticate, donationController.setUserCharities
  * @desc    Get user's donations with filtering
  * @access  Private
  */
-router.get(
-  '/',
-  validate(getDonationsQuerySchema),
-  donationController.getUserDonations
-);
-
-/**
- * @route   GET /api/donations/impact-wallet
- * @desc    Get user's Impact Wallet details
- * @access  Private
- */
-router.get('/impact-wallet', donationController.getImpactWallet);
-
-/**
- * @route   GET /api/donations/stats
- * @desc    Get user's donation statistics
- * @access  Private
- */
-router.get('/stats', donationController.getDonationStats);
-
-/**
- * @route   PATCH /api/donations/impact-wallet
- * @desc    Update Impact Wallet limits
- * @access  Private (Admin in future)
- */
-router.patch(
-  '/impact-wallet',
-  validate(updateImpactWalletSchema),
-  donationController.updateImpactWallet
-);
-
-/**
- * @route   POST /api/donations/manual
- * @desc    Create manual donation (admin only)
- * @access  Private (Admin in future)
- */
-router.post(
-  '/manual',
-  validate(createManualDonationSchema),
-  donationController.createManualDonation
-);
+router.get('/', authenticate, validate(getDonationsQuerySchema), donationController.getUserDonations);
+router.get('/impact-wallet', authenticate, donationController.getImpactWallet);
+router.get('/stats', authenticate, donationController.getDonationStats);
+router.patch('/impact-wallet', authenticate, validate(updateImpactWalletSchema), donationController.updateImpactWallet);
+router.post('/manual', authenticate, validate(createManualDonationSchema), donationController.createManualDonation);
 
 export default router;

@@ -92,13 +92,11 @@ export const requireSuperAdmin = (req: AuthRequest, _res: Response, next: NextFu
 export const requireTier = (...tiers: string[]) => {
   return (req: AuthRequest, _res: Response, next: NextFunction): void => {
     if (!req.user) {
-      throw new UnauthorizedError('Authentication required');
+      return next(new UnauthorizedError('Authentication required'));
     }
-
     if (!tiers.includes(req.user.subscriptionTier)) {
-      throw new UnauthorizedError('Insufficient subscription tier');
+      return next(new UnauthorizedError('Insufficient subscription tier'));
     }
-
     next();
   };
 };
