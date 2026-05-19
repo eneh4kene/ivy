@@ -28,7 +28,8 @@ const envSchema = z.object({
   // Twilio
   TWILIO_ACCOUNT_SID: z.string().optional(),
   TWILIO_AUTH_TOKEN: z.string().optional(),
-  TWILIO_PHONE_NUMBER: z.string().optional(),
+  TWILIO_PHONE_NUMBER: z.string().optional(),    // UK (+44) — used for GBP users
+  TWILIO_PHONE_NUMBER_US: z.string().optional(), // US (+1)  — used for USD users
 
   // Retell AI
   RETELL_API_KEY: z.string().optional(),

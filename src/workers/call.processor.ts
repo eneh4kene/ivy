@@ -53,8 +53,14 @@ callScheduleQueue.process('initiate-call', async (job: Job<CallJobData>) => {
       ? buildPonderPrompt(ctx)
       : promptService.buildSystemPrompt(callType, ctx, isB2B, brief ?? undefined);
 
+    // Call from the UK number for GBP users, US number for USD users (falls back to UK if US not configured)
+    const fromNumber = (ctx.currency === 'USD' && config.twilio.phoneNumberUs)
+      ? config.twilio.phoneNumberUs
+      : config.twilio.phoneNumber;
+
     const retellCall = await retellService.initiateCall({
       phoneNumber: phone,
+      fromNumber,
       agentId,
       variables: flattenContext({ ...ctx, call_type: callType.toLowerCase() }),
       metadata: { callId, userId, callType },

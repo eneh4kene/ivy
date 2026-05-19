@@ -3,7 +3,8 @@ import { config } from '../config';
 import logger from '../utils/logger';
 
 export interface RetellCallParams {
-  phoneNumber: string;
+  phoneNumber: string;   // destination (user's number)
+  fromNumber?: string;   // override which Twilio number to call from (defaults to config.twilio.phoneNumber)
   agentId: string;
   variables?: Record<string, any>;
   metadata?: Record<string, any>;
@@ -29,7 +30,7 @@ class RetellService {
 
     try {
       const body: Record<string, any> = {
-        from_number: config.twilio.phoneNumber,
+        from_number: params.fromNumber ?? config.twilio.phoneNumber,
         to_number: params.phoneNumber,
         agent_id: params.agentId,
         override_agent_id: params.agentId,

@@ -23,6 +23,7 @@ export const config = {
     accountSid: env.TWILIO_ACCOUNT_SID,
     authToken: env.TWILIO_AUTH_TOKEN,
     phoneNumber: env.TWILIO_PHONE_NUMBER,
+    phoneNumberUs: env.TWILIO_PHONE_NUMBER_US,
   },
   retell: {
     apiKey: env.RETELL_API_KEY,
