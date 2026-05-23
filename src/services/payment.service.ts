@@ -26,12 +26,12 @@ class PaymentService {
 
   private getTierFromPriceId(priceId: string): SubscriptionTier | null {
     const tierMap: Record<string, SubscriptionTier> = {
-      [process.env.STRIPE_PRICE_PRO_GBP || '']:              'PRO',
-      [process.env.STRIPE_PRICE_PRO_USD || '']:              'PRO',
-      [process.env.STRIPE_PRICE_ELITE_GBP || '']:            'ELITE',
-      [process.env.STRIPE_PRICE_ELITE_USD || '']:            'ELITE',
-      [process.env.STRIPE_PRICE_CONCIERGE_GBP || '']:        'CONCIERGE',
-      [process.env.STRIPE_PRICE_CONCIERGE_USD || '']:        'CONCIERGE',
+      [process.env.STRIPE_PRICE_IVY_GBP || '']:              'PRO',
+      [process.env.STRIPE_PRICE_IVY_USD || '']:              'PRO',
+      [process.env.STRIPE_PRICE_IVY_PLUS_GBP || '']:         'ELITE',
+      [process.env.STRIPE_PRICE_IVY_PLUS_USD || '']:         'ELITE',
+      [process.env.STRIPE_PRICE_IVY_CONCIERGE_GBP || '']:   'CONCIERGE',
+      [process.env.STRIPE_PRICE_IVY_CONCIERGE_USD || '']:   'CONCIERGE',
       [process.env.STRIPE_PRICE_B2B_TEAM_GBP || '']:         'B2B',
       [process.env.STRIPE_PRICE_B2B_TEAM_USD || '']:         'B2B',
       [process.env.STRIPE_PRICE_B2B_CHAMPION_GBP || '']:     'B2B',

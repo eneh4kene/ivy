@@ -36,13 +36,13 @@ export const IMPACT_WALLET_MONTHLY: Record<string, Record<Currency, number>> = {
 }
 
 // Maps internal tier enum → env var name fragment.
-// Env vars: STRIPE_PRICE_PRO_{GBP|USD}, STRIPE_PRICE_ELITE_{GBP|USD},
-//   STRIPE_PRICE_CONCIERGE_{GBP|USD}, STRIPE_PRICE_B2B_TEAM_{GBP|USD}
+// Env vars: STRIPE_PRICE_IVY_{GBP|USD}, STRIPE_PRICE_IVY_PLUS_{GBP|USD},
+//   STRIPE_PRICE_IVY_CONCIERGE_{GBP|USD}, STRIPE_PRICE_B2B_TEAM_{GBP|USD}
 // Coach plans use createCoachCheckoutSession (STRIPE_PRICE_COACH_{5|10|20}_{GBP|USD}).
 const TIER_ENV_NAME: Record<string, string> = {
-  PRO:       'PRO',
-  ELITE:     'ELITE',
-  CONCIERGE: 'CONCIERGE',
+  PRO:       'IVY',
+  ELITE:     'IVY_PLUS',
+  CONCIERGE: 'IVY_CONCIERGE',
   B2B:       'B2B_TEAM',
   COACH:     'COACH',
 }
