@@ -5,9 +5,9 @@
  * Ivy uses it to dispatch accumulated wallet donations monthly in batches.
  *
  * Setup required:
- * - Create an account at every.org/nonprofits or every.org/giving-api
- * - Get an API key from the Every.org dashboard
- * - Set EVERY_ORG_API_KEY in environment
+ * - Create an account at every.org/charity-api
+ * - Create an API Key (pk_live_...) and API Secret (sk_live_...) in the dashboard
+ * - Set EVERY_ORG_API_KEY and EVERY_ORG_API_SECRET in environment
  *
  * Donation flow:
  * 1. User completes workout → Donation record created in DB (status: PENDING)
@@ -25,14 +25,17 @@ const EVERY_ORG_BASE = 'https://api.every.org/v1'
 const EVERY_ORG_DONATE_BASE = 'https://www.every.org/api/v0.2'
 
 function getHeaders() {
+  const token = Buffer.from(
+    `${process.env.EVERY_ORG_API_KEY}:${process.env.EVERY_ORG_API_SECRET}`
+  ).toString('base64')
   return {
-    Authorization: `Bearer ${process.env.EVERY_ORG_API_KEY}`,
+    Authorization: `Basic ${token}`,
     'Content-Type': 'application/json',
   }
 }
 
 export async function searchNonprofit(query: string): Promise<EveryOrgNonprofit[]> {
-  if (!process.env.EVERY_ORG_API_KEY) return []
+  if (!process.env.EVERY_ORG_API_KEY || !process.env.EVERY_ORG_API_SECRET) return []
   try {
     const res = await axios.get(`${EVERY_ORG_BASE}/search`, {
       params: { q: query, causes: 'any' },
@@ -46,7 +49,7 @@ export async function searchNonprofit(query: string): Promise<EveryOrgNonprofit[
 }
 
 export async function getNonprofit(slug: string): Promise<EveryOrgNonprofit | null> {
-  if (!process.env.EVERY_ORG_API_KEY) return null
+  if (!process.env.EVERY_ORG_API_KEY || !process.env.EVERY_ORG_API_SECRET) return null
   try {
     const res = await axios.get(`${EVERY_ORG_BASE}/nonprofits/${slug}`, {
       headers: getHeaders(),
@@ -70,7 +73,7 @@ export async function dispatchDonation(params: {
   donorEmail: string
   description: string
 }): Promise<{ success: boolean; chargeId?: string; error?: string }> {
-  if (!process.env.EVERY_ORG_API_KEY) {
+  if (!process.env.EVERY_ORG_API_KEY || !process.env.EVERY_ORG_API_SECRET) {
     logger.warn('Every.org not configured — donation dispatch skipped')
     return { success: false, error: 'Every.org not configured' }
   }

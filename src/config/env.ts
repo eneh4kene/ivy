@@ -46,6 +46,10 @@ const envSchema = z.object({
   WHATSAPP_ACCESS_TOKEN: z.string().optional(),
   WHATSAPP_WEBHOOK_VERIFY_TOKEN: z.string().optional(),
 
+  // Every.org — charity donation dispatch
+  EVERY_ORG_API_KEY: z.string().optional(),
+  EVERY_ORG_API_SECRET: z.string().optional(),
+
   // Anthropic (call insight extraction + behavioural synthesis)
   ANTHROPIC_API_KEY: z.string().optional(),
 
