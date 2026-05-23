@@ -64,10 +64,15 @@ app.use((req, _res, next) => {
 
 // Health check
 app.get('/health', (_req, res) => {
+  const mem = process.memoryUsage();
   res.json({
     status: 'ok',
     timestamp: new Date().toISOString(),
     uptime: process.uptime(),
+    memory: {
+      rss: Math.round(mem.rss / 1024 / 1024) + 'MB',
+      heap: Math.round(mem.heapUsed / 1024 / 1024) + 'MB',
+    },
   });
 });
 
