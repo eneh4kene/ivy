@@ -11,21 +11,14 @@ const logger = winston.createLogger({
   ),
   defaultMeta: { service: 'ivy-backend' },
   transports: [
-    new winston.transports.File({ filename: 'logs/error.log', level: 'error' }),
-    new winston.transports.File({ filename: 'logs/combined.log' }),
+    // Always log to console — containers (Railway) capture stdout/stderr.
+    // File transports are omitted: the logs/ directory doesn't exist in the container.
+    new winston.transports.Console({
+      format: config.server.env === 'production'
+        ? winston.format.combine(winston.format.timestamp(), winston.format.json())
+        : winston.format.combine(winston.format.colorize(), winston.format.simple()),
+    }),
   ],
 });
-
-// If not in production, also log to console
-if (config.server.env !== 'production') {
-  logger.add(
-    new winston.transports.Console({
-      format: winston.format.combine(
-        winston.format.colorize(),
-        winston.format.simple()
-      ),
-    })
-  );
-}
 
 export default logger;
