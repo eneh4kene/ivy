@@ -52,3 +52,5 @@ dump.rdb
 ngrok.yml
 pricing_strategy.md
 recap.md
+.env.example
+*.md
