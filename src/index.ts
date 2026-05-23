@@ -26,13 +26,13 @@ const server = app.listen(PORT, () => {
 // Every Sunday at 9am UTC — weekly accountability buddy digests
 cron.schedule('0 9 * * 0', async () => {
   logger.info('Running weekly buddy digest...');
-  await buddyService.sendWeeklyDigests();
+  await buddyService.sendWeeklyDigests().catch((err) => logger.error('Buddy digest error:', err));
 });
 
 // Every Monday at 8am UTC — weekly coach client digest
 cron.schedule('0 8 * * 1', async () => {
   logger.info('Running weekly coach digest...');
-  await coachService.sendWeeklyDigestToAllCoaches();
+  await coachService.sendWeeklyDigestToAllCoaches().catch((err) => logger.error('Coach digest error:', err));
 });
 
 // Every 30 minutes — schedule ponder calls for due coaches
@@ -45,44 +45,52 @@ cron.schedule('*/30 * * * *', async () => {
 // 1st of every month at 2am UTC — dispatch accumulated wallet donations to charities
 cron.schedule('0 2 1 * *', async () => {
   logger.info('Running monthly charity donation dispatch...');
-  await dispatchPendingDonations();
+  await dispatchPendingDonations().catch((err) => logger.error('Donation dispatch error:', err));
 });
 
 // Every day at midnight UTC — schedule today's calls for all active users
 cron.schedule('0 0 * * *', async () => {
   logger.info('Scheduling daily calls...');
-  const users = await prisma.user.findMany({
-    where: { isActive: true, isOnboarded: true, subscriptionTier: { notIn: ['FREE', 'COACH'] } },
-    select: { id: true },
-  });
-  const today = new Date();
-  let scheduled = 0;
-  for (const user of users) {
-    try {
-      await callService.scheduleDailyCalls(user.id, today);
-      scheduled++;
-    } catch (err) {
-      logger.warn(`Failed to schedule calls for ${user.id}:`, err);
+  try {
+    const users = await prisma.user.findMany({
+      where: { isActive: true, isOnboarded: true, subscriptionTier: { notIn: ['FREE', 'COACH'] } },
+      select: { id: true },
+    });
+    const today = new Date();
+    let scheduled = 0;
+    for (const user of users) {
+      try {
+        await callService.scheduleDailyCalls(user.id, today);
+        scheduled++;
+      } catch (err) {
+        logger.warn(`Failed to schedule calls for ${user.id}:`, err);
+      }
     }
+    logger.info(`Scheduled calls for ${scheduled}/${users.length} users`);
+  } catch (err) {
+    logger.error('Daily call scheduling error:', err);
   }
-  logger.info(`Scheduled calls for ${scheduled}/${users.length} users`);
 });
 
 // Every day at 1am UTC — advance sprint and season statuses based on current date
 cron.schedule('0 1 * * *', async () => {
   logger.info('Advancing sprint and season statuses...');
-  await seasonService.advanceStatuses();
+  await seasonService.advanceStatuses().catch((err) => logger.error('Season advance error:', err));
 });
 
 // Every day at 3am UTC — recover calls stuck in IN_PROGRESS (Retell outage safety net)
 cron.schedule('0 3 * * *', async () => {
-  const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000);
-  const result = await prisma.call.updateMany({
-    where: { status: 'IN_PROGRESS', startedAt: { lt: twoHoursAgo } },
-    data: { status: 'FAILED', outcome: 'stuck_recovered' },
-  });
-  if (result.count > 0) {
-    logger.warn(`Recovered ${result.count} stuck IN_PROGRESS call(s)`);
+  try {
+    const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000);
+    const result = await prisma.call.updateMany({
+      where: { status: 'IN_PROGRESS', startedAt: { lt: twoHoursAgo } },
+      data: { status: 'FAILED', outcome: 'stuck_recovered' },
+    });
+    if (result.count > 0) {
+      logger.warn(`Recovered ${result.count} stuck IN_PROGRESS call(s)`);
+    }
+  } catch (err) {
+    logger.error('Stuck call recovery error:', err);
   }
 });
 
