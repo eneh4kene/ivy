@@ -27,11 +27,29 @@ process.stdout.write('[BOOT] message processor import done\n');
 
 const PORT = config.server.port;
 
+// Register exception handlers BEFORE listen so server errors are caught
+process.on('uncaughtException', (error: Error) => {
+  process.stdout.write(`[FATAL] Uncaught Exception: ${error.message}\n${error.stack}\n`);
+  process.exit(1);
+});
+
+process.on('unhandledRejection', (reason: unknown) => {
+  process.stdout.write(`[WARN] Unhandled Rejection: ${String(reason)}\n`);
+  // Do not re-throw — Prisma and Bull emit internal rejections on connection drops
+});
+
+process.stdout.write(`[BOOT] calling app.listen on port ${PORT}\n`);
+
 // Start server
 const server = app.listen(PORT, () => {
   logger.info(`🚀 Ivy Backend API running on port ${PORT}`);
   logger.info(`📝 Environment: ${config.server.env}`);
   logger.info(`🔗 Base URL: ${config.server.baseUrl}`);
+});
+
+server.on('error', (err: NodeJS.ErrnoException) => {
+  process.stdout.write(`[FATAL] Server failed to bind: ${err.code} ${err.message}\n`);
+  process.exit(1);
 });
 
 // Every Sunday at 9am UTC — weekly accountability buddy digests
@@ -129,17 +147,6 @@ const gracefulShutdown = async (signal: string) => {
 process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
 process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 
-// Handle unhandled promise rejections
-process.on('unhandledRejection', (reason: unknown) => {
-  logger.error('Unhandled Promise Rejection:', reason);
-  // Do not re-throw — Prisma and Bull emit internal rejections on connection drops
-  // that are non-fatal. Re-throwing crashes the process unnecessarily.
-});
-
-// Handle uncaught exceptions
-process.on('uncaughtException', (error: Error) => {
-  logger.error('Uncaught Exception:', error);
-  process.exit(1);
-});
+// (uncaughtException and unhandledRejection handlers registered above, before app.listen)
 
 export default server;
