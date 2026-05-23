@@ -1,18 +1,29 @@
+process.stdout.write('[BOOT] index.ts loaded\n');
+
 import { initSentry } from './lib/sentry';
+process.stdout.write('[BOOT] sentry import done\n');
 initSentry(); // must be first
+process.stdout.write('[BOOT] sentry init done\n');
 
 import app from './app';
+process.stdout.write('[BOOT] app import done\n');
 import { config } from './config';
+process.stdout.write('[BOOT] config import done\n');
 import logger from './utils/logger';
+process.stdout.write('[BOOT] logger import done\n');
 import prisma from './utils/prisma';
+process.stdout.write('[BOOT] prisma import done\n');
 import cron from 'node-cron';
 import buddyService from './services/buddy.service';
 import { dispatchPendingDonations } from './services/every-org.service';
 import callService from './services/call.service';
 import seasonService from './services/season.service';
 import coachService from './services/coach.service';
+process.stdout.write('[BOOT] service imports done\n');
 import './workers/call.processor';    // start call Bull worker
+process.stdout.write('[BOOT] call processor import done\n');
 import './workers/message.processor'; // start message Bull worker
+process.stdout.write('[BOOT] message processor import done\n');
 
 const PORT = config.server.port;
 
