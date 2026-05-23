@@ -23,27 +23,31 @@ function buildRedisConfig(): { host: string; port: number; password?: string; tl
 const redisOptions = buildRedisConfig();
 
 // Create queues
+// settings.stalledInterval and guardInterval reduce how often Bull polls Redis
+// for stalled jobs — default is every 5s which burns through Upstash free-tier limits fast.
+const conservativeSettings = {
+  stalledInterval: 300000, // check for stalled jobs every 5 min instead of 5s
+  guardInterval: 300000,   // internal guard loop every 5 min
+  retryProcessDelay: 5000,
+};
+
 export const callScheduleQueue = new Queue('call-schedule', {
   redis: redisOptions,
+  ...conservativeSettings,
   defaultJobOptions: {
     attempts: 3,
-    backoff: {
-      type: 'exponential',
-      delay: 2000,
-    },
-    removeOnComplete: 100, // Keep last 100 completed jobs
-    removeOnFail: 500, // Keep last 500 failed jobs
+    backoff: { type: 'exponential', delay: 2000 },
+    removeOnComplete: 100,
+    removeOnFail: 500,
   },
 });
 
 export const messageQueue = new Queue('messages', {
   redis: redisOptions,
+  ...conservativeSettings,
   defaultJobOptions: {
     attempts: 3,
-    backoff: {
-      type: 'exponential',
-      delay: 1000,
-    },
+    backoff: { type: 'exponential', delay: 1000 },
     removeOnComplete: 100,
     removeOnFail: 500,
   },
@@ -51,6 +55,7 @@ export const messageQueue = new Queue('messages', {
 
 export const donationQueue = new Queue('donations', {
   redis: redisOptions,
+  ...conservativeSettings,
   defaultJobOptions: {
     attempts: 2,
     removeOnComplete: 50,
