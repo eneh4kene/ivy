@@ -119,9 +119,10 @@ process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
 process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 
 // Handle unhandled promise rejections
-process.on('unhandledRejection', (reason: Error) => {
+process.on('unhandledRejection', (reason: unknown) => {
   logger.error('Unhandled Promise Rejection:', reason);
-  throw reason;
+  // Do not re-throw — Prisma and Bull emit internal rejections on connection drops
+  // that are non-fatal. Re-throwing crashes the process unnecessarily.
 });
 
 // Handle uncaught exceptions
