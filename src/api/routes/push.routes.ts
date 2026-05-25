@@ -1,4 +1,4 @@
-import { Router, Request, Response } from 'express'
+import { Router, Request, Response, NextFunction } from 'express'
 import { authenticate } from '../../middleware/auth'
 import { subscribeDevice, unsubscribeDevice } from '../../services/push.service'
 
@@ -13,9 +13,9 @@ router.get('/vapid-public-key', (_req: Request, res: Response): void => {
   res.json({ success: true, data: { publicKey: key } })
 })
 
-router.post('/subscribe', authenticate, async (req: Request, res: Response): Promise<void> => {
+router.post('/subscribe', authenticate, async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
-    const userId = (req as any).user.userId
+    const userId = (req as any).user.id
     const { subscription } = req.body
 
     if (!subscription?.endpoint || !subscription?.keys?.p256dh || !subscription?.keys?.auth) {
@@ -26,12 +26,12 @@ router.post('/subscribe', authenticate, async (req: Request, res: Response): Pro
     const userAgent = req.headers['user-agent']
     await subscribeDevice(userId, subscription, userAgent)
     res.json({ success: true, data: { message: 'Subscribed' } })
-  } catch {
-    res.status(500).json({ success: false, error: 'Failed to save subscription' })
+  } catch (err) {
+    next(err)
   }
 })
 
-router.post('/unsubscribe', authenticate, async (req: Request, res: Response): Promise<void> => {
+router.post('/unsubscribe', authenticate, async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     const { endpoint } = req.body
     if (!endpoint) {
@@ -40,8 +40,8 @@ router.post('/unsubscribe', authenticate, async (req: Request, res: Response): P
     }
     await unsubscribeDevice(endpoint)
     res.json({ success: true, data: { message: 'Unsubscribed' } })
-  } catch {
-    res.status(500).json({ success: false, error: 'Failed to remove subscription' })
+  } catch (err) {
+    next(err)
   }
 })
 

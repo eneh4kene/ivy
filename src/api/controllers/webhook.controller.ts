@@ -140,10 +140,10 @@ class WebhookController {
                     messagingService.sendMessage(
                       dbUserId,
                       `Ivy ponder summary:\n\n${summary.slice(0, 600)}\n\nAny programme area updates from our chat have been applied.`
-                    ).catch(() => {});
+                    ).catch((err) => logger.warn('Ponder summary message failed:', err));
                   }
                 })
-                .catch(() => {});
+                .catch((err) => logger.warn('Ponder coach lookup failed:', err));
             }
           }
           break;

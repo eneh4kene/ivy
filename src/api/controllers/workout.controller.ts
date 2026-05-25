@@ -20,11 +20,8 @@ class WorkoutController {
     next: NextFunction
   ): Promise<void> {
     try {
-      if (!req.user) {
-        throw new Error('User not authenticated');
-      }
 
-      const workout = await workoutService.createWorkout(req.user.id, req.body as CreateWorkoutInput);
+      const workout = await workoutService.createWorkout(req.user!.id, req.body as CreateWorkoutInput);
 
       sendCreated(res, workout);
     } catch (error) {
@@ -42,11 +39,8 @@ class WorkoutController {
     next: NextFunction
   ): Promise<void> {
     try {
-      if (!req.user) {
-        throw new Error('User not authenticated');
-      }
 
-      const workout = await workoutService.getWorkoutById(req.params.id, req.user.id);
+      const workout = await workoutService.getWorkoutById(req.params.id, req.user!.id);
 
       sendSuccess(res, workout);
     } catch (error) {
@@ -64,11 +58,8 @@ class WorkoutController {
     next: NextFunction
   ): Promise<void> {
     try {
-      if (!req.user) {
-        throw new Error('User not authenticated');
-      }
 
-      const result = await workoutService.getUserWorkouts(req.user.id, req.query as GetWorkoutsQueryInput);
+      const result = await workoutService.getUserWorkouts(req.user!.id, req.query as GetWorkoutsQueryInput);
 
       sendSuccess(res, result.workouts, 200, result.meta);
     } catch (error) {
@@ -86,11 +77,8 @@ class WorkoutController {
     next: NextFunction
   ): Promise<void> {
     try {
-      if (!req.user) {
-        throw new Error('User not authenticated');
-      }
 
-      const workout = await workoutService.updateWorkout(req.params.id, req.user.id, req.body as UpdateWorkoutInput);
+      const workout = await workoutService.updateWorkout(req.params.id, req.user!.id, req.body as UpdateWorkoutInput);
 
       sendSuccess(res, workout);
     } catch (error) {
@@ -108,11 +96,8 @@ class WorkoutController {
     next: NextFunction
   ): Promise<void> {
     try {
-      if (!req.user) {
-        throw new Error('User not authenticated');
-      }
 
-      const workout = await workoutService.completeWorkout(req.params.id, req.user.id, req.body as CompleteWorkoutInput);
+      const workout = await workoutService.completeWorkout(req.params.id, req.user!.id, req.body as CompleteWorkoutInput);
 
       sendSuccess(res, workout);
     } catch (error) {
@@ -130,11 +115,8 @@ class WorkoutController {
     next: NextFunction
   ): Promise<void> {
     try {
-      if (!req.user) {
-        throw new Error('User not authenticated');
-      }
 
-      await workoutService.deleteWorkout(req.params.id, req.user.id);
+      await workoutService.deleteWorkout(req.params.id, req.user!.id);
 
       sendSuccess(res, { message: 'Workout deleted successfully' });
     } catch (error) {

@@ -81,9 +81,8 @@ class AuthController {
     next: NextFunction
   ): Promise<void> {
     try {
-      // Only allow in development
       if (process.env.NODE_ENV !== 'development') {
-        sendSuccess(res, { message: 'This endpoint is only available in development mode' });
+        res.status(403).json({ success: false, error: 'This endpoint is only available in development mode' });
         return;
       }
 

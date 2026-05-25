@@ -21,11 +21,8 @@ class DonationController {
     next: NextFunction
   ): Promise<void> {
     try {
-      if (!req.user) {
-        throw new Error('User not authenticated');
-      }
 
-      const result = await donationService.getUserDonations(req.user.id, req.query as GetDonationsQueryInput);
+      const result = await donationService.getUserDonations(req.user!.id, req.query as GetDonationsQueryInput);
 
       sendSuccess(res, result.donations, 200, result.meta);
     } catch (error) {
@@ -43,11 +40,8 @@ class DonationController {
     next: NextFunction
   ): Promise<void> {
     try {
-      if (!req.user) {
-        throw new Error('User not authenticated');
-      }
 
-      const wallet = await donationService.getImpactWallet(req.user.id);
+      const wallet = await donationService.getImpactWallet(req.user!.id);
 
       sendSuccess(res, wallet);
     } catch (error) {
@@ -65,11 +59,8 @@ class DonationController {
     next: NextFunction
   ): Promise<void> {
     try {
-      if (!req.user) {
-        throw new Error('User not authenticated');
-      }
 
-      const stats = await donationService.getDonationStats(req.user.id);
+      const stats = await donationService.getDonationStats(req.user!.id);
 
       sendSuccess(res, stats);
     } catch (error) {
@@ -87,11 +78,8 @@ class DonationController {
     next: NextFunction
   ): Promise<void> {
     try {
-      if (!req.user) {
-        throw new Error('User not authenticated');
-      }
 
-      const wallet = await donationService.updateImpactWallet(req.user.id, req.body as UpdateImpactWalletInput);
+      const wallet = await donationService.updateImpactWallet(req.user!.id, req.body as UpdateImpactWalletInput);
 
       sendSuccess(res, wallet);
     } catch (error) {
