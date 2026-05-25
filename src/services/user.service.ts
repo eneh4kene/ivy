@@ -1,6 +1,6 @@
 import prisma from '../utils/prisma';
 import { CreateUserInput, UpdateUserInput } from '../types/user.schema';
-import { ConflictError, NotFoundError } from '../utils/errors';
+import { BadRequestError, ConflictError, NotFoundError } from '../utils/errors';
 import logger from '../utils/logger';
 import { IMPACT_WALLET_MONTHLY } from '../config/pricing';
 import seasonService from './season.service';
@@ -165,6 +165,11 @@ class UserService {
       where: { id: userId },
       select: { id: true, goal: true, morningCallTime: true, eveningCallTime: true, phone: true, subscriptionTier: true },
     });
+
+    // Coaches don't need a phone (they receive calls from their clients, not Ivy)
+    if (fullUser?.subscriptionTier !== 'COACH' && !fullUser?.phone) {
+      throw new BadRequestError('A phone number is required to complete onboarding.');
+    }
 
     const user = await prisma.user.update({
       where: { id: userId },
