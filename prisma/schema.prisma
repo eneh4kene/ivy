@@ -75,6 +75,9 @@ model User {
   // Role
   role           String  @default("user") // "user" | "superadmin"
 
+  // Messaging
+  telegramChatId     String?   @unique // set when user connects Telegram via deep link
+
   // Legal consent
   tcpaConsent        Boolean   @default(false) // US users — TCPA consent for AI calls
   tcpaConsentAt      DateTime? // timestamp of consent — required for TCPA compliance record
@@ -509,6 +512,7 @@ enum MessageChannel {
   SMS
   WHATSAPP
   EMAIL
+  TELEGRAM
 }
 
 enum MessageDirection {

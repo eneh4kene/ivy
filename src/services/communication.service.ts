@@ -286,7 +286,7 @@ async function sendTextualNudge(userId: string, situation: string): Promise<void
 
   const message = messages[situation]
   if (message) {
-    await messagingService.sendWhatsAppMessage(userId, message, 'nudge')
+    await messagingService.sendMessage(userId, message, 'nudge')
   }
 }
 

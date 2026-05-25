@@ -40,7 +40,10 @@ const envSchema = z.object({
   // Shared webhook signing secret (used for both outbound call webhooks and inbound call webhook)
   RETELL_WEBHOOK_SECRET: z.string().optional(),
 
-  // WhatsApp
+  // Telegram
+  TELEGRAM_BOT_TOKEN: z.string().optional(),
+
+  // WhatsApp (kept for reference, Telegram is now primary)
   WHATSAPP_BUSINESS_ACCOUNT_ID: z.string().optional(),
   WHATSAPP_PHONE_NUMBER_ID: z.string().optional(),
   WHATSAPP_ACCESS_TOKEN: z.string().optional(),

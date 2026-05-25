@@ -7,12 +7,11 @@ import { config } from '../config';
 import logger from '../utils/logger';
 import { logUsage } from '../services/usage.service';
 
-interface WhatsAppJobData {
+interface TelegramJobData {
   messageId: string;
   userId: string;
-  phone: string;
+  chatId: string;
   content: string;
-  userName: string;
 }
 
 interface SMSJobData {
@@ -22,49 +21,29 @@ interface SMSJobData {
   content: string;
 }
 
-async function fallbackToSms(job: Job<WhatsAppJobData>, reason: string) {
-  logger.warn(`WhatsApp ${reason} for message ${job.data.messageId} — falling back to SMS`);
-  await prisma.message.update({
-    where: { id: job.data.messageId },
-    data: { channel: 'SMS' },
-  });
-  await messageQueue.add('send-sms', {
-    messageId: job.data.messageId,
-    userId: job.data.userId,
-    phone: job.data.phone,
-    content: job.data.content,
-  });
-}
+messageQueue.process('send-telegram', async (job: Job<TelegramJobData>) => {
+  const { messageId, chatId, content, userId } = job.data;
 
-messageQueue.process('send-whatsapp', async (job: Job<WhatsAppJobData>) => {
-  const { messageId, phone, content } = job.data;
-
-  if (!config.whatsapp.accessToken || !config.whatsapp.phoneNumberId) {
-    await fallbackToSms(job, 'not configured');
-    return { fallback: 'sms' };
+  if (!config.telegram.botToken) {
+    logger.warn(`Telegram not configured — message ${messageId} not sent`);
+    await prisma.message.update({ where: { id: messageId }, data: { status: 'FAILED' } });
+    return { skipped: true };
   }
 
   try {
-    const response = await axios.post(
-      `https://graph.facebook.com/v18.0/${config.whatsapp.phoneNumberId}/messages`,
-      { messaging_product: 'whatsapp', to: phone, type: 'text', text: { body: content } },
-      { headers: { Authorization: `Bearer ${config.whatsapp.accessToken}`, 'Content-Type': 'application/json' } }
-    );
-
-    const waId = response.data.messages?.[0]?.id;
-    await prisma.message.update({
-      where: { id: messageId },
-      data: { status: 'SENT', whatsappId: waId },
+    await axios.post(`https://api.telegram.org/bot${config.telegram.botToken}/sendMessage`, {
+      chat_id: chatId,
+      text: content,
     });
 
-    await logUsage('whatsapp', 'whatsapp_message', 1, job.data.userId, { messageId, waId });
-    logger.info(`WhatsApp sent to ${phone}: ${waId}`);
-    return { success: true, waId };
+    await prisma.message.update({ where: { id: messageId }, data: { status: 'SENT' } });
+    await logUsage('telegram', 'telegram_message', 1, userId, { messageId, chatId });
+    logger.info(`Telegram message sent to chat ${chatId}`);
+    return { success: true };
   } catch (err: any) {
-    logger.error(`WhatsApp failed for ${phone}:`, err?.response?.data ?? err);
-    // Fall back to SMS on delivery failure rather than leaving the user in silence
-    await fallbackToSms(job, 'delivery failed');
-    return { fallback: 'sms' };
+    logger.error(`Telegram failed for chat ${chatId}:`, err?.response?.data ?? err);
+    await prisma.message.update({ where: { id: messageId }, data: { status: 'FAILED' } });
+    throw err;
   }
 });
 
@@ -84,11 +63,7 @@ messageQueue.process('send-sms', async (job: Job<SMSJobData>) => {
       to: phone,
     });
 
-    await prisma.message.update({
-      where: { id: messageId },
-      data: { status: 'SENT' },
-    });
-
+    await prisma.message.update({ where: { id: messageId }, data: { status: 'SENT' } });
     await logUsage('twilio', 'sms', 1, job.data.userId, { messageId, sid: message.sid });
     logger.info(`SMS sent to ${phone}: ${message.sid}`);
     return { success: true, sid: message.sid };

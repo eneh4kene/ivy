@@ -11,18 +11,13 @@ const router = Router();
 router.post('/retell', webhookController.handleRetellWebhook);
 
 /**
- * @route   GET /webhooks/whatsapp
- * @desc    Verify WhatsApp webhook
- * @access  Public (required by WhatsApp)
+ * @route   POST /webhooks/telegram
+ * @desc    Handle Telegram bot webhook updates
+ * @access  Public (Telegram sends updates here; always returns 200)
+ *
+ * Configure in Telegram: POST https://api.telegram.org/bot{TOKEN}/setWebhook?url={this URL}
  */
-router.get('/whatsapp', webhookController.verifyWhatsAppWebhook);
-
-/**
- * @route   POST /webhooks/whatsapp
- * @desc    Handle WhatsApp webhook events
- * @access  Public (verified by WhatsApp signature)
- */
-router.post('/whatsapp', webhookController.handleWhatsAppWebhook);
+router.post('/telegram', webhookController.handleTelegramWebhook);
 
 /**
  * @route   POST /webhooks/stripe

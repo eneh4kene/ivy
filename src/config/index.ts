@@ -34,6 +34,9 @@ export const config = {
     sipEndpoint: env.RETELL_SIP_ENDPOINT,
     webhookSecret: env.RETELL_WEBHOOK_SECRET,
   },
+  telegram: {
+    botToken: env.TELEGRAM_BOT_TOKEN,
+  },
   whatsapp: {
     businessAccountId: env.WHATSAPP_BUSINESS_ACCOUNT_ID,
     phoneNumberId: env.WHATSAPP_PHONE_NUMBER_ID,

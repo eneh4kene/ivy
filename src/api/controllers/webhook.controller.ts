@@ -170,69 +170,28 @@ class WebhookController {
   }
 
   /**
-   * Handle WhatsApp webhook events
-   * POST /webhooks/whatsapp
+   * Handle Telegram webhook updates
+   * POST /webhooks/telegram
    */
-  async handleWhatsAppWebhook(
-    req: Request,
-    res: Response,
-    next: NextFunction
-  ): Promise<void> {
+  async handleTelegramWebhook(req: Request, res: Response): Promise<void> {
     try {
-      const { entry } = req.body;
+      const update = req.body;
+      const message = update?.message;
 
-      if (!entry || entry.length === 0) {
-        sendSuccess(res, { received: true });
-        return;
+      if (message?.text) {
+        const chatId = String(message.chat.id);
+        const text: string = message.text;
+
+        logger.info(`Telegram message from chat ${chatId}: ${text}`);
+        await messagingService.handleTelegramUpdate(chatId, text, message.from?.id);
       }
 
-      for (const change of entry[0].changes || []) {
-        if (change.value?.messages) {
-          for (const message of change.value.messages) {
-            const phone = message.from;
-            const content = message.text?.body || '';
-
-            logger.info(`WhatsApp message received from ${phone}: ${content}`);
-
-            // Process incoming message
-            await messagingService.handleIncomingMessage(phone, content);
-          }
-        }
-
-        // Handle status updates (delivered, read, etc.)
-        if (change.value?.statuses) {
-          for (const status of change.value.statuses) {
-            const messageId = status.id;
-            const newStatus = status.status;
-
-            logger.info(`WhatsApp status update: ${messageId} -> ${newStatus}`);
-
-            // Update message status in database
-            // This would require mapping WhatsApp message ID to our message ID
-          }
-        }
-      }
-
-      sendSuccess(res, { received: true });
+      // Always respond 200 quickly — Telegram retries on non-200
+      res.status(200).json({ ok: true });
     } catch (error) {
-      next(error);
-    }
-  }
-
-  /**
-   * Verify WhatsApp webhook (required by WhatsApp)
-   * GET /webhooks/whatsapp
-   */
-  verifyWhatsAppWebhook(req: Request, res: Response): void {
-    const mode = req.query['hub.mode'];
-    const token = req.query['hub.verify_token'];
-    const challenge = req.query['hub.challenge'];
-
-    if (mode === 'subscribe' && token === config.whatsapp.webhookVerifyToken) {
-      logger.info('WhatsApp webhook verified');
-      res.status(200).send(challenge);
-    } else {
-      res.status(403).send('Verification failed');
+      // Still return 200 so Telegram doesn't retry
+      res.status(200).json({ ok: true });
+      logger.error('Telegram webhook error:', error);
     }
   }
 
