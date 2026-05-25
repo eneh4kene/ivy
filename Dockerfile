@@ -1,28 +1,33 @@
-FROM node:18-alpine
+FROM node:18-alpine AS builder
 
-# Prisma's schema engine binary requires OpenSSL — not present in Alpine by default
 RUN apk add --no-cache openssl
 
 WORKDIR /app
 
-# Copy package files
 COPY package*.json ./
 COPY prisma ./prisma/
 
-# Install dependencies
 RUN npm ci
 
-# Copy source code
 COPY . .
 
-# Generate Prisma client
-RUN npx prisma generate
+RUN npx prisma generate && npm run build
 
-# Build the application
-RUN npm run build
+# ── Production image ──────────────────────────────────────────────────────────
+FROM node:18-alpine
 
-# Expose port
-EXPOSE 3000
+RUN apk add --no-cache openssl
 
-# Start the application
-CMD ["npm", "start"]
+WORKDIR /app
+
+COPY package*.json ./
+COPY prisma ./prisma/
+
+RUN npm ci --omit=dev && npx prisma generate
+
+COPY --from=builder /app/dist ./dist
+
+EXPOSE 8080
+
+# Run migrations then start
+CMD ["sh", "-c", "npx prisma migrate deploy && node dist/index.js"]
