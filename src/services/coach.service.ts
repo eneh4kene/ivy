@@ -227,9 +227,6 @@ class CoachService {
     });
     if (!coach) throw new NotFoundError('Coach not found');
 
-    const clientCount = await prisma.user.count({ where: { coachId } });
-    if (clientCount >= 20) throw new BadRequestError('Client limit reached for your plan');
-
     const profile = coach.coachProfile as any;
     const brand = (profile?.whitelabelEnabled && profile?.brandName)
       ? { name: profile.brandName, logoUrl: profile.brandLogoUrl ?? null }

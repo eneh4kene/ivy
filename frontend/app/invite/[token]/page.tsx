@@ -26,8 +26,7 @@ export default function InvitePage() {
 
   useEffect(() => {
     inviteApi.getInfo(token)
-      .then(setInfo)
-      .then(() => setState('ready'))
+      .then((data) => { setInfo(data); setState('ready') })
       .catch(() => setState('invalid'))
   }, [token])
 
@@ -38,6 +37,7 @@ export default function InvitePage() {
     setError('')
     try {
       await inviteApi.join(token, email.trim())
+      localStorage.setItem('ivy-invite-token', token)
       setState('submitted')
     } catch (err: any) {
       setError(err.response?.data?.error ?? 'Something went wrong — try again')

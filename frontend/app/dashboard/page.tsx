@@ -164,7 +164,7 @@ export default function DashboardPage() {
         </div>
         {!user?.telegramChatId && (
           <a
-            href={`https://t.me/${process.env.NEXT_PUBLIC_TELEGRAM_BOT_USERNAME ?? 'ivykeepsbot'}?start=${user?.id}`}
+            href={`https://t.me/${process.env.NEXT_PUBLIC_TELEGRAM_BOT_USERNAME ?? 'ivykeeps_bot'}?start=${user?.id}`}
             target="_blank"
             rel="noreferrer"
             className="hidden sm:flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium text-white border border-[#229ED9]/40 bg-[#229ED9]/10 hover:bg-[#229ED9]/20 transition-colors"
@@ -186,7 +186,7 @@ export default function DashboardPage() {
       {/* Telegram connect banner — shown until user connects */}
       {!user?.telegramChatId && (
         <a
-          href={`https://t.me/${process.env.NEXT_PUBLIC_TELEGRAM_BOT_USERNAME ?? 'ivykeepsbot'}?start=${user?.id}`}
+          href={`https://t.me/${process.env.NEXT_PUBLIC_TELEGRAM_BOT_USERNAME ?? 'ivykeeps_bot'}?start=${user?.id}`}
           target="_blank"
           rel="noreferrer"
           className="flex items-center gap-3 p-3.5 mb-6 rounded-xl border border-[#229ED9]/30 bg-[#229ED9]/5 hover:bg-[#229ED9]/10 transition-colors"

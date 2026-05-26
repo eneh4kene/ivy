@@ -36,12 +36,8 @@ class PaymentService {
       [process.env.STRIPE_PRICE_B2B_TEAM_USD || '']:         'B2B',
       [process.env.STRIPE_PRICE_B2B_CHAMPION_GBP || '']:     'B2B',
       [process.env.STRIPE_PRICE_B2B_CHAMPION_USD || '']:     'B2B',
-      [process.env.STRIPE_PRICE_COACH_5_GBP || '']:          'COACH',
-      [process.env.STRIPE_PRICE_COACH_5_USD || '']:          'COACH',
-      [process.env.STRIPE_PRICE_COACH_10_GBP || '']:         'COACH',
-      [process.env.STRIPE_PRICE_COACH_10_USD || '']:         'COACH',
-      [process.env.STRIPE_PRICE_COACH_20_GBP || '']:         'COACH',
-      [process.env.STRIPE_PRICE_COACH_20_USD || '']:         'COACH',
+      [process.env.STRIPE_PRICE_COACH_GBP || '']:            'COACH',
+      [process.env.STRIPE_PRICE_COACH_USD || '']:            'COACH',
     };
 
     return tierMap[priceId] || null;
@@ -145,20 +141,18 @@ class PaymentService {
   }
 
   /**
-   * Create Stripe checkout for coach plans (COACH_5 / COACH_10 / COACH_20)
+   * Create Stripe checkout for the coach plan (flat rate, unlimited clients)
    */
   async createCoachCheckoutSession(
     userId: string,
-    coachPlan: 'COACH_5' | 'COACH_10' | 'COACH_20',
     successUrl: string,
     cancelUrl: string,
     currency: Currency = 'GBP',
   ) {
     if (!this.stripe) throw new BadRequestError('Payment service not configured');
 
-    const priceEnvKey = `STRIPE_PRICE_${coachPlan}_${currency}`;
-    const priceId = process.env[priceEnvKey];
-    if (!priceId) throw new BadRequestError(`Coach price not configured: ${priceEnvKey}`);
+    const priceId = process.env[`STRIPE_PRICE_COACH_${currency}`];
+    if (!priceId) throw new BadRequestError(`Coach price not configured: STRIPE_PRICE_COACH_${currency}`);
 
     const user = await prisma.user.findUnique({ where: { id: userId } });
     if (!user) throw new NotFoundError('User not found');
@@ -178,14 +172,14 @@ class PaymentService {
       line_items: [{ price: priceId, quantity: 1 }],
       allow_promotion_codes: true,
       subscription_data: {
-        metadata: { userId, tier: 'COACH', coachPlan, currency },
+        metadata: { userId, tier: 'COACH', currency },
       },
       success_url: successUrl,
       cancel_url: cancelUrl,
-      metadata: { userId, tier: 'COACH', coachPlan, currency },
+      metadata: { userId, tier: 'COACH', currency },
     });
 
-    logger.info(`Coach checkout session created for user ${userId} — ${coachPlan}`);
+    logger.info(`Coach checkout session created for user ${userId}`);
     return { sessionId: session.id, url: session.url };
   }
 
@@ -368,6 +362,7 @@ class PaymentService {
 
     if (newTier) {
       await this.updateSubscriptionTier(userId, newTier, subscription.id);
+
     }
 
     // Update subscription status

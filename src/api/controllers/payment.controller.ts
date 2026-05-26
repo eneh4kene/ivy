@@ -70,14 +70,10 @@ class PaymentController {
       const userId = req.user?.id;
       if (!userId) { res.status(401).json({ success: false, error: 'Unauthorized' }); return; }
 
-      const { coachPlan, currency, successUrl, cancelUrl } = req.body;
-      const validPlans = ['COACH_5', 'COACH_10', 'COACH_20'];
-      if (!validPlans.includes(coachPlan)) {
-        res.status(400).json({ success: false, error: 'Invalid coach plan' }); return;
-      }
+      const { currency, successUrl, cancelUrl } = req.body;
 
       const session = await paymentService.createCoachCheckoutSession(
-        userId, coachPlan,
+        userId,
         successUrl || `${process.env.FRONTEND_URL}/coach?setup=1`,
         cancelUrl || `${process.env.FRONTEND_URL}/pricing`,
         currency || 'GBP',

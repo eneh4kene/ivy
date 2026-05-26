@@ -17,16 +17,10 @@ export const B2B_PRICES: Record<string, Record<Currency, number>> = {
   CHAMPION: { GBP: 65, USD: 79 },
 }
 
-// Coach tier: per-seat pricing based on client count
-// STRIPE_PRICE_COACH_5_GBP, STRIPE_PRICE_COACH_10_GBP, STRIPE_PRICE_COACH_20_GBP
-export const COACH_PRICES: Record<string, Record<Currency, number>> = {
-  COACH_5:  { GBP: 35,  USD: 45  }, // up to 5 clients
-  COACH_10: { GBP: 60,  USD: 75  }, // up to 10 clients
-  COACH_20: { GBP: 100, USD: 125 }, // up to 20 clients
-}
-
-export const COACH_CLIENT_LIMITS: Record<string, number> = {
-  COACH_5: 5, COACH_10: 10, COACH_20: 20,
+// Coach tier: flat monthly rate, unlimited clients
+// STRIPE_PRICE_COACH_GBP, STRIPE_PRICE_COACH_USD
+export const COACH_PRICE: Record<Currency, number> = {
+  GBP: 79, USD: 99,
 }
 
 export const IMPACT_WALLET_MONTHLY: Record<string, Record<Currency, number>> = {

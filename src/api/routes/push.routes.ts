@@ -1,5 +1,5 @@
 import { Router, Request, Response, NextFunction } from 'express'
-import { authenticate } from '../../middleware/auth'
+import { authenticate, AuthRequest } from '../../middleware/auth'
 import { subscribeDevice, unsubscribeDevice } from '../../services/push.service'
 
 const router = Router()
@@ -13,9 +13,9 @@ router.get('/vapid-public-key', (_req: Request, res: Response): void => {
   res.json({ success: true, data: { publicKey: key } })
 })
 
-router.post('/subscribe', authenticate, async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+router.post('/subscribe', authenticate, async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
   try {
-    const userId = (req as any).user.id
+    const userId = req.user!.id
     const { subscription } = req.body
 
     if (!subscription?.endpoint || !subscription?.keys?.p256dh || !subscription?.keys?.auth) {

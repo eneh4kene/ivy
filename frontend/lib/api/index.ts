@@ -254,8 +254,8 @@ export const paymentsApi = {
     return response.data
   },
 
-  createCoachCheckoutSession: async (coachPlan: 'COACH_5' | 'COACH_10' | 'COACH_20', currency: string = 'GBP') => {
-    const response = await client.post<ApiResponse<{ sessionId: string; url: string }>>('/api/payments/coach-checkout', { coachPlan, currency })
+  createCoachCheckoutSession: async (currency: string = 'GBP') => {
+    const response = await client.post<ApiResponse<{ sessionId: string; url: string }>>('/api/payments/coach-checkout', { currency })
     return response.data.data!
   },
 }

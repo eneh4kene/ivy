@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { useAuthStore } from '@/lib/store/auth.store'
 import { getTierName, getTierFeatures } from '@/lib/permissions'
@@ -10,9 +10,10 @@ import { paymentsApi } from '@/lib/api'
 import type { SubscriptionTier } from '@/lib/types'
 import {
   Check, Leaf, ArrowLeft, Zap, Crown, Star, Users, ArrowRight, HelpCircle,
-  Phone, Shield, Calendar, Heart, TrendingUp, MessageCircle, Flame, Sparkles, Dumbbell
+  Phone, Shield, Calendar, Heart, TrendingUp, MessageCircle, Flame, Sparkles, Dumbbell, UserCheck
 } from 'lucide-react'
-import { COACH_PRICES } from '@/lib/pricing'
+import { inviteApi } from '@/lib/api'
+import { COACH_PRICE } from '@/lib/pricing'
 
 const paidTiers: SubscriptionTier[] = ['PRO', 'ELITE', 'CONCIERGE']
 
@@ -98,11 +99,14 @@ function getFaq(currency: Currency) {
   ]
 }
 
+type InviteContext = { coachName: string; programmeName: string; displayName: string | null; logoUrl: string | null }
+
 export default function PricingPage() {
   const user = useAuthStore((state) => state.user)
   const currentTier = user?.subscriptionTier || 'FREE'
   const [loading, setLoading] = useState<string | null>(null)
   const [openFaq, setOpenFaq] = useState<number | null>(null)
+  const [inviteContext, setInviteContext] = useState<InviteContext | null>(null)
   const [currency, setCurrency] = useState<Currency>(() => {
     if (typeof window !== 'undefined') {
       try {
@@ -120,6 +124,18 @@ export default function PricingPage() {
     return ''
   })
   const [promoApplied, setPromoApplied] = useState(false)
+
+  useEffect(() => {
+    if (user?.isOnboarded) {
+      localStorage.removeItem('ivy-invite-token')
+      return
+    }
+    const storedToken = localStorage.getItem('ivy-invite-token')
+    if (!storedToken) return
+    inviteApi.getInfo(storedToken)
+      .then(setInviteContext)
+      .catch(() => localStorage.removeItem('ivy-invite-token'))
+  }, [user?.isOnboarded])
 
   const handleUpgrade = async (tier: SubscriptionTier) => {
     if (!user) {
@@ -158,6 +174,27 @@ export default function PricingPage() {
           )}
         </div>
       </nav>
+
+      {/* Coach invite context banner */}
+      {inviteContext && !user?.isOnboarded && (
+        <div className="max-w-3xl mx-auto px-4 pt-8">
+          <div className="flex items-start gap-3 p-4 rounded-xl border border-primary/20 bg-primary/5">
+            <div className="w-8 h-8 rounded-lg bg-primary/15 flex items-center justify-center flex-shrink-0 mt-0.5">
+              <UserCheck className="w-4 h-4 text-primary" />
+            </div>
+            <div>
+              <p className="text-sm font-medium">
+                {inviteContext.displayName
+                  ? `${inviteContext.displayName} runs on Ivy`
+                  : `${inviteContext.coachName} invited you to join ${inviteContext.programmeName}`}
+              </p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Choose a plan below to get started — your coach will be able to see your accountability data from day one.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Header */}
       <section className="max-w-3xl mx-auto px-4 py-16 text-center">
@@ -410,57 +447,44 @@ export default function PricingPage() {
         <div className="relative rounded-2xl border border-amber-500/20 bg-amber-500/5 p-8 sm:p-10 overflow-hidden">
           <div className="absolute top-0 right-0 w-64 h-64 bg-amber-500/8 rounded-full blur-3xl" />
           <div className="relative">
-            <div className="flex items-center gap-3 mb-2">
-              <div className="w-10 h-10 rounded-xl bg-amber-500/15 border border-amber-500/25 flex items-center justify-center">
-                <Dumbbell className="w-5 h-5 text-amber-400" />
+            <div className="flex items-center justify-between flex-wrap gap-4 mb-2">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-amber-500/15 border border-amber-500/25 flex items-center justify-center">
+                  <Dumbbell className="w-5 h-5 text-amber-400" />
+                </div>
+                <div>
+                  <h2 className="text-2xl font-bold tracking-tight">Ivy for Coaches</h2>
+                  <p className="text-sm text-muted-foreground">Daily AI accountability for your clients — between every session</p>
+                </div>
               </div>
-              <div>
-                <h2 className="text-2xl font-bold tracking-tight">Ivy for Coaches</h2>
-                <p className="text-sm text-muted-foreground">Daily AI accountability for your clients — between every session</p>
+              <div className="flex items-baseline gap-1">
+                <span className="text-3xl font-bold text-amber-400">{CURRENCY_SYMBOL[currency]}{COACH_PRICE[currency]}</span>
+                <span className="text-sm text-muted-foreground">/mo · unlimited clients</span>
               </div>
             </div>
             <p className="text-sm text-muted-foreground mb-8 max-w-2xl">
               Ivy calls your clients every morning and evening, extracts what they said, and surfaces it in your dashboard. Your coaching notes feed directly into every call. Optional: present it as your own brand.
             </p>
-            <div className="grid sm:grid-cols-3 gap-4 mb-8">
-              {([
-                { planKey: 'COACH_5' as const, label: 'Starter', clients: 5 },
-                { planKey: 'COACH_10' as const, label: 'Growth', clients: 10 },
-                { planKey: 'COACH_20' as const, label: 'Pro', clients: 20 },
-              ]).map((plan) => {
-                const price = COACH_PRICES[plan.planKey]?.[currency]
-                return (
-                  <div key={plan.planKey} className="bg-background/50 border border-border/60 rounded-xl p-5">
-                    <h3 className="font-bold mb-1">{plan.label}</h3>
-                    <div className="flex items-baseline gap-1 mb-1">
-                      <span className="text-2xl font-bold text-amber-400">{CURRENCY_SYMBOL[currency]}{price}</span>
-                      <span className="text-xs text-muted-foreground">/mo</span>
-                    </div>
-                    <p className="text-xs text-muted-foreground mb-4">Up to {plan.clients} clients</p>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="w-full border-amber-500/30 text-amber-400 hover:bg-amber-500/10"
-                      onClick={async () => {
-                        try {
-                          const session = await paymentsApi.createCoachCheckoutSession(plan.planKey, currency)
-                          if (session?.url) window.location.href = session.url
-                        } catch (e) { console.error(e) }
-                      }}
-                    >
-                      Get started
-                    </Button>
-                  </div>
-                )
-              })}
-            </div>
-            <ul className="grid sm:grid-cols-2 gap-2">
+            <ul className="grid sm:grid-cols-2 gap-2 mb-8">
               {getTierFeatures('COACH').map((f) => (
                 <li key={f} className="flex items-center gap-2 text-sm text-muted-foreground">
                   <Check className="w-3.5 h-3.5 text-amber-400 flex-shrink-0" />{f}
                 </li>
               ))}
             </ul>
+            <Button
+              size="lg"
+              variant="outline"
+              className="border-amber-500/30 text-amber-400 hover:bg-amber-500/10"
+              onClick={async () => {
+                try {
+                  const session = await paymentsApi.createCoachCheckoutSession(currency)
+                  if (session?.url) window.location.href = session.url
+                } catch (e) { console.error(e) }
+              }}
+            >
+              Get started <ArrowRight className="w-4 h-4 ml-2" />
+            </Button>
           </div>
         </div>
       </section>

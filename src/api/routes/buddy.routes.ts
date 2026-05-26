@@ -1,21 +1,22 @@
 import { Router } from 'express';
 import { authenticate } from '../../middleware/auth';
+import { AuthRequest } from '../../middleware/auth';
 import buddyService from '../../services/buddy.service';
 import { sendSuccess } from '../../utils/response';
 
 const router = Router();
 router.use(authenticate);
 
-router.get('/', async (req: any, res, next) => {
+router.get('/', async (req: AuthRequest, res, next) => {
   try {
-    const buddy = await buddyService.getBuddy(req.user.userId);
+    const buddy = await buddyService.getBuddy(req.user!.id);
     sendSuccess(res, buddy);
   } catch (e) {
     next(e);
   }
 });
 
-router.post('/', async (req: any, res, next) => {
+router.post('/', async (req: AuthRequest, res, next) => {
   try {
     const { buddyName, buddyEmail, buddyPhone } = req.body;
     if (!buddyName || (!buddyEmail && !buddyPhone)) {
@@ -27,7 +28,7 @@ router.post('/', async (req: any, res, next) => {
       });
       return;
     }
-    const buddy = await buddyService.setBuddy(req.user.userId, {
+    const buddy = await buddyService.setBuddy(req.user!.id, {
       buddyName,
       buddyEmail,
       buddyPhone,
@@ -38,9 +39,9 @@ router.post('/', async (req: any, res, next) => {
   }
 });
 
-router.delete('/', async (req: any, res, next) => {
+router.delete('/', async (req: AuthRequest, res, next) => {
   try {
-    await buddyService.removeBuddy(req.user.userId);
+    await buddyService.removeBuddy(req.user!.id);
     sendSuccess(res, { removed: true });
   } catch (e) {
     next(e);

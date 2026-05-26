@@ -712,7 +712,7 @@ export default function SettingsPage() {
                 size="sm"
                 className="bg-[#229ED9] hover:bg-[#1a8bbf] text-white"
                 onClick={() => window.open(
-                  `https://t.me/${process.env.NEXT_PUBLIC_TELEGRAM_BOT_USERNAME ?? 'ivykeepsbot'}?start=${user?.id}`,
+                  `https://t.me/${process.env.NEXT_PUBLIC_TELEGRAM_BOT_USERNAME ?? 'ivykeeps_bot'}?start=${user?.id}`,
                   '_blank'
                 )}
               >
