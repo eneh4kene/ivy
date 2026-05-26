@@ -27,6 +27,7 @@ export interface User {
   preferredDays?: string
   googleCalendarConnected: boolean
   outlookCalendarConnected: boolean
+  telegramChatId?: string | null
   isActive: boolean
   isOnboarded: boolean
   onboardedAt?: string

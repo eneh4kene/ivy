@@ -86,6 +86,7 @@ class UserService {
         preferredDays: true,
         googleCalendarConnected: true,
         outlookCalendarConnected: true,
+        telegramChatId: true,
         isActive: true,
         isOnboarded: true,
         onboardedAt: true,

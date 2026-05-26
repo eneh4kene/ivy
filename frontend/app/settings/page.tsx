@@ -9,7 +9,7 @@ import { getTierName, getTierPrice } from '@/lib/permissions'
 import { useCurrencyStore } from '@/lib/store/currency.store'
 import api, { buddyApi, donationsApi } from '@/lib/api'
 import type { UpdateProfileInput, AccountabilityBuddy } from '@/lib/types'
-import { User, Phone, Clock, Target, CreditCard, Trash2, Download, CheckCircle2, AlertCircle, ChevronRight, Users, Bell, BellOff, Heart, Loader2, ShieldCheck } from 'lucide-react'
+import { User, Phone, Clock, Target, CreditCard, Trash2, Download, CheckCircle2, AlertCircle, ChevronRight, Users, Bell, BellOff, Heart, Loader2, ShieldCheck, MessageCircle } from 'lucide-react'
 import { usePushNotifications } from '@/hooks/usePushNotifications'
 
 function SectionCard({ title, description, icon: Icon, children }: {
@@ -112,6 +112,7 @@ export default function SettingsPage() {
   })
   const [deletingAccount, setDeletingAccount] = useState(false)
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
+  const [telegramDisconnecting, setTelegramDisconnecting] = useState(false)
 
   useEffect(() => {
     buddyApi.get().then((b) => setBuddy(b ?? null)).catch(console.error).finally(() => setBuddyLoading(false))
@@ -662,6 +663,63 @@ export default function SettingsPage() {
             </div>
           </SectionCard>
         )}
+
+        {/* Telegram */}
+        <SectionCard
+          title="Telegram"
+          description="Chat with Ivy on Telegram — reply any time, send voice notes"
+          icon={MessageCircle}
+        >
+          {user?.telegramChatId ? (
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="w-2 h-2 rounded-full bg-emerald-400" />
+                <div>
+                  <p className="text-sm font-medium text-foreground">Connected</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">Ivy will message you here alongside your calls</p>
+                </div>
+              </div>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={telegramDisconnecting}
+                onClick={async () => {
+                  setTelegramDisconnecting(true)
+                  try {
+                    await api.users.disconnectTelegram()
+                    setUser({ ...user, telegramChatId: null })
+                    showToast('Telegram disconnected')
+                  } catch {
+                    showToast('Failed to disconnect Telegram', 'error')
+                  } finally {
+                    setTelegramDisconnecting(false)
+                  }
+                }}
+              >
+                {telegramDisconnecting
+                  ? <span className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                  : 'Disconnect'}
+              </Button>
+            </div>
+          ) : (
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-foreground">Not connected</p>
+                <p className="text-xs text-muted-foreground mt-0.5">Tap to open Telegram and link your account</p>
+              </div>
+              <Button
+                size="sm"
+                className="bg-[#229ED9] hover:bg-[#1a8bbf] text-white"
+                onClick={() => window.open(
+                  `https://t.me/${process.env.NEXT_PUBLIC_TELEGRAM_BOT_USERNAME ?? 'ivykeepsbot'}?start=${user?.id}`,
+                  '_blank'
+                )}
+              >
+                Connect Telegram
+              </Button>
+            </div>
+          )}
+        </SectionCard>
 
         {/* Charity */}
         <SectionCard title="Your Cause" description={`Choose up to ${charityLimit === 999 ? 'unlimited' : charityLimit} charities — your wallet splits equally`} icon={Heart}>

@@ -196,6 +196,7 @@ class AuthService {
         morningCallTime: true,
         eveningCallTime: true,
         callFrequency: true,
+        telegramChatId: true,
       },
     });
 

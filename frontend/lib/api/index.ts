@@ -77,6 +77,11 @@ export const usersApi = {
     return response.data
   },
 
+  disconnectTelegram: async () => {
+    const response = await client.delete<ApiResponse>('/api/users/me/telegram')
+    return response.data
+  },
+
   deleteAccount: async () => {
     const response = await client.delete<ApiResponse>('/api/users/me')
     return response.data

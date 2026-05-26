@@ -4,6 +4,7 @@ import { validate } from '../../middleware/validate';
 import { authenticate, AuthRequest } from '../../middleware/auth';
 import { createUserSchema, updateUserSchema, getUserByIdSchema } from '../../types/user.schema';
 import phoneVerifyService from '../../services/phone-verify.service';
+import prisma from '../../utils/prisma';
 
 const router = Router();
 
@@ -61,6 +62,22 @@ router.get(
   '/me/export',
   authenticate,
   userController.exportMyData
+);
+
+/**
+ * @route   DELETE /api/users/me/telegram
+ * @desc    Disconnect Telegram — clears telegramChatId
+ * @access  Private
+ */
+router.delete(
+  '/me/telegram',
+  authenticate,
+  async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      await prisma.user.update({ where: { id: req.user!.id }, data: { telegramChatId: null } });
+      res.json({ success: true, data: { message: 'Telegram disconnected' } });
+    } catch (err) { next(err); }
+  }
 );
 
 /**
