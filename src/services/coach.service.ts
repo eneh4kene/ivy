@@ -46,6 +46,7 @@ class CoachService {
         coachNotes: true,
         isOnboarded: true,
         lastCallAt: true,
+        telegramChatId: true,
         streaks: { select: { currentStreak: true, longestStreak: true } },
         calls: {
           where: { status: { in: ['COMPLETED', 'NO_ANSWER'] } },
@@ -187,14 +188,16 @@ class CoachService {
   async removeClient(coachId: string, clientId: string) {
     const client = await prisma.user.findFirst({ where: { id: clientId, coachId } });
     if (!client) throw new NotFoundError('Client not found');
+    // Coaches can only assign FREE or PRO to clients — ELITE/CONCIERGE/B2B mean the
+    // client had an independent paid subscription before or after being linked.
+    // Revert coach-managed tiers to FREE; preserve independently-paid tiers.
+    const coachManagedTiers = ['FREE', 'PRO'];
+    const tierAfterRemoval = coachManagedTiers.includes(client.subscriptionTier)
+      ? 'FREE'
+      : client.subscriptionTier;
     await prisma.user.update({
       where: { id: clientId },
-      data: {
-        coachId: null,
-        coachNotes: null,
-        // Revert to FREE — coach is no longer covering their subscription
-        subscriptionTier: 'FREE',
-      },
+      data: { coachId: null, coachNotes: null, subscriptionTier: tierAfterRemoval },
     });
   }
 
@@ -401,7 +404,7 @@ class CoachService {
       '- At the end, summarise the key decisions made.',
       '- Keep it under 10 minutes unless the coach wants to go deeper.',
       '',
-      'After this call, you will send a WhatsApp summary of decisions to this number.',
+      'After this call, you will send a Telegram message summarising the key decisions made.',
     );
 
     return lines.join('\n');

@@ -10,7 +10,7 @@ import api, { seasonsApi } from '@/lib/api'
 import type { Stats, Season, Streak } from '@/lib/types'
 import {
   Zap, Heart, TrendingUp, ArrowRight, Plus, CheckCircle,
-  BarChart3, Flame, Trophy, ChevronRight, Target, Shield, Phone
+  BarChart3, Flame, Trophy, ChevronRight, Target, Shield, Phone, MessageCircle
 } from 'lucide-react'
 
 function StatCard({ label, value, sub, icon: Icon, accent = false }: {
@@ -162,6 +162,17 @@ export default function DashboardPage() {
           </div>
           <p className="text-muted-foreground">Here's your accountability dashboard</p>
         </div>
+        {!user?.telegramChatId && (
+          <a
+            href={`https://t.me/${process.env.NEXT_PUBLIC_TELEGRAM_BOT_USERNAME ?? 'ivykeepsbot'}?start=${user?.id}`}
+            target="_blank"
+            rel="noreferrer"
+            className="hidden sm:flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium text-white border border-[#229ED9]/40 bg-[#229ED9]/10 hover:bg-[#229ED9]/20 transition-colors"
+          >
+            <MessageCircle className="w-3.5 h-3.5 text-[#229ED9]" />
+            Connect Telegram
+          </a>
+        )}
         {showUpgrade && (
           <Link href="/pricing" className="hidden sm:block">
             <Button variant="outline" size="sm">
@@ -171,6 +182,25 @@ export default function DashboardPage() {
           </Link>
         )}
       </div>
+
+      {/* Telegram connect banner — shown until user connects */}
+      {!user?.telegramChatId && (
+        <a
+          href={`https://t.me/${process.env.NEXT_PUBLIC_TELEGRAM_BOT_USERNAME ?? 'ivykeepsbot'}?start=${user?.id}`}
+          target="_blank"
+          rel="noreferrer"
+          className="flex items-center gap-3 p-3.5 mb-6 rounded-xl border border-[#229ED9]/30 bg-[#229ED9]/5 hover:bg-[#229ED9]/10 transition-colors"
+        >
+          <div className="w-8 h-8 rounded-lg bg-[#229ED9]/15 flex items-center justify-center shrink-0">
+            <MessageCircle className="w-4 h-4 text-[#229ED9]" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-medium">Connect Telegram</p>
+            <p className="text-xs text-muted-foreground">Message Ivy any time, send voice notes — tap to link your account</p>
+          </div>
+          <ArrowRight className="w-4 h-4 text-[#229ED9] shrink-0" />
+        </a>
+      )}
 
       {/* Stats grid */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-6">

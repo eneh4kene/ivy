@@ -547,6 +547,7 @@ export interface CoachClient {
   id: string; firstName: string; lastName: string; email: string
   track: string; goal: string; coachNotes?: string
   isOnboarded: boolean; lastCallAt?: string
+  telegramChatId?: string | null
   currentStreak: number; lastCallSentiment?: string
   recentMissedCount: number; needsAttention: boolean
   calls: { callType: string; status: string; sentiment?: string; scheduledAt: string; callSummary?: string }[]

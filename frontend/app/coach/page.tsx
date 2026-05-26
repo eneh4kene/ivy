@@ -6,7 +6,7 @@ import { useAuthStore } from '@/lib/store/auth.store'
 import Link from 'next/link'
 import {
   Users, AlertTriangle, TrendingUp, Plus, Loader2,
-  ChevronRight, Settings, Flame, Phone
+  ChevronRight, Settings, Flame, Phone, MessageCircle
 } from 'lucide-react'
 
 function StatusDot({ needsAttention, missed }: { needsAttention: boolean; missed: number }) {
@@ -215,6 +215,9 @@ function ClientCard({ client }: { client: CoachClient }) {
                 </span>
               )}
               <span className="text-xs text-muted-foreground capitalize">{client.track}</span>
+              <span title={client.telegramChatId ? 'Telegram connected' : 'Telegram not connected'}>
+                <MessageCircle className={`w-3 h-3 ${client.telegramChatId ? 'text-[#229ED9]' : 'text-muted-foreground/30'}`} />
+              </span>
             </div>
           </div>
           <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0" />
