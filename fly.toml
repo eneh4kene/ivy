@@ -7,21 +7,37 @@ primary_region = "lhr"
   NODE_ENV = "production"
   PORT = "8080"
 
+# ── API process ────────────────────────────────────────────────────────────────
+# Handles all HTTP traffic. Workers are NOT started here.
 [http_service]
   internal_port = 8080
   force_https = true
   auto_stop_machines = "stop"
   auto_start_machines = true
   min_machines_running = 1
+  processes = ["app"]
 
   [http_service.concurrency]
     type = "connections"
     hard_limit = 100
     soft_limit = 80
 
+# ── Process definitions ────────────────────────────────────────────────────────
+[processes]
+  # API server — no workers
+  app = "node dist/index.js"
+  # Worker — Bull queues only, always exactly 1 machine
+  worker = "node dist/worker.js"
+
 [[vm]]
   size = "shared-cpu-1x"
   memory = "512mb"
+  processes = ["app"]
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "256mb"
+  processes = ["worker"]
 
 [checks]
   [checks.health]
@@ -32,3 +48,4 @@ primary_region = "lhr"
     port = 8080
     timeout = "5s"
     type = "http"
+    processes = ["app"]
