@@ -77,6 +77,16 @@ export const usersApi = {
     return response.data
   },
 
+  acceptCoachInvite: async () => {
+    const response = await client.post<ApiResponse<User>>('/api/users/me/coach/accept')
+    return response.data.data!
+  },
+
+  leaveCoach: async () => {
+    const response = await client.delete<ApiResponse>('/api/users/me/coach')
+    return response.data
+  },
+
   disconnectTelegram: async () => {
     const response = await client.delete<ApiResponse>('/api/users/me/telegram')
     return response.data

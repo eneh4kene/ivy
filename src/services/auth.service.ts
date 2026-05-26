@@ -197,6 +197,7 @@ class AuthService {
         eveningCallTime: true,
         callFrequency: true,
         telegramChatId: true,
+        pendingCoachId: true,
       },
     });
 

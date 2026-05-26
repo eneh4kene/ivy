@@ -5,16 +5,18 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { useAuthStore } from '@/lib/store/auth.store'
-import { paymentsApi } from '@/lib/api'
-import { Leaf, CheckCircle2, XCircle, ArrowRight } from 'lucide-react'
+import api, { paymentsApi } from '@/lib/api'
+import { Leaf, CheckCircle2, XCircle, ArrowRight, Users } from 'lucide-react'
 
 function VerifyContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const verifyMagicLink = useAuthStore((state) => state.verifyMagicLink)
+  const setUser = useAuthStore((state) => state.setUser)
   const user = useAuthStore((state) => state.user)
-  const [status, setStatus] = useState<'verifying' | 'success' | 'error'>('verifying')
+  const [status, setStatus] = useState<'verifying' | 'success' | 'coach_consent' | 'error'>('verifying')
   const [error, setError] = useState('')
+  const [coachAction, setCoachAction] = useState<'idle' | 'loading'>('idle')
 
   useEffect(() => {
     const token = searchParams.get('token')
@@ -27,19 +29,24 @@ function VerifyContent() {
     const plan = searchParams.get('plan')
     verifyMagicLink(token)
       .then(async () => {
-        setStatus('success')
         const authUser = useAuthStore.getState().user
+
+        // Existing user with a pending coach invite — ask before linking
+        if (authUser?.pendingCoachId) {
+          setStatus('coach_consent')
+          return
+        }
+
+        setStatus('success')
         if (authUser?.isOnboarded) {
           setTimeout(() => router.push('/dashboard'), 2000)
           return
         }
-        // Pre-selected plan (e.g. pilot link) — skip pricing page, go straight to Stripe
         if (plan) {
           try {
             const session = await paymentsApi.createCheckoutSession(plan, promo ?? undefined)
             window.location.href = session.url
           } catch {
-            // Fall back to pricing page if checkout creation fails
             router.push(promo ? `/pricing?promo=${promo}` : '/pricing')
           }
           return
@@ -51,6 +58,31 @@ function VerifyContent() {
         setError(err.message || 'Invalid or expired link')
       })
   }, [searchParams, verifyMagicLink, router])
+
+  const handleAcceptCoach = async () => {
+    setCoachAction('loading')
+    try {
+      const updated = await api.users.acceptCoachInvite()
+      setUser(updated)
+      setStatus('success')
+      setTimeout(() => router.push('/dashboard'), 1500)
+    } catch {
+      setCoachAction('idle')
+    }
+  }
+
+  const handleDeclineCoach = async () => {
+    setCoachAction('loading')
+    try {
+      await api.users.leaveCoach()
+      const authUser = useAuthStore.getState().user
+      if (authUser) setUser({ ...authUser, pendingCoachId: null })
+      setStatus('success')
+      setTimeout(() => router.push('/dashboard'), 1500)
+    } catch {
+      setCoachAction('idle')
+    }
+  }
 
   return (
     <div className="min-h-screen bg-background mesh-bg flex items-center justify-center p-4">
@@ -93,6 +125,49 @@ function VerifyContent() {
                   ? 'Taking you to checkout…'
                   : 'Redirecting you now…'}
               </p>
+            </>
+          )}
+
+          {status === 'coach_consent' && (
+            <>
+              <div className="w-16 h-16 rounded-2xl bg-primary/15 border border-primary/25 flex items-center justify-center mx-auto mb-6">
+                <Users className="w-8 h-8 text-primary" />
+              </div>
+              <h2 className="text-xl font-bold tracking-tight mb-2">You've been invited</h2>
+              <p className="text-sm text-muted-foreground mb-1">
+                <strong className="text-foreground">
+                  {user?.pendingCoach?.coachProfile?.brandName
+                    ?? user?.pendingCoach?.firstName
+                    ?? 'A coach'}
+                </strong>
+                {' '}has invited you to join their accountability programme
+                {user?.pendingCoach?.coachProfile?.programmeName
+                  ? ` — ${user.pendingCoach.coachProfile.programmeName}`
+                  : ''}.
+              </p>
+              <p className="text-xs text-muted-foreground mt-2 mb-6">
+                Ivy will run your daily accountability calls as part of their programme.
+                You can leave at any time from your settings.
+              </p>
+              <div className="flex flex-col gap-2">
+                <Button
+                  className="w-full"
+                  disabled={coachAction === 'loading'}
+                  onClick={handleAcceptCoach}
+                >
+                  {coachAction === 'loading'
+                    ? <span className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                    : <>Join programme <ArrowRight className="w-4 h-4 ml-1.5" /></>}
+                </Button>
+                <Button
+                  variant="ghost"
+                  className="w-full text-muted-foreground"
+                  disabled={coachAction === 'loading'}
+                  onClick={handleDeclineCoach}
+                >
+                  Decline
+                </Button>
+              </div>
             </>
           )}
 

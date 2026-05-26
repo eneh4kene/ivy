@@ -87,6 +87,26 @@ class UserService {
         googleCalendarConnected: true,
         outlookCalendarConnected: true,
         telegramChatId: true,
+        coachId: true,
+        coachLinkedAt: true,
+        pendingCoachId: true,
+        preCoachTier: true,
+        coach: {
+          select: {
+            firstName: true,
+            coachProfile: {
+              select: { programmeName: true, brandName: true, whitelabelEnabled: true },
+            },
+          },
+        },
+        pendingCoach: {
+          select: {
+            firstName: true,
+            coachProfile: {
+              select: { programmeName: true, brandName: true },
+            },
+          },
+        },
         isActive: true,
         isOnboarded: true,
         onboardedAt: true,

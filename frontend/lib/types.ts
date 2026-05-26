@@ -28,6 +28,12 @@ export interface User {
   googleCalendarConnected: boolean
   outlookCalendarConnected: boolean
   telegramChatId?: string | null
+  coachId?: string | null
+  coachLinkedAt?: string | null
+  pendingCoachId?: string | null
+  preCoachTier?: string | null
+  coach?: { firstName: string; coachProfile?: { programmeName?: string | null; brandName?: string | null; whitelabelEnabled?: boolean } | null } | null
+  pendingCoach?: { firstName: string; coachProfile?: { programmeName?: string | null; brandName?: string | null } | null } | null
   isActive: boolean
   isOnboarded: boolean
   onboardedAt?: string

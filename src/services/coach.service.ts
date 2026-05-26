@@ -116,39 +116,53 @@ class CoachService {
   async inviteClient(coachId: string, email: string) {
     const coach = await prisma.user.findUnique({
       where: { id: coachId },
-      select: { id: true, subscriptionTier: true, coachProfile: true },
+      select: { id: true, subscriptionTier: true, firstName: true, coachProfile: true },
     });
     if (!coach) throw new NotFoundError('Coach not found');
 
     const clientCount = await prisma.user.count({ where: { coachId } });
-    // Soft limit check — frontend enforces the plan limit but we guard server-side too
     if (clientCount >= 20) throw new BadRequestError('Client limit reached for your plan');
 
-    // Check if user already exists
+    const profile = coach.coachProfile as any;
+    const brand = (profile?.whitelabelEnabled && profile?.brandName)
+      ? { name: profile.brandName, logoUrl: profile.brandLogoUrl ?? null }
+      : undefined;
+    const { emailService } = await import('./email.service');
+
     const existing = await prisma.user.findUnique({ where: { email } });
+
     if (existing) {
-      // Link existing user to this coach
+      // Already fully linked to this coach — idempotent
+      if (existing.coachId === coachId) return { status: 'already_linked', email };
+      // Already linked to a different coach
       if (existing.coachId && existing.coachId !== coachId) {
         throw new BadRequestError('This user already has a coach');
       }
+      // Pending invite from this coach already sent
+      if (existing.pendingCoachId === coachId) return { status: 'pending', email };
+
+      // Existing Ivy user — set a pending invite and let THEM accept.
+      // We do not change their tier or link them yet.
       await prisma.user.update({
         where: { id: existing.id },
-        data: {
-          coachId,
-          // Upgrade FREE users so they get daily calls — coach is paying
-          subscriptionTier: existing.subscriptionTier === 'FREE' ? 'PRO' : existing.subscriptionTier,
-        },
+        data: { pendingCoachId: coachId },
       });
-      await authService.sendMagicLink(email);
-      logger.info(`Existing user ${existing.id} linked to coach ${coachId}`);
-      return { status: 'linked', email };
+
+      // Send coach-branded magic link — consent screen shown on verify page
+      const magicUrl = await authService.createMagicLinkUrl(email);
+      await emailService.sendClientMagicLink({
+        clientEmail: email,
+        magicUrl,
+        brand,
+        coachName: brand ? undefined : coach.firstName,
+      });
+
+      logger.info(`Pending coach invite sent to existing user ${existing.id} from coach ${coachId}`);
+      return { status: 'pending', email };
     }
 
-    // New user — create stub and send coach-branded invite email
-    // firstName/lastName left blank until client completes onboarding.
-    // getUserContext guards against empty name — falls back to 'there' in messaging,
-    // and the onboarding call fires before any personalised calls are scheduled.
-    const stub = await prisma.user.create({
+    // Brand new user — create stub with coachId already set (they have no prior account)
+    await prisma.user.create({
       data: {
         email,
         firstName: 'Friend', // placeholder — overwritten when client completes onboarding
@@ -156,49 +170,100 @@ class CoachService {
         track: 'fitness',
         goal: '',
         coachId,
+        coachLinkedAt: new Date(),
+        // preCoachTier intentionally null — marks this as a coach-created stub
         subscriptionTier: 'PRO',
         isActive: true,
         isOnboarded: false,
       },
     });
 
-    // Generate magic link URL and send coach-branded invite (white-label aware)
     const magicUrl = await authService.createMagicLinkUrl(email);
-    const coachUser = await prisma.user.findUnique({
-      where: { id: coachId },
-      select: { firstName: true, coachProfile: true },
-    });
-    const profile = coachUser?.coachProfile as any;
-    const brand = (profile?.whitelabelEnabled && profile?.brandName)
-      ? { name: profile.brandName, logoUrl: profile.brandLogoUrl ?? null }
-      : undefined;
-
-    const { emailService } = await import('./email.service');
     await emailService.sendClientMagicLink({
       clientEmail: email,
       magicUrl,
       brand,
-      coachName: brand ? undefined : coachUser?.firstName, // only show coach name if not white-labelled
+      coachName: brand ? undefined : coach.firstName,
     });
 
-    logger.info(`Client invite sent to ${email} for coach ${coachId} — stub user ${stub.id}`);
+    logger.info(`New client stub created and invite sent to ${email} for coach ${coachId}`);
     return { status: 'invited', email };
+  }
+
+  async acceptCoachInvite(userId: string): Promise<void> {
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, pendingCoachId: true, subscriptionTier: true },
+    });
+    if (!user?.pendingCoachId) throw new BadRequestError('No pending coach invite');
+
+    await prisma.user.update({
+      where: { id: userId },
+      data: {
+        coachId: user.pendingCoachId,
+        coachLinkedAt: new Date(),
+        preCoachTier: user.subscriptionTier, // remember their tier before the coach
+        pendingCoachId: null,
+      },
+    });
+  }
+
+  async declineCoachInvite(userId: string): Promise<void> {
+    await prisma.user.update({
+      where: { id: userId },
+      data: { pendingCoachId: null },
+    });
   }
 
   async removeClient(coachId: string, clientId: string) {
     const client = await prisma.user.findFirst({ where: { id: clientId, coachId } });
     if (!client) throw new NotFoundError('Client not found');
-    // Coaches can only assign FREE or PRO to clients — ELITE/CONCIERGE/B2B mean the
-    // client had an independent paid subscription before or after being linked.
-    // Revert coach-managed tiers to FREE; preserve independently-paid tiers.
-    const coachManagedTiers = ['FREE', 'PRO'];
-    const tierAfterRemoval = coachManagedTiers.includes(client.subscriptionTier)
-      ? 'FREE'
-      : client.subscriptionTier;
-    await prisma.user.update({
-      where: { id: clientId },
-      data: { coachId: null, coachNotes: null, subscriptionTier: tierAfterRemoval },
+    await this._unlinkClient(client);
+  }
+
+  async leaveCoach(userId: string): Promise<void> {
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, coachId: true, pendingCoachId: true, preCoachTier: true, isOnboarded: true, subscriptionTier: true },
     });
+    if (!user) throw new NotFoundError('User not found');
+    if (user.pendingCoachId) {
+      await this.declineCoachInvite(userId);
+      return;
+    }
+    if (!user.coachId) throw new BadRequestError('You are not in a coach programme');
+    await this._unlinkClient(user as any);
+  }
+
+  private async _unlinkClient(client: {
+    id: string; preCoachTier: string | null; isOnboarded: boolean; subscriptionTier: string;
+  }): Promise<void> {
+    if (client.preCoachTier) {
+      // Existing user who was linked — restore the tier they had before
+      await prisma.user.update({
+        where: { id: client.id },
+        data: {
+          coachId: null, coachNotes: null,
+          preCoachTier: null, coachLinkedAt: null,
+          subscriptionTier: client.preCoachTier as any,
+        },
+      });
+    } else if (!client.isOnboarded) {
+      // Stub created by coach, never completed onboarding — deactivate entirely
+      await prisma.user.update({
+        where: { id: client.id },
+        data: {
+          coachId: null, coachNotes: null,
+          isActive: false, subscriptionStatus: 'cancelled',
+        },
+      });
+    } else {
+      // Legacy: linked before preCoachTier was tracked — unlink only, keep current tier
+      await prisma.user.update({
+        where: { id: client.id },
+        data: { coachId: null, coachNotes: null, coachLinkedAt: null },
+      });
+    }
   }
 
   // ── Coach context for Ivy calls ────────────────────────────────────────────

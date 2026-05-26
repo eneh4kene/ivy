@@ -65,6 +65,41 @@ router.get(
 );
 
 /**
+ * @route   POST /api/users/me/coach/accept
+ * @desc    Accept a pending coach invite
+ * @access  Private
+ */
+router.post(
+  '/me/coach/accept',
+  authenticate,
+  async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const { coachService } = await import('../../services/coach.service');
+      await coachService.acceptCoachInvite(req.user!.id);
+      const user = await import('../../services/user.service').then((m) => m.default.getUserById(req.user!.id));
+      res.json({ success: true, data: user });
+    } catch (err) { next(err); }
+  }
+);
+
+/**
+ * @route   DELETE /api/users/me/coach
+ * @desc    Leave coach programme or decline pending invite
+ * @access  Private
+ */
+router.delete(
+  '/me/coach',
+  authenticate,
+  async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const { coachService } = await import('../../services/coach.service');
+      await coachService.leaveCoach(req.user!.id);
+      res.json({ success: true, data: { message: 'Left coach programme' } });
+    } catch (err) { next(err); }
+  }
+);
+
+/**
  * @route   DELETE /api/users/me/telegram
  * @desc    Disconnect Telegram — clears telegramChatId
  * @access  Private

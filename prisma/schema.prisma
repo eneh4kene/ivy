@@ -56,9 +56,12 @@ model User {
   giftFrame   String? // Who/what they're doing this for
 
   // Coach relationship (for COACH-managed clients)
-  coachId       String?  // ID of the coach User who manages this client
-  coachNotes    String?  @db.Text // PT-written notes Ivy surfaces in calls
-  programmeAreas Json?  // Array of { id, area, instruction } — coach-defined per client
+  coachId        String?   // ID of the coach User who manages this client
+  coachNotes     String?   @db.Text // PT-written notes Ivy surfaces in calls
+  programmeAreas Json?     // Array of { id, area, instruction } — coach-defined per client
+  pendingCoachId String?   // coach invite awaiting user acceptance
+  preCoachTier   String?   // subscription tier before coach linked (null = stub created by coach)
+  coachLinkedAt  DateTime? // when the user accepted the coach link
 
   // Charity Preferences
   preferredCharityId String?
@@ -112,6 +115,8 @@ model User {
   coachProfile        CoachProfile?       // set if this user is a COACH
   clients             User[]              @relation("CoachClients")
   coach               User?               @relation("CoachClients", fields: [coachId], references: [id])
+  pendingClients      User[]              @relation("PendingCoachClients")
+  pendingCoach        User?               @relation("PendingCoachClients", fields: [pendingCoachId], references: [id])
 
   @@index([email])
   @@index([companyId])

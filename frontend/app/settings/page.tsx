@@ -113,6 +113,7 @@ export default function SettingsPage() {
   const [deletingAccount, setDeletingAccount] = useState(false)
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
   const [telegramDisconnecting, setTelegramDisconnecting] = useState(false)
+  const [leavingCoach, setLeavingCoach] = useState(false)
 
   useEffect(() => {
     buddyApi.get().then((b) => setBuddy(b ?? null)).catch(console.error).finally(() => setBuddyLoading(false))
@@ -757,6 +758,73 @@ export default function SettingsPage() {
             </div>
           )}
         </SectionCard>
+
+        {/* Coach programme — shown when user is in a programme or has a pending invite */}
+        {(user?.coachId || user?.pendingCoachId) && (
+          <SectionCard title="Coach Programme" description="Your accountability programme" icon={Users}>
+            {user.coachId ? (
+              <div className="space-y-3">
+                <div>
+                  <p className="text-sm font-medium">
+                    {user.coach?.coachProfile?.brandName ?? user.coach?.coachProfile?.programmeName ?? `${user.coach?.firstName}'s programme`}
+                  </p>
+                  {user.coachLinkedAt && (
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Joined {new Date(user.coachLinkedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}
+                    </p>
+                  )}
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={leavingCoach}
+                  className="text-destructive hover:text-destructive hover:border-destructive/30 hover:bg-destructive/5"
+                  onClick={async () => {
+                    if (!confirm('Leave this programme? Your calls will stop and you may lose access depending on your subscription.')) return
+                    setLeavingCoach(true)
+                    try {
+                      await api.users.leaveCoach()
+                      setUser({ ...user, coachId: null, coachLinkedAt: null, coach: null, preCoachTier: null })
+                      showToast('You have left the programme')
+                    } catch {
+                      showToast('Failed to leave programme', 'error')
+                    } finally { setLeavingCoach(false) }
+                  }}
+                >
+                  {leavingCoach
+                    ? <span className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin mr-1.5" />
+                    : null}
+                  Leave programme
+                </Button>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <div>
+                  <p className="text-sm font-medium text-amber-400">Invite pending</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    {user.pendingCoach?.coachProfile?.brandName ?? user.pendingCoach?.firstName ?? 'A coach'} has invited you to their programme
+                  </p>
+                </div>
+                <div className="flex gap-2">
+                  <Button size="sm" onClick={async () => {
+                    try {
+                      const updated = await api.users.acceptCoachInvite()
+                      setUser(updated)
+                      showToast('Joined the programme')
+                    } catch { showToast('Failed to accept invite', 'error') }
+                  }}>Accept</Button>
+                  <Button variant="outline" size="sm" onClick={async () => {
+                    try {
+                      await api.users.leaveCoach()
+                      setUser({ ...user, pendingCoachId: null, pendingCoach: null })
+                      showToast('Invite declined')
+                    } catch { showToast('Failed to decline', 'error') }
+                  }}>Decline</Button>
+                </div>
+              </div>
+            )}
+          </SectionCard>
+        )}
 
         {/* Account Actions */}
         <SectionCard title="Account" icon={Trash2}>
