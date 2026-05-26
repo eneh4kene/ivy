@@ -514,6 +514,17 @@ export const adminApi = {
     }>>('/api/admin/usage', { params: { days } })
     return response.data.data!
   },
+  getPlatformCosts: async (days = 30) => {
+    const response = await client.get<ApiResponse<{
+      periodDays: number
+      totalCostGbp: number
+      alertThresholdGbp: number
+      byService: { service: string; operation: string; totalCostGbp: number; totalUnits: number; count: number }[]
+      byDay: { date: string; totalCostGbp: number; byService: Record<string, number> }[]
+      topUsers: { userId: string; name: string; email: string; tier: string; totalCostGbp: number }[]
+    }>>('/api/admin/platform-costs', { params: { days } })
+    return response.data.data!
+  },
 }
 
 // Coach API

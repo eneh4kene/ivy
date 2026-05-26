@@ -188,9 +188,10 @@ class WebhookController {
           await messagingService.handleTelegramUpdate(chatId, message.text, telegramUserId);
         } else if (message.voice) {
           const fileId: string = message.voice.file_id;
-          logger.info(`Telegram voice note from chat ${chatId} (file: ${fileId})`);
+          const durationSeconds: number | undefined = message.voice.duration;
+          logger.info(`Telegram voice note from chat ${chatId} (${durationSeconds ?? '?'}s)`);
 
-          const transcription = await transcriptionService.transcribeTelegramVoice(fileId);
+          const transcription = await transcriptionService.transcribeTelegramVoice(fileId, durationSeconds);
           if (transcription) {
             logger.info(`Voice note transcribed (${transcription.length} chars)`);
             await messagingService.handleTelegramUpdate(chatId, transcription, telegramUserId);

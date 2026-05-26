@@ -27,6 +27,10 @@ router.get('/calls', adminController.getCalls.bind(adminController));
 // Query: ?days=30 (default 30)
 router.get('/usage', adminController.getUsage.bind(adminController));
 
+// GET /api/admin/platform-costs — full platform cost dashboard (superadmin only)
+// Query: ?days=30 (max 90)
+router.get('/platform-costs', requireSuperAdmin, adminController.getPlatformCosts.bind(adminController));
+
 // ── Game Suggestions (superadmin only) ────────────────────────────────────────
 
 router.get('/game-suggestions', requireSuperAdmin, async (_req: Request, res: Response, next: NextFunction) => {

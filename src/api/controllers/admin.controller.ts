@@ -348,6 +348,96 @@ class AdminController {
     }
   }
 
+  /**
+   * Platform-wide cost dashboard — superadmin only.
+   * GET /api/admin/platform-costs?days=30
+   */
+  async getPlatformCosts(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const days = Math.min(Number(req.query.days ?? 30), 90);
+      const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+
+      // Totals by service/operation
+      const byService = await prisma.apiUsageLog.groupBy({
+        by: ['service', 'operation'],
+        where: { createdAt: { gte: since } },
+        _sum: { costGbp: true, units: true },
+        _count: true,
+        orderBy: { _sum: { costGbp: 'desc' } },
+      });
+
+      // Daily breakdown
+      const rawLogs = await prisma.apiUsageLog.findMany({
+        where: { createdAt: { gte: since } },
+        select: { createdAt: true, costGbp: true, service: true },
+        orderBy: { createdAt: 'asc' },
+      });
+
+      // Bucket by date string
+      const dailyMap = new Map<string, { total: number; byService: Record<string, number> }>();
+      for (const log of rawLogs) {
+        const date = log.createdAt.toISOString().slice(0, 10);
+        if (!dailyMap.has(date)) dailyMap.set(date, { total: 0, byService: {} });
+        const bucket = dailyMap.get(date)!;
+        bucket.total += Number(log.costGbp ?? 0);
+        bucket.byService[log.service] = (bucket.byService[log.service] ?? 0) + Number(log.costGbp ?? 0);
+      }
+      const byDay = Array.from(dailyMap.entries()).map(([date, v]) => ({
+        date,
+        totalCostGbp: Number(v.total.toFixed(4)),
+        byService: Object.fromEntries(
+          Object.entries(v.byService).map(([s, c]) => [s, Number(c.toFixed(4))])
+        ),
+      }));
+
+      // Top users by cost
+      const topUsersRaw = await prisma.apiUsageLog.groupBy({
+        by: ['userId'],
+        where: { createdAt: { gte: since }, userId: { not: null } },
+        _sum: { costGbp: true },
+        orderBy: { _sum: { costGbp: 'desc' } },
+        take: 20,
+      });
+
+      const userIds = topUsersRaw.map((r) => r.userId).filter(Boolean) as string[];
+      const users = await prisma.user.findMany({
+        where: { id: { in: userIds } },
+        select: { id: true, firstName: true, lastName: true, email: true, subscriptionTier: true },
+      });
+      const userMap = new Map(users.map((u) => [u.id, u]));
+
+      const topUsers = topUsersRaw.map((row) => {
+        const u = userMap.get(row.userId ?? '');
+        return {
+          userId: row.userId,
+          name: u ? `${u.firstName} ${u.lastName}`.trim() : 'Unknown',
+          email: u?.email ?? '',
+          tier: u?.subscriptionTier ?? '',
+          totalCostGbp: Number((row._sum.costGbp ?? 0).toFixed(4)),
+        };
+      });
+
+      const totalCostGbp = byService.reduce((sum, r) => sum + Number(r._sum.costGbp ?? 0), 0);
+
+      sendSuccess(res, {
+        periodDays: days,
+        totalCostGbp: Number(totalCostGbp.toFixed(4)),
+        alertThresholdGbp: parseFloat(process.env.COST_ALERT_THRESHOLD_GBP ?? '15'),
+        byService: byService.map((r) => ({
+          service: r.service,
+          operation: r.operation,
+          totalCostGbp: Number((r._sum.costGbp ?? 0).toFixed(4)),
+          totalUnits: Number((r._sum.units ?? 0).toFixed(2)),
+          count: r._count,
+        })),
+        byDay,
+        topUsers,
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
   async getReportData(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
     try {
       const companyId = this.requireCompany(req, res);

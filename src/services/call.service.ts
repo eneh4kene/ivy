@@ -41,6 +41,24 @@ class CallService {
       throw new Error('User has no phone number');
     }
 
+    // Hard daily cap — prevents runaway billing from scheduler bugs
+    const DAILY_CALL_CAP = 5;
+    const dayStart = new Date(scheduledAt);
+    dayStart.setHours(0, 0, 0, 0);
+    const dayEnd = new Date(dayStart);
+    dayEnd.setDate(dayEnd.getDate() + 1);
+    const callsToday = await prisma.call.count({
+      where: {
+        userId,
+        scheduledAt: { gte: dayStart, lt: dayEnd },
+        status: { notIn: ['CANCELLED', 'FAILED'] },
+      },
+    });
+    if (callsToday >= DAILY_CALL_CAP) {
+      logger.warn(`Daily call cap (${DAILY_CALL_CAP}) reached for user ${userId} — skipping ${callType}`);
+      throw new Error(`Daily call cap reached for user ${userId}`);
+    }
+
     // Create call record in database
     const call = await prisma.call.create({
       data: {

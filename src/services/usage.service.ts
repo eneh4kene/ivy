@@ -4,18 +4,21 @@ import logger from '../utils/logger'
 // Approximate GBP costs per unit
 const COST_PER_UNIT: Record<string, Record<string, number>> = {
   retell: {
-    call: 0.09,        // per minute
+    call: 0.09,        // per minute (~£0.09/min Retell fee + Twilio leg)
   },
   twilio: {
     call: 0.013,       // per minute outbound UK
     call_us: 0.014,    // per minute outbound US
-    sms: 0.04,
+    sms: 0.04,         // per SMS segment
   },
-  sendgrid: {
-    email: 0.0001,
+  openai: {
+    whisper: 0.005,    // per minute transcribed (~$0.006/min ≈ £0.005/min)
   },
-  whatsapp: {
-    whatsapp_message: 0.005,
+  postmark: {
+    email: 0.0001,     // per email (Postmark)
+  },
+  telegram: {
+    telegram_message: 0, // free
   },
 }
 

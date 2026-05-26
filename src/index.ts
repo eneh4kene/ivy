@@ -19,6 +19,8 @@ import { dispatchPendingDonations } from './services/every-org.service';
 import callService from './services/call.service';
 import seasonService from './services/season.service';
 import coachService from './services/coach.service';
+import { getServiceCostSummary } from './services/usage.service';
+import { sendTelegramAdmin } from './utils/telegram-admin';
 process.stdout.write('[BOOT] service imports done\n');
 import './workers/call.processor';    // start call Bull worker
 process.stdout.write('[BOOT] call processor import done\n');
@@ -120,6 +122,31 @@ cron.schedule('0 3 * * *', async () => {
     }
   } catch (err) {
     logger.error('Stuck call recovery error:', err);
+  }
+});
+
+// Every day at 9am UTC — check yesterday's platform spend, alert if over threshold
+cron.schedule('0 9 * * *', async () => {
+  try {
+    const threshold = parseFloat(process.env.COST_ALERT_THRESHOLD_GBP ?? '15');
+    const summary = await getServiceCostSummary(1); // last 24h
+    const total = summary.reduce((sum, row) => sum + row.totalCostGbp, 0);
+    const retell = summary.find((r) => r.service === 'retell')?.totalCostGbp ?? 0;
+
+    logger.info(`Daily spend check — total £${total.toFixed(2)}, Retell £${retell.toFixed(2)}, threshold £${threshold}`);
+
+    if (total > threshold) {
+      const lines = summary
+        .filter((r) => r.totalCostGbp > 0)
+        .sort((a, b) => b.totalCostGbp - a.totalCostGbp)
+        .map((r) => `  ${r.service}/${r.operation}: £${r.totalCostGbp.toFixed(2)} (${r.count} calls)`)
+        .join('\n');
+      await sendTelegramAdmin(
+        `⚠️ Ivy daily spend alert\n\nTotal (last 24h): £${total.toFixed(2)}\nThreshold: £${threshold}\n\nBreakdown:\n${lines}`
+      );
+    }
+  } catch (err) {
+    logger.error('Cost alert job error:', err);
   }
 });
 

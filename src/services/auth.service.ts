@@ -142,7 +142,7 @@ class AuthService {
         `,
       });
 
-      await logUsage('sendgrid', 'email', 1, user.id, { type: 'magic_link', email });
+      await logUsage('postmark', 'email', 1, user.id, { type: 'magic_link', email });
       logger.info(`Magic link sent to ${email}`);
     } catch (error) {
       logger.error('Failed to send magic link email:', error);
