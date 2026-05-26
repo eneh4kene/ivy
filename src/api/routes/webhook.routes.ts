@@ -55,4 +55,13 @@ router.post('/twilio-inbound', webhookController.handleTwilioInbound);
  */
 router.post('/retell-inbound', webhookController.handleRetellInbound);
 
+/**
+ * @route   POST /webhooks/sentry
+ * @desc    Sentry issue alerts — forwards new/regressed issues to admin Telegram
+ * @access  Public (optionally verify sentry-hook-signature header)
+ *
+ * Configure in Sentry: Settings → Integrations → WebHooks → add URL → tick "issue" events
+ */
+router.post('/sentry', webhookController.handleSentryWebhook);
+
 export default router;

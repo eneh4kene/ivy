@@ -211,6 +211,41 @@ class WebhookController {
   }
 
   /**
+   * Handle Sentry issue webhook — forwards new/regressed issues to admin Telegram
+   * POST /webhooks/sentry
+   */
+  async handleSentryWebhook(req: Request, res: Response): Promise<void> {
+    // Respond immediately — Sentry expects fast acknowledgement
+    res.status(200).json({ ok: true });
+
+    try {
+      const { action, data, actor } = req.body;
+      if (!data?.issue) return;
+
+      // Only alert on new issues or regressions — not every event
+      if (!['created', 'regression'].includes(action)) return;
+
+      const issue = data.issue;
+      const emoji = action === 'regression' ? '🔄' : '🚨';
+      const label = action === 'regression' ? 'REGRESSION' : 'NEW ISSUE';
+      const culprit = issue.culprit || issue.metadata?.filename || 'unknown';
+      const count = issue.count ? ` (${issue.count} events)` : '';
+      const assignee = actor?.name ? ` · assigned to ${actor.name}` : '';
+
+      const text =
+        `${emoji} Sentry ${label}\n\n` +
+        `${issue.title}\n` +
+        `📍 ${culprit}${count}${assignee}\n` +
+        `🔗 ${issue.permalink}`;
+
+      const { sendTelegramAdmin } = await import('../../utils/telegram-admin');
+      await sendTelegramAdmin(text);
+    } catch (err) {
+      logger.error('Sentry webhook handler error:', err);
+    }
+  }
+
+  /**
    * Handle Stripe webhook events
    * POST /webhooks/stripe
    */
