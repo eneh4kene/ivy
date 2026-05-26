@@ -50,7 +50,7 @@ dump.rdb
 
 # Local dev files — not for repo
 ngrok.yml
-pricing_strategy.md
-recap.md
 .env.example
 *.md
+!README.md
+!docs/*.md
