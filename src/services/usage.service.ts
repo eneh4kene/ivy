@@ -1,5 +1,6 @@
 import prisma from '../utils/prisma'
 import logger from '../utils/logger'
+import { sendTelegramAdmin } from '../utils/telegram-admin'
 
 // Approximate GBP costs per unit
 const COST_PER_UNIT: Record<string, Record<string, number>> = {
@@ -43,8 +44,47 @@ export async function logUsage(
         metadata: metadata ? JSON.stringify(metadata) : null,
       },
     })
+
+    // Real-time threshold crossing detection — alert on first crossing each day
+    if (costGbp > 0) {
+      checkThresholdCrossing(costGbp).catch(() => {})
+    }
   } catch (err) {
     logger.warn('Failed to log API usage:', err)
+  }
+}
+
+async function checkThresholdCrossing(costJustAdded: number): Promise<void> {
+  const threshold = parseFloat(process.env.COST_ALERT_THRESHOLD_GBP ?? '15')
+
+  const todayStart = new Date()
+  todayStart.setHours(0, 0, 0, 0)
+
+  const result = await prisma.apiUsageLog.aggregate({
+    where: { createdAt: { gte: todayStart } },
+    _sum: { costGbp: true },
+  })
+
+  const totalToday = Number(result._sum.costGbp ?? 0)
+  const totalBefore = totalToday - costJustAdded
+
+  // Only fire on the first crossing — not on every subsequent call
+  if (totalToday >= threshold && totalBefore < threshold) {
+    const byService = await prisma.apiUsageLog.groupBy({
+      by: ['service'],
+      where: { createdAt: { gte: todayStart } },
+      _sum: { costGbp: true },
+      orderBy: { _sum: { costGbp: 'desc' } },
+    })
+
+    const breakdown = byService
+      .filter((r) => Number(r._sum.costGbp ?? 0) > 0)
+      .map((r) => `  ${r.service}: £${Number(r._sum.costGbp ?? 0).toFixed(2)}`)
+      .join('\n')
+
+    await sendTelegramAdmin(
+      `🚨 Ivy cost alert — daily threshold crossed\n\nToday's spend: £${totalToday.toFixed(2)}\nThreshold: £${threshold}\n\nBy service:\n${breakdown}`
+    )
   }
 }
 
