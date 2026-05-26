@@ -19,8 +19,12 @@ import './workers/message.processor';
 
 logger.info(`Worker process started — env: ${config.server.env}`);
 
+// Alert admin on startup so we know the worker is alive
+sendTelegramAdmin('✅ Ivy worker started').catch(() => {});
+
 process.on('uncaughtException', (error: Error) => {
   process.stdout.write(`[FATAL] Uncaught Exception: ${error.message}\n${error.stack}\n`);
+  sendTelegramAdmin(`💀 Ivy worker crashed (uncaughtException)\n\n${error.message}`).catch(() => {});
   process.exit(1);
 });
 
