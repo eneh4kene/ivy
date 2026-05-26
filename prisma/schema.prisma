@@ -60,8 +60,7 @@ model User {
   coachNotes     String?   @db.Text // PT-written notes Ivy surfaces in calls
   programmeAreas Json?     // Array of { id, area, instruction } — coach-defined per client
   pendingCoachId String?   // coach invite awaiting user acceptance
-  preCoachTier   String?   // subscription tier before coach linked (null = stub created by coach)
-  coachLinkedAt  DateTime? // when the user accepted the coach link
+  coachLinkedAt  DateTime? // when the user accepted (or was created by) the coach
 
   // Charity Preferences
   preferredCharityId String?

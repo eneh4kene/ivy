@@ -45,6 +45,9 @@ class CoachService {
         goal: true,
         coachNotes: true,
         isOnboarded: true,
+        isActive: true,
+        subscriptionStatus: true,
+        subscriptionTier: true,
         lastCallAt: true,
         telegramChatId: true,
         streaks: { select: { currentStreak: true, longestStreak: true } },
@@ -161,7 +164,8 @@ class CoachService {
       return { status: 'pending', email };
     }
 
-    // Brand new user — create stub with coachId already set (they have no prior account)
+    // Brand new user — create a minimal stub. They pay their own way through
+    // the normal pricing/checkout flow; the coach just gets them in the door.
     await prisma.user.create({
       data: {
         email,
@@ -171,8 +175,6 @@ class CoachService {
         goal: '',
         coachId,
         coachLinkedAt: new Date(),
-        // preCoachTier intentionally null — marks this as a coach-created stub
-        subscriptionTier: 'PRO',
         isActive: true,
         isOnboarded: false,
       },
@@ -193,7 +195,7 @@ class CoachService {
   async acceptCoachInvite(userId: string): Promise<void> {
     const user = await prisma.user.findUnique({
       where: { id: userId },
-      select: { id: true, pendingCoachId: true, subscriptionTier: true },
+      select: { id: true, pendingCoachId: true },
     });
     if (!user?.pendingCoachId) throw new BadRequestError('No pending coach invite');
 
@@ -202,7 +204,6 @@ class CoachService {
       data: {
         coachId: user.pendingCoachId,
         coachLinkedAt: new Date(),
-        preCoachTier: user.subscriptionTier, // remember their tier before the coach
         pendingCoachId: null,
       },
     });
@@ -224,7 +225,7 @@ class CoachService {
   async leaveCoach(userId: string): Promise<void> {
     const user = await prisma.user.findUnique({
       where: { id: userId },
-      select: { id: true, coachId: true, pendingCoachId: true, preCoachTier: true, isOnboarded: true, subscriptionTier: true },
+      select: { id: true, coachId: true, pendingCoachId: true },
     });
     if (!user) throw new NotFoundError('User not found');
     if (user.pendingCoachId) {
@@ -232,38 +233,22 @@ class CoachService {
       return;
     }
     if (!user.coachId) throw new BadRequestError('You are not in a coach programme');
-    await this._unlinkClient(user as any);
+    await this._unlinkClient(user);
   }
 
-  private async _unlinkClient(client: {
-    id: string; preCoachTier: string | null; isOnboarded: boolean; subscriptionTier: string;
-  }): Promise<void> {
-    if (client.preCoachTier) {
-      // Existing user who was linked — restore the tier they had before
-      await prisma.user.update({
-        where: { id: client.id },
-        data: {
-          coachId: null, coachNotes: null,
-          preCoachTier: null, coachLinkedAt: null,
-          subscriptionTier: client.preCoachTier as any,
-        },
-      });
-    } else if (!client.isOnboarded) {
-      // Stub created by coach, never completed onboarding — deactivate entirely
-      await prisma.user.update({
-        where: { id: client.id },
-        data: {
-          coachId: null, coachNotes: null,
-          isActive: false, subscriptionStatus: 'cancelled',
-        },
-      });
-    } else {
-      // Legacy: linked before preCoachTier was tracked — unlink only, keep current tier
-      await prisma.user.update({
-        where: { id: client.id },
-        data: { coachId: null, coachNotes: null, coachLinkedAt: null },
-      });
-    }
+  private async _unlinkClient(client: { id: string }): Promise<void> {
+    // Subscriptions are fully independent of the coach relationship.
+    // Unlinking only removes the coaching overlay — billing and access are untouched.
+    // The user reverts to standard Ivy around their own goals until their subscription expires.
+    await prisma.user.update({
+      where: { id: client.id },
+      data: {
+        coachId: null,
+        coachNotes: null,
+        programmeAreas: { set: [] },
+        coachLinkedAt: null,
+      },
+    });
   }
 
   // ── Coach context for Ivy calls ────────────────────────────────────────────

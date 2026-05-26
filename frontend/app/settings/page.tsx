@@ -784,7 +784,7 @@ export default function SettingsPage() {
                     setLeavingCoach(true)
                     try {
                       await api.users.leaveCoach()
-                      setUser({ ...user, coachId: null, coachLinkedAt: null, coach: null, preCoachTier: null })
+                      setUser({ ...user, coachId: null, coachLinkedAt: null, coach: null })
                       showToast('You have left the programme')
                     } catch {
                       showToast('Failed to leave programme', 'error')

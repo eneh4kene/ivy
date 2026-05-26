@@ -51,8 +51,14 @@ export default function CoachDashboard() {
     } finally { setInviting(false) }
   }
 
-  const atRisk = clients.filter((c) => c.needsAttention)
-  const onTrack = clients.filter((c) => !c.needsAttention)
+  const isClientActive = (c: CoachClient) =>
+    c.isActive && c.isOnboarded && c.subscriptionStatus === 'active'
+
+  const pending = clients.filter((c) => !c.isOnboarded)
+  const inactive = clients.filter((c) => c.isOnboarded && (!c.isActive || c.subscriptionStatus !== 'active'))
+  const active = clients.filter((c) => isClientActive(c))
+  const atRisk = active.filter((c) => c.needsAttention)
+  const onTrack = active.filter((c) => !c.needsAttention)
 
   if (loading) {
     return (
@@ -99,11 +105,12 @@ export default function CoachDashboard() {
         )}
 
         {/* Stats bar */}
-        <div className="grid grid-cols-3 gap-3 mb-6">
+        <div className="grid grid-cols-4 gap-3 mb-6">
           {[
-            { label: 'Total clients', value: clients.length, icon: Users },
+            { label: 'Active', value: active.length, icon: Users },
             { label: 'On track', value: onTrack.length, icon: TrendingUp },
-            { label: 'Need attention', value: atRisk.length, icon: AlertTriangle },
+            { label: 'Attention', value: atRisk.length, icon: AlertTriangle },
+            { label: 'Inactive', value: inactive.length + pending.length, icon: Phone },
           ].map(({ label, value, icon: Icon }) => (
             <div key={label} className="p-3 rounded-xl border border-border bg-card text-center">
               <p className="text-xl font-bold">{value}</p>
@@ -173,6 +180,30 @@ export default function CoachDashboard() {
           </div>
         )}
 
+        {/* Inactive — subscriptions lapsed, Ivy can't follow up */}
+        {inactive.length > 0 && (
+          <div className="mb-5">
+            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2.5">
+              Ivy can't reach ({inactive.length})
+            </p>
+            <div className="space-y-2">
+              {inactive.map((c) => <ClientCard key={c.id} client={c} />)}
+            </div>
+          </div>
+        )}
+
+        {/* Pending — invited but haven't signed up yet */}
+        {pending.length > 0 && (
+          <div className="mb-5">
+            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2.5">
+              Awaiting signup ({pending.length})
+            </p>
+            <div className="space-y-2">
+              {pending.map((c) => <ClientCard key={c.id} client={c} />)}
+            </div>
+          </div>
+        )}
+
         {clients.length === 0 && !loading && (
           <div className="text-center py-16">
             <Users className="w-10 h-10 text-muted-foreground mx-auto mb-3" />
@@ -191,34 +222,54 @@ function ClientCard({ client }: { client: CoachClient }) {
     positive: 'text-emerald-400', neutral: 'text-muted-foreground', negative: 'text-red-400',
   }
 
+  const isInactive = !client.isActive || client.subscriptionStatus !== 'active'
+  const isPending = !client.isOnboarded
+
+  const subStatusLabel: Record<string, string> = {
+    past_due: 'Payment overdue',
+    cancelled: 'Cancelled',
+    paused: 'Paused',
+    CANCELLING: 'Cancelling',
+    PAST_DUE: 'Payment overdue',
+    CANCELLED: 'Cancelled',
+  }
+
   return (
     <Link href={`/coach/clients/${client.id}`}>
       <div className={`p-4 rounded-xl border bg-card hover:border-primary/30 transition-colors cursor-pointer ${
+        isPending ? 'border-border opacity-60' :
+        isInactive ? 'border-border opacity-50' :
         client.needsAttention ? 'border-red-500/20 bg-red-500/3' : 'border-border'
       }`}>
         <div className="flex items-center gap-4">
           <div className="w-9 h-9 rounded-full bg-muted flex items-center justify-center text-sm font-semibold shrink-0">
-            {client.firstName[0]}{client.lastName[0]}
+            {client.firstName[0]}{client.lastName?.[0] ?? ''}
           </div>
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2">
               <p className="text-sm font-medium">{client.firstName} {client.lastName}</p>
-              <StatusDot needsAttention={client.needsAttention} missed={client.recentMissedCount} />
+              {isPending
+                ? <span className="text-xs text-amber-400">Awaiting signup</span>
+                : isInactive
+                ? <span className="text-xs text-muted-foreground">{subStatusLabel[client.subscriptionStatus] ?? 'Inactive'} — Ivy can't reach</span>
+                : <StatusDot needsAttention={client.needsAttention} missed={client.recentMissedCount} />}
             </div>
-            <div className="flex items-center gap-3 mt-0.5">
-              <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                <Flame className="w-3 h-3 text-amber-400" /> {client.currentStreak}d
-              </span>
-              {lastCall && (
-                <span className={`text-xs ${sentimentColour[lastCall.sentiment ?? 'neutral'] ?? 'text-muted-foreground'}`}>
-                  Last: {lastCall.callType.toLowerCase().replace('_', ' ')}
+            {!isPending && !isInactive && (
+              <div className="flex items-center gap-3 mt-0.5">
+                <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                  <Flame className="w-3 h-3 text-amber-400" /> {client.currentStreak}d
                 </span>
-              )}
-              <span className="text-xs text-muted-foreground capitalize">{client.track}</span>
-              <span title={client.telegramChatId ? 'Telegram connected' : 'Telegram not connected'}>
-                <MessageCircle className={`w-3 h-3 ${client.telegramChatId ? 'text-[#229ED9]' : 'text-muted-foreground/30'}`} />
-              </span>
-            </div>
+                {lastCall && (
+                  <span className={`text-xs ${sentimentColour[lastCall.sentiment ?? 'neutral'] ?? 'text-muted-foreground'}`}>
+                    Last: {lastCall.callType.toLowerCase().replace('_', ' ')}
+                  </span>
+                )}
+                <span className="text-xs text-muted-foreground capitalize">{client.track}</span>
+                <span title={client.telegramChatId ? 'Telegram connected' : 'Telegram not connected'}>
+                  <MessageCircle className={`w-3 h-3 ${client.telegramChatId ? 'text-[#229ED9]' : 'text-muted-foreground/30'}`} />
+                </span>
+              </div>
+            )}
           </div>
           <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0" />
         </div>

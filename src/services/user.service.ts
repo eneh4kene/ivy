@@ -90,7 +90,6 @@ class UserService {
         coachId: true,
         coachLinkedAt: true,
         pendingCoachId: true,
-        preCoachTier: true,
         coach: {
           select: {
             firstName: true,
