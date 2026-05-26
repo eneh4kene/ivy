@@ -564,6 +564,20 @@ export interface CoachClient {
   calls: { callType: string; status: string; sentiment?: string; scheduledAt: string; callSummary?: string }[]
 }
 
+export const inviteApi = {
+  getInfo: async (token: string) => {
+    const response = await client.get<ApiResponse<{
+      coachId: string; coachName: string; programmeName: string;
+      displayName: string | null; logoUrl: string | null;
+    }>>(`/api/invite/${token}`)
+    return response.data.data!
+  },
+  join: async (token: string, email: string) => {
+    const response = await client.post<ApiResponse>(`/api/invite/${token}/join`, { email })
+    return response.data
+  },
+}
+
 export const coachApi = {
   getProfile: async (): Promise<CoachProfile | null> => {
     const response = await client.get<ApiResponse<CoachProfile | null>>('/api/coach/profile')
@@ -571,6 +585,14 @@ export const coachApi = {
   },
   updateProfile: async (data: Partial<CoachProfile>): Promise<CoachProfile> => {
     const response = await client.patch<ApiResponse<CoachProfile>>('/api/coach/profile', data)
+    return response.data.data!
+  },
+  getInviteLink: async (): Promise<{ token: string; url: string }> => {
+    const response = await client.get<ApiResponse<{ token: string; url: string }>>('/api/coach/invite-link')
+    return response.data.data!
+  },
+  resetInviteLink: async (): Promise<{ token: string; url: string }> => {
+    const response = await client.post<ApiResponse<{ token: string; url: string }>>('/api/coach/invite-link/reset')
     return response.data.data!
   },
   getClients: async (): Promise<CoachClient[]> => {

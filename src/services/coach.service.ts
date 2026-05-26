@@ -114,6 +114,110 @@ class CoachService {
     return prisma.user.update({ where: { id: clientId }, data: { coachNotes } });
   }
 
+  // ── Shareable invite link ──────────────────────────────────────────────────
+
+  async getOrCreateInviteToken(coachId: string): Promise<string> {
+    const profile = await prisma.coachProfile.findUnique({
+      where: { userId: coachId },
+      select: { inviteToken: true },
+    });
+    if (!profile) throw new NotFoundError('Coach profile not found');
+    if (profile.inviteToken) return profile.inviteToken;
+
+    const token = crypto.randomBytes(16).toString('hex');
+    await prisma.coachProfile.update({
+      where: { userId: coachId },
+      data: { inviteToken: token },
+    });
+    return token;
+  }
+
+  async resetInviteToken(coachId: string): Promise<string> {
+    const token = crypto.randomBytes(16).toString('hex');
+    await prisma.coachProfile.update({
+      where: { userId: coachId },
+      data: { inviteToken: token },
+    });
+    return token;
+  }
+
+  async resolveInviteToken(token: string) {
+    const profile = await prisma.coachProfile.findUnique({
+      where: { inviteToken: token },
+      select: {
+        programmeName: true,
+        brandName: true,
+        brandLogoUrl: true,
+        whitelabelEnabled: true,
+        user: { select: { id: true, firstName: true } },
+      },
+    });
+    if (!profile) throw new NotFoundError('Invite link not found or has been reset');
+    return {
+      coachId: profile.user.id,
+      coachName: profile.user.firstName,
+      programmeName: profile.programmeName,
+      displayName: (profile.whitelabelEnabled && profile.brandName) ? profile.brandName : null,
+      logoUrl: (profile.whitelabelEnabled && profile.brandLogoUrl) ? profile.brandLogoUrl : null,
+    };
+  }
+
+  async joinViaInviteToken(token: string, email: string): Promise<void> {
+    const info = await this.resolveInviteToken(token);
+    const coachId = info.coachId;
+
+    const { emailService } = await import('./email.service');
+    const profile = await prisma.coachProfile.findUnique({
+      where: { userId: coachId },
+      select: { brandName: true, brandLogoUrl: true, whitelabelEnabled: true },
+    }) as any;
+    const brand = (profile?.whitelabelEnabled && profile?.brandName)
+      ? { name: profile.brandName, logoUrl: profile.brandLogoUrl ?? null }
+      : undefined;
+
+    const existing = await prisma.user.findUnique({ where: { email } });
+
+    if (existing) {
+      if (existing.coachId === coachId) {
+        // Already in this programme — just send a magic link to log in
+        await authService.sendMagicLink(email);
+        return;
+      }
+      if (existing.coachId && existing.coachId !== coachId) {
+        throw new BadRequestError('You already have a coach on Ivy');
+      }
+      // Existing user, no coach yet — set pending invite, they accept on verify
+      await prisma.user.update({
+        where: { id: existing.id },
+        data: { pendingCoachId: coachId },
+      });
+      const magicUrl = await authService.createMagicLinkUrl(email);
+      await emailService.sendClientMagicLink({
+        clientEmail: email, magicUrl, brand, coachName: brand ? undefined : info.coachName,
+      });
+      return;
+    }
+
+    // Brand new user — create stub, they'll go through pricing themselves
+    await prisma.user.create({
+      data: {
+        email,
+        firstName: 'Friend',
+        lastName: '',
+        track: 'fitness',
+        goal: '',
+        coachId,
+        coachLinkedAt: new Date(),
+        isActive: true,
+        isOnboarded: false,
+      },
+    });
+    const magicUrl = await authService.createMagicLinkUrl(email);
+    await emailService.sendClientMagicLink({
+      clientEmail: email, magicUrl, brand, coachName: brand ? undefined : info.coachName,
+    });
+  }
+
   // ── Client invites ─────────────────────────────────────────────────────────
 
   async inviteClient(coachId: string, email: string) {

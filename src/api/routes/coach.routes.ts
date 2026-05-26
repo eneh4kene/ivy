@@ -84,4 +84,20 @@ router.delete('/clients/:id', requireCoach, async (req: AuthRequest, res: Respon
   } catch (err) { next(err); }
 });
 
+// GET /api/coach/invite-link — get (or generate) the coach's shareable invite token
+router.get('/invite-link', requireCoach, async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const token = await coachService.getOrCreateInviteToken(req.user!.id);
+    res.json({ success: true, data: { token, url: `${process.env.FRONTEND_URL}/invite/${token}` } });
+  } catch (err) { next(err); }
+});
+
+// POST /api/coach/invite-link/reset — regenerate (invalidates old link)
+router.post('/invite-link/reset', requireCoach, async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const token = await coachService.resetInviteToken(req.user!.id);
+    res.json({ success: true, data: { token, url: `${process.env.FRONTEND_URL}/invite/${token}` } });
+  } catch (err) { next(err); }
+});
+
 export default router;

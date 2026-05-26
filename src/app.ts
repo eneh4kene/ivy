@@ -22,6 +22,7 @@ import pushRoutes from './api/routes/push.routes';
 import circleRoutes from './api/routes/circle.routes';
 import adminRoutes from './api/routes/admin.routes';
 import coachRoutes from './api/routes/coach.routes';
+import inviteRoutes from './api/routes/invite.routes';
 
 const app: Application = express();
 
@@ -106,6 +107,7 @@ app.use('/api/push', pushRoutes);
 app.use('/api/circles', circleRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/coach', coachRoutes);
+app.use('/api/invite', inviteRoutes);
 app.use('/webhooks', webhookRoutes);
 
 // 404 handler

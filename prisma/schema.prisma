@@ -829,6 +829,9 @@ model CoachProfile {
   brandName         String? // replaces "Ivy" in client-facing comms
   brandLogoUrl      String? // optional logo URL
 
+  // Shareable invite link — coach shares this URL, no email needed
+  inviteToken String? @unique // random token; /invite/[token] is the public landing page
+
   // Alert preferences
   alertOnMissedCalls Int @default(3) // notify coach after N consecutive missed calls
   weeklyDigestEnabled Boolean @default(true)

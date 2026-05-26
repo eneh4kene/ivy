@@ -1,12 +1,13 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { coachApi, type CoachClient, type CoachProfile } from '@/lib/api'
 import { useAuthStore } from '@/lib/store/auth.store'
 import Link from 'next/link'
 import {
   Users, AlertTriangle, TrendingUp, Plus, Loader2,
-  ChevronRight, Settings, Flame, Phone, MessageCircle
+  ChevronRight, Settings, Flame, Phone, MessageCircle,
+  Link2, RefreshCw, Check, Copy
 } from 'lucide-react'
 
 function StatusDot({ needsAttention, missed }: { needsAttention: boolean; missed: number }) {
@@ -23,32 +24,39 @@ export default function CoachDashboard() {
   const [profile, setProfile] = useState<CoachProfile | null>(null)
   const [clients, setClients] = useState<CoachClient[]>([])
   const [loading, setLoading] = useState(true)
-  const [showInvite, setShowInvite] = useState(false)
-  const [inviteEmail, setInviteEmail] = useState('')
-  const [inviting, setInviting] = useState(false)
-  const [inviteMsg, setInviteMsg] = useState('')
+  const [inviteUrl, setInviteUrl] = useState<string | null>(null)
+  const [copied, setCopied] = useState(false)
+  const [resetting, setResetting] = useState(false)
+
+  const loadInviteLink = useCallback(async () => {
+    try {
+      const { url } = await coachApi.getInviteLink()
+      setInviteUrl(url)
+    } catch {}
+  }, [])
 
   useEffect(() => {
     Promise.all([coachApi.getProfile(), coachApi.getClients()])
       .then(([p, c]) => { setProfile(p); setClients(c) })
       .catch(console.error)
       .finally(() => setLoading(false))
-  }, [])
+    loadInviteLink()
+  }, [loadInviteLink])
 
-  const handleInvite = async () => {
-    if (!inviteEmail.trim()) return
-    setInviting(true); setInviteMsg('')
+  const handleCopy = () => {
+    if (!inviteUrl) return
+    navigator.clipboard.writeText(inviteUrl)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+
+  const handleReset = async () => {
+    if (!confirm('This will invalidate your current invite link. Anyone who had the old link won\'t be able to use it. Continue?')) return
+    setResetting(true)
     try {
-      const result = await coachApi.inviteClient(inviteEmail.trim())
-      setInviteMsg(result.status === 'linked'
-        ? `${inviteEmail} linked to your account.`
-        : `Invite sent to ${inviteEmail}.`)
-      setInviteEmail('')
-      const updated = await coachApi.getClients()
-      setClients(updated)
-    } catch (e: any) {
-      setInviteMsg(e.response?.data?.error ?? 'Failed to invite client.')
-    } finally { setInviting(false) }
+      const { url } = await coachApi.resetInviteLink()
+      setInviteUrl(url)
+    } catch {} finally { setResetting(false) }
   }
 
   const isClientActive = (c: CoachClient) =>
@@ -119,40 +127,37 @@ export default function CoachDashboard() {
           ))}
         </div>
 
-        {/* Invite */}
-        <div className="mb-6">
-          {!showInvite ? (
-            <button onClick={() => setShowInvite(true)}
-              className="w-full flex items-center justify-center gap-2 py-3 rounded-xl border border-dashed border-border hover:border-primary/40 hover:bg-primary/5 transition-colors text-sm text-muted-foreground hover:text-foreground">
-              <Plus className="w-4 h-4" /> Invite a client
-            </button>
-          ) : (
-            <div className="p-4 rounded-xl border border-border bg-card space-y-3">
-              <p className="text-sm font-medium">Invite a client</p>
-              <div className="flex gap-2">
-                <input
-                  type="email"
-                  value={inviteEmail}
-                  onChange={(e) => setInviteEmail(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && handleInvite()}
-                  placeholder="client@email.com"
-                  autoFocus
-                  className="flex-1 px-3 py-2 text-sm bg-muted/40 border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-primary"
-                />
-                <button onClick={handleInvite} disabled={inviting || !inviteEmail.trim()}
-                  className="px-4 py-2 bg-primary text-primary-foreground text-sm font-medium rounded-lg hover:opacity-90 disabled:opacity-40 flex items-center gap-1.5">
-                  {inviting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : 'Send invite'}
-                </button>
-                <button onClick={() => { setShowInvite(false); setInviteEmail(''); setInviteMsg('') }}
-                  className="px-3 py-2 text-sm text-muted-foreground hover:text-foreground border border-border rounded-lg">
-                  Cancel
-                </button>
+        {/* Invite link */}
+        <div className="mb-6 p-4 rounded-xl border border-border bg-card space-y-3">
+          <div className="flex items-center gap-2">
+            <Link2 className="w-4 h-4 text-muted-foreground" />
+            <p className="text-sm font-medium">Your invite link</p>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Share this anywhere — WhatsApp, Teams, DM, wherever. Anyone who clicks it can join your programme.
+          </p>
+          {inviteUrl ? (
+            <div className="flex gap-2">
+              <div className="flex-1 px-3 py-2 text-xs bg-muted/40 border border-border rounded-lg truncate text-muted-foreground font-mono">
+                {inviteUrl}
               </div>
-              {inviteMsg && <p className="text-xs text-muted-foreground">{inviteMsg}</p>}
-              <p className="text-xs text-muted-foreground">
-                They'll receive a magic link. Once they complete onboarding, Ivy starts their daily calls automatically.
-              </p>
+              <button
+                onClick={handleCopy}
+                className="px-3 py-2 border border-border rounded-lg text-sm hover:bg-muted/30 transition-colors flex items-center gap-1.5 shrink-0"
+              >
+                {copied ? <><Check className="w-3.5 h-3.5 text-emerald-400" /> Copied</> : <><Copy className="w-3.5 h-3.5" /> Copy</>}
+              </button>
+              <button
+                onClick={handleReset}
+                disabled={resetting}
+                title="Regenerate link (invalidates old one)"
+                className="px-3 py-2 border border-border rounded-lg text-sm hover:bg-muted/30 transition-colors text-muted-foreground shrink-0"
+              >
+                {resetting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+              </button>
             </div>
+          ) : (
+            <div className="h-9 rounded-lg bg-muted/40 animate-pulse" />
           )}
         </div>
 
