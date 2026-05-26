@@ -13,6 +13,7 @@ import { serverAnalytics } from '../../lib/analytics';
 import { handleMissedCall as handleMissedCallComms, handleDroppedCall } from '../../services/communication.service';
 import circleCatchupService from '../../services/circle-catchup.service';
 import coachService from '../../services/coach.service';
+import transcriptionService from '../../services/transcription.service';
 import { flattenContext } from '../../utils/retell';
 import { sendSuccess } from '../../utils/response';
 import logger from '../../utils/logger';
@@ -178,12 +179,25 @@ class WebhookController {
       const update = req.body;
       const message = update?.message;
 
-      if (message?.text) {
+      if (message) {
         const chatId = String(message.chat.id);
-        const text: string = message.text;
+        const telegramUserId: number | undefined = message.from?.id;
 
-        logger.info(`Telegram message from chat ${chatId}: ${text}`);
-        await messagingService.handleTelegramUpdate(chatId, text, message.from?.id);
+        if (message.text) {
+          logger.info(`Telegram text from chat ${chatId}`);
+          await messagingService.handleTelegramUpdate(chatId, message.text, telegramUserId);
+        } else if (message.voice) {
+          const fileId: string = message.voice.file_id;
+          logger.info(`Telegram voice note from chat ${chatId} (file: ${fileId})`);
+
+          const transcription = await transcriptionService.transcribeTelegramVoice(fileId);
+          if (transcription) {
+            logger.info(`Voice note transcribed (${transcription.length} chars)`);
+            await messagingService.handleTelegramUpdate(chatId, transcription, telegramUserId);
+          } else {
+            logger.warn(`Voice note from chat ${chatId} produced empty transcription — ignored`);
+          }
+        }
       }
 
       // Always respond 200 quickly — Telegram retries on non-200
