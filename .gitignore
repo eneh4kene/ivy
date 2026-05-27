@@ -54,3 +54,4 @@ ngrok.yml
 *.md
 !README.md
 !docs/*.md
+!tests/*.md
