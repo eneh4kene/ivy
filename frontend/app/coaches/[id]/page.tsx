@@ -3,27 +3,63 @@
 /**
  * /coaches/[id] — Coach profile view (consumer side).
  *
- * Shows full bio, credentials, specialties, testimonials, rate, and the
- * "Add this coach" CTA. MOCK DATA ONLY.
+ * Data source: GET /api/coach/marketplace/:id (real API).
+ * Fields not yet in the schema fall back to MOCK_MARKETPLACE_COACHES lookup by id.
  *
- * MOCK: MOCK_MARKETPLACE_COACHES + MOCK_COACH_REVIEWS
- * TODO(api): GET /api/coach/marketplace/:id
- * TODO(api): GET /api/coach/marketplace/:id/reviews
+ * MOCKED (not in schema, left mocked with clear flag):
+ *   - hourlyRate, rating, reviewCount, specialties, credentials, yearsCoaching,
+ *     activeClients, responseHours, testimonials, billingNote
+ *
+ * TODO(api): GET /api/coach/marketplace/:id/reviews (no CoachReview model yet)
  * TODO(api): POST /api/user/coach { coachId } → add-coach flow
  */
 
-import { useState, use } from 'react'
+import { useState, use, useEffect } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import {
   ArrowLeft, Star, Shield, Clock, Users, Trophy, Check, ChevronRight, X,
 } from 'lucide-react'
+import { coachMarketplaceApi, type MarketplaceCoachDetail } from '@/lib/api'
 import {
   MOCK_MARKETPLACE_COACHES,
   MOCK_COACH_REVIEWS,
   type MarketplaceCoach,
   type Specialty,
 } from '@/lib/mock/coach'
+
+/**
+ * Merge real API detail with mock fallback for fields not in the schema.
+ */
+function mergeDetailWithMock(real: MarketplaceCoachDetail): MarketplaceCoach {
+  const mock = MOCK_MARKETPLACE_COACHES.find((m) => m.id === real.id)
+  return {
+    id: real.id,
+    firstName: real.firstName,
+    lastName: real.lastName,
+    displayName: real.displayName,
+    photoUrl: real.photoUrl ?? mock?.photoUrl ?? `https://api.dicebear.com/7.x/initials/svg?seed=${real.displayName}`,
+    tagline: mock?.tagline ?? real.coachingStyle ?? real.programmeName ?? '',
+    bio: mock?.bio ?? real.programmeNotes ?? '',
+    specialties: real.specialties ?? mock?.specialties ?? [],
+    // MOCKED — hourlyRate not in CoachProfile schema yet
+    hourlyRate: real.hourlyRate ?? mock?.hourlyRate ?? 0,
+    currency: mock?.currency ?? 'GBP',
+    // MOCKED — rating / reviewCount require a CoachReview model
+    rating: real.rating ?? mock?.rating ?? 0,
+    reviewCount: real.reviewCount ?? mock?.reviewCount ?? 0,
+    activeClients: mock?.activeClients ?? 0,
+    yearsCoaching: mock?.yearsCoaching ?? 0,
+    credentials: real.credentials ?? mock?.credentials ?? [],
+    ivyVetted: real.ivyVetted,
+    available: mock?.available ?? true,
+    responseHours: mock?.responseHours ?? 24,
+    testimonials: mock?.testimonials ?? [],
+    programmes: mock?.programmes ?? (real.programmeName ? [real.programmeName] : []),
+    billingNote: mock?.billingNote
+      ?? `${real.firstName} bills you directly. Ivy takes 0% — you pay exactly what they charge.`,
+  } as MarketplaceCoach
+}
 
 // ─── Specialty labels (duplicated locally for self-containment) ───────────────
 
@@ -197,16 +233,33 @@ export default function CoachProfilePage({ params }: { params: Promise<{ id: str
 
   const [showSheet, setShowSheet] = useState(false)
   const [confirmed, setConfirmed] = useState(false)
+  const [coach, setCoach] = useState<MarketplaceCoach | null>(
+    // Start with mock data if available so the page renders immediately
+    MOCK_MARKETPLACE_COACHES.find((c) => c.id === id) ?? null,
+  )
+  const [notFound, setNotFound] = useState(false)
 
-  // MOCK: find coach by id
-  // TODO(api): GET /api/coach/marketplace/:id
-  const coach = MOCK_MARKETPLACE_COACHES.find((c) => c.id === id)
+  // Fetch real coach data from backend; merge with mock for missing fields
+  useEffect(() => {
+    coachMarketplaceApi.get(id)
+      .then((real) => setCoach(mergeDetailWithMock(real)))
+      .catch((err: any) => {
+        const status = err?.response?.status ?? err?.status
+        if (status === 404) {
+          // Genuinely not found — if we had mock data, keep it (dev mode);
+          // in prod there will be no mock data for real IDs that don't exist.
+          if (!coach) setNotFound(true)
+        }
+        // Other errors: keep mock data (or null) and degrade gracefully
+      })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id])
 
-  // MOCK: reviews
+  // MOCK: reviews — no CoachReview model yet
   // TODO(api): GET /api/coach/marketplace/:id/reviews
   const reviews = MOCK_COACH_REVIEWS[id] ?? []
 
-  if (!coach) {
+  if (notFound || (!coach && !MOCK_MARKETPLACE_COACHES.find((c) => c.id === id))) {
     return (
       <div className="min-h-dvh mesh-bg flex items-center justify-center px-6 text-center">
         <div>
@@ -215,6 +268,11 @@ export default function CoachProfilePage({ params }: { params: Promise<{ id: str
         </div>
       </div>
     )
+  }
+
+  if (!coach) {
+    // Still loading — render nothing (coach will be set by effect)
+    return null
   }
 
   if (confirmed) {

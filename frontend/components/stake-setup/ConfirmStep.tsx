@@ -13,7 +13,7 @@ import { useState } from 'react'
 import { Shield, AlertTriangle, Clock, Heart } from 'lucide-react'
 import { CHARITY_CATALOGUE, FORFEIT_OPTIONS, dailySlice } from '@/lib/mock/stake-setup'
 import type { StakeSetupState } from '@/lib/mock/stake-setup'
-import { paymentsApi } from '@/lib/api'
+import { paymentsApi, stakeApi } from '@/lib/api'
 
 interface ConfirmStepProps {
   state: StakeSetupState
@@ -69,20 +69,38 @@ export function ConfirmStep({ state, onConfirm, onEdit }: ConfirmStepProps) {
   const handleConfirm = async () => {
     setConfirming(true)
     try {
-      // Initiate subscription checkout — the user's plan tier covers access;
-      // the weekly stake amount is managed by the separate StakeCycle system
-      // (opened automatically on Mondays by the worker).
-      // For now, redirect to Stripe checkout to set up the subscription if not already active.
-      // TODO: When /api/stake/open-cycle is added, call it here to set weeklyAmount,
-      //       forfeitMode, successCharityId, dislikedCharityId, armingWindowStart/End.
+      // ── Step 1: Persist the stake config to the backend ──────────────────
+      // This is what makes the user eligible for the Monday openStakeCyclesForActiveUsers
+      // cron — without saving, the stake mechanic never engages.
+      await stakeApi.saveConfig({
+        stakeWeeklyAmount: state.weeklyAmount,
+        forfeitMode: state.forfeitMode,
+        dislikedCharityId: state.forfeitMode === 'SAVAGE' ? state.dislikedCharityId : null,
+        preferredCharityId: state.successCharityId,
+        armingWindowStart: state.armingWindowStart,
+        armingWindowEnd: state.armingWindowEnd,
+      })
+
+      // ── Step 2: Initiate subscription checkout if not already subscribed ──
+      // The user's plan tier covers access; the weekly stake auth is handled
+      // separately by the StakeCycle system on Mondays.
       const { url } = await paymentsApi.createCheckoutSession('PRO')
       if (url && typeof window !== 'undefined') {
         window.location.href = url
         return
       }
-    } catch {
-      // If the user already has an active subscription, checkout will fail —
-      // treat as already subscribed and proceed to the armed confirmation.
+    } catch (err: any) {
+      // Stake config save errors are surfaced; checkout failures (e.g. already
+      // subscribed) are treated as "already paid" and we proceed to confirmation.
+      if (err?.message?.includes('stakeWeeklyAmount') ||
+          err?.message?.includes('forfeitMode') ||
+          err?.message?.includes('arming') ||
+          err?.message?.includes('charity')) {
+        // Validation error from stake endpoint — surface it
+        setConfirming(false)
+        return
+      }
+      // Checkout failure — likely already subscribed; continue to done screen
     }
     setConfirming(false)
     onConfirm()

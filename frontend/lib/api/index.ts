@@ -578,6 +578,41 @@ export const inviteApi = {
   },
 }
 
+// Coach Marketplace API (consumer-facing)
+export interface MarketplaceCoachSummary {
+  id: string
+  firstName: string
+  lastName: string
+  displayName: string
+  photoUrl: string | null
+  programmeName: string | null
+  coachingStyle: string | null
+  /** MOCKED — not in schema yet: requires hourlyRate field on CoachProfile */
+  hourlyRate: number | null
+  /** MOCKED — not in schema yet: requires CoachReview model */
+  rating: number | null
+  reviewCount: number | null
+  ivyVetted: boolean
+}
+
+export interface MarketplaceCoachDetail extends MarketplaceCoachSummary {
+  programmeNotes: string | null
+  /** MOCKED — not in schema yet */
+  credentials: string[] | null
+  specialties: string[] | null
+}
+
+export const coachMarketplaceApi = {
+  list: async (): Promise<MarketplaceCoachSummary[]> => {
+    const response = await client.get<ApiResponse<MarketplaceCoachSummary[]>>('/api/coach/marketplace')
+    return response.data.data ?? []
+  },
+  get: async (id: string): Promise<MarketplaceCoachDetail> => {
+    const response = await client.get<ApiResponse<MarketplaceCoachDetail>>(`/api/coach/marketplace/${id}`)
+    return response.data.data!
+  },
+}
+
 export const coachApi = {
   getProfile: async (): Promise<CoachProfile | null> => {
     const response = await client.get<ApiResponse<CoachProfile | null>>('/api/coach/profile')
@@ -615,6 +650,44 @@ export const coachApi = {
   },
   updateProgrammeAreas: async (id: string, areas: Array<{ id: string; area: string; instruction: string }>): Promise<void> => {
     await client.patch(`/api/coach/clients/${id}/programme-areas`, { areas })
+  },
+}
+
+// Stake Config API
+export interface StakeConfig {
+  stakeWeeklyAmount: number | null
+  forfeitMode: 'MIDDLE' | 'SAVAGE'
+  dislikedCharityId: string | null
+  preferredCharityId: string | null
+  armingWindowStart: string | null
+  armingWindowEnd: string | null
+  currency: string
+  minWeeklyStake: number
+  defaultWeeklyStake: number
+}
+
+export const stakeApi = {
+  /**
+   * Persist the user's stake configuration.
+   * weeklyAmount must be >= STAKE_CONFIG.minWeeklyStake for the user's currency.
+   * dislikedCharityId is required when forfeitMode is 'SAVAGE'.
+   */
+  saveConfig: async (data: {
+    stakeWeeklyAmount: number
+    forfeitMode: 'MIDDLE' | 'SAVAGE'
+    dislikedCharityId?: string | null
+    preferredCharityId?: string | null
+    armingWindowStart: string
+    armingWindowEnd: string
+  }): Promise<StakeConfig> => {
+    const response = await client.post<ApiResponse<StakeConfig>>('/api/stake/config', data)
+    return response.data.data!
+  },
+
+  /** Fetch the current user's stake configuration. */
+  getConfig: async (): Promise<StakeConfig> => {
+    const response = await client.get<ApiResponse<StakeConfig>>('/api/stake/config')
+    return response.data.data!
   },
 }
 
@@ -693,6 +766,8 @@ export const api = {
   gameSuggestions: gameSuggestionsApi,
   admin: adminApi,
   coach: coachApi,
+  coachMarketplace: coachMarketplaceApi,
+  stake: stakeApi,
 }
 
 export default api

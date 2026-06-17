@@ -90,7 +90,6 @@ class EmailService {
     id: string; firstName: string; email: string; subscriptionTier: string; currency: string;
   }) {
     const tierName = TIER_NAMES[user.subscriptionTier] ?? user.subscriptionTier;
-    const symbol = user.currency === 'USD' ? '$' : '£';
     const dashboardUrl = user.subscriptionTier === 'COACH'
       ? `${config.frontend.url}/coach`
       : `${config.frontend.url}/dashboard`;
@@ -116,8 +115,8 @@ class EmailService {
             <tr><td style="font-size:13px;color:#9ca3af;padding:5px 0;">Coach dashboard</td><td style="font-size:13px;color:#34d399;text-align:right;">✓ Ready</td></tr>
             <tr><td style="font-size:13px;color:#9ca3af;padding:5px 0;">Client invite links</td><td style="font-size:13px;color:#34d399;text-align:right;">✓ Available</td></tr>
             ` : `
-            <tr><td style="font-size:13px;color:#9ca3af;padding:5px 0;">Daily accountability calls</td><td style="font-size:13px;color:#34d399;text-align:right;">✓ Active</td></tr>
-            <tr><td style="font-size:13px;color:#9ca3af;padding:5px 0;">Impact Wallet</td><td style="font-size:13px;color:#34d399;text-align:right;">${symbol}1 per follow-through</td></tr>
+            <tr><td style="font-size:13px;color:#9ca3af;padding:5px 0;">Morning VN arming + evening review</td><td style="font-size:13px;color:#34d399;text-align:right;">✓ Active</td></tr>
+            <tr><td style="font-size:13px;color:#9ca3af;padding:5px 0;">Stake commitment device</td><td style="font-size:13px;color:#34d399;text-align:right;">Set up in app</td></tr>
             <tr><td style="font-size:13px;color:#9ca3af;padding:5px 0;">Streak tracking</td><td style="font-size:13px;color:#34d399;text-align:right;">✓ Active</td></tr>
             `}
           </table>
@@ -151,7 +150,7 @@ class EmailService {
       </h1>
       <p style="margin:0 0 24px;font-size:15px;color:#9ca3af;line-height:1.6;">
         Hey ${user.firstName}, we couldn't process your latest Ivy payment.
-        Your calls and wallet are paused until the payment clears — but nothing has been lost.
+        Your calls and daily accountability loop are paused until the payment clears — but nothing has been lost.
       </p>
       <table width="100%" cellpadding="0" cellspacing="0" style="background:#1a0a0a;border:1px solid #3b1515;border-radius:12px;padding:20px;margin-bottom:28px;">
         <tr><td style="font-size:13px;color:#f87171;">

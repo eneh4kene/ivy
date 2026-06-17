@@ -4,7 +4,12 @@
  * /coaches — Consumer-facing coach marketplace.
  *
  * Browse Ivy-vetted coaches, filter by specialty, see cards with photo/rating/rate.
- * MOCK DATA ONLY — all API shapes are marked with // TODO(api): / // MOCK:
+ *
+ * Data source: GET /api/coach/marketplace (real API).
+ * Fields not yet in the schema (hourlyRate, rating, reviewCount, specialties,
+ * credentials, yearsCoaching, activeClients, responseHours, testimonials) fall
+ * back to the MOCK_MARKETPLACE_COACHES lookup by id, or sensible defaults.
+ * When those fields are added to CoachProfile the fallback paths can be removed.
  *
  * Key product facts (§5f of docs/product-pricing-rework.md):
  *   - Coach is an optional add-on, available at any time on any plan
@@ -12,16 +17,50 @@
  *   - "Ivy-delivered features are free; humans are paid to the humans."
  */
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import Link from 'next/link'
 import {
   ArrowLeft, Star, Shield, Clock, ChevronRight, Search, SlidersHorizontal, X,
 } from 'lucide-react'
+import { coachMarketplaceApi, type MarketplaceCoachSummary } from '@/lib/api'
 import {
   MOCK_MARKETPLACE_COACHES,
   type MarketplaceCoach,
   type Specialty,
 } from '@/lib/mock/coach'
+
+/**
+ * Merge real API data with mock fallback for fields not yet in the schema.
+ * Once hourlyRate / rating etc. are added to CoachProfile, remove the fallback.
+ */
+function mergeWithMock(real: MarketplaceCoachSummary): MarketplaceCoach {
+  const mock = MOCK_MARKETPLACE_COACHES.find((m) => m.id === real.id)
+  return {
+    id: real.id,
+    firstName: real.firstName,
+    lastName: real.lastName,
+    displayName: real.displayName,
+    photoUrl: real.photoUrl ?? mock?.photoUrl ?? `https://api.dicebear.com/7.x/initials/svg?seed=${real.displayName}`,
+    tagline: mock?.tagline ?? real.coachingStyle ?? real.programmeName ?? '',
+    bio: mock?.bio ?? '',
+    specialties: mock?.specialties ?? [],
+    // MOCKED — hourlyRate not in schema; show 0 when unavailable
+    hourlyRate: real.hourlyRate ?? mock?.hourlyRate ?? 0,
+    currency: mock?.currency ?? 'GBP',
+    // MOCKED — rating/reviewCount not in schema
+    rating: real.rating ?? mock?.rating ?? 0,
+    reviewCount: real.reviewCount ?? mock?.reviewCount ?? 0,
+    activeClients: mock?.activeClients ?? 0,
+    yearsCoaching: mock?.yearsCoaching ?? 0,
+    credentials: mock?.credentials ?? [],
+    ivyVetted: real.ivyVetted,
+    available: mock?.available ?? true,
+    responseHours: mock?.responseHours ?? 24,
+    testimonials: mock?.testimonials ?? [],
+    programmes: mock?.programmes ?? (real.programmeName ? [real.programmeName] : []),
+    billingNote: mock?.billingNote ?? `${real.firstName} bills you directly. Ivy takes 0% — you pay exactly what they charge.`,
+  } as MarketplaceCoach
+}
 
 // ─── Specialty labels ─────────────────────────────────────────────────────────
 
@@ -164,15 +203,32 @@ export default function CoachMarketplacePage() {
   const [searchQuery, setSearchQuery] = useState('')
   const [activeSpecialty, setActiveSpecialty] = useState<Specialty | null>(null)
   const [showFilters, setShowFilters] = useState(false)
+  const [coaches, setCoaches] = useState<MarketplaceCoach[]>(
+    // Start with mock data while the real fetch loads, so the page isn't blank
+    MOCK_MARKETPLACE_COACHES,
+  )
+  const [loading, setLoading] = useState(true)
 
-  // MOCK: client has no coach yet
-  // TODO(api): GET /api/user/coach → check if user has an active coach
-  const hasCoach = false
+  // Fetch real coaches from the backend
+  useEffect(() => {
+    coachMarketplaceApi.list()
+      .then((realCoaches) => {
+        if (realCoaches.length > 0) {
+          // Merge real data with mock fallbacks for schema-missing fields
+          setCoaches(realCoaches.map(mergeWithMock))
+        }
+        // If the API returns 0 results (no COACH users yet), keep the mock data
+        // so the page still renders meaningfully during development.
+      })
+      .catch(() => {
+        // On error keep mock data — non-fatal, marketplace degrades gracefully
+      })
+      .finally(() => setLoading(false))
+  }, [])
 
-  // MOCK: filter logic on client
-  // TODO(api): pass filters to GET /api/coach/marketplace?specialty=strength&q=...
+  // Filters run client-side on whatever data we have (real or mock)
   const filtered = useMemo(() => {
-    let list = MOCK_MARKETPLACE_COACHES
+    let list = coaches
     if (activeSpecialty) {
       list = list.filter((c) => c.specialties.includes(activeSpecialty))
     }
@@ -186,7 +242,11 @@ export default function CoachMarketplacePage() {
       )
     }
     return list
-  }, [searchQuery, activeSpecialty])
+  }, [searchQuery, activeSpecialty, coaches])
+
+  // MOCK: client has no coach yet
+  // TODO(api): GET /api/user/coach → check if user has an active coach
+  const hasCoach = false
 
   return (
     <div className="min-h-dvh mesh-bg-subtle pb-safe-b">
