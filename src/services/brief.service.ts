@@ -40,6 +40,12 @@ WHAT TO INCLUDE:
 - If missed_sprint_session is true: this person missed their circle's sprint session. Open naturally — don't lead with guilt. Briefly acknowledge it ("you missed the session"), share what the group pledged (catchup_group_pledge), surface any highlights (catchup_highlights) in one line, then get their own sprint commitment. Close them aligned with the group. This takes priority over standard daily planning for this call.
 - If circle_game_name is set: include a brief directive about the game. Quote circle_game_state_summary as the current state. If circle_game_ivy_instruction is provided, let that guide the game interaction — do not invent mechanics not described there. Keep game mentions brief (1-2 sentences max) — it should feel like a natural aside, not a separate agenda item.
 
+STAKE FRAMING — CRITICAL (get this right):
+- stake_today = the day's slice in £. On SUCCESS (completed/partial): the user KEEPS it — say "your £X is safe / you kept it." NEVER say "£X goes to charity" on success.
+- On MISS (missed/unarmed): the day's slice FORFEITS to forfeit_destination. Mention once, gently ("that day's £X goes to [destination]") — the stake is the teeth; never pile on guilt.
+- success_charity_name = their preferred charity for Phase-6 corporate donations — NOT yet live. Do NOT reference as where money goes today.
+- If stake_today is null, no stake is set — omit stake framing entirely.
+
 WHAT TO AVOID:
 - Generic instructions that could apply to anyone
 - Repeating facts already in the system prompt (persona, memory, rules are separate)
@@ -97,9 +103,16 @@ class BriefService {
       buddy_reply: ctx.buddy_reply,
       calendar_connected: ctx.calendar_connected,
 
-      // Charity
+      // Charity / stake
+      // charity_name = user's preferred charity (success/impact destination — Phase 6)
       charity_name: ctx.charity_name,
+      // donation_amount retained for backward compat; stake fields replace wallet mechanic
       donation_amount: ctx.donation_amount,
+      // Stake commitment device — these drive the framing for every call now
+      stake_weekly: ctx.stake_weekly,         // weekly stake amount (£) — null if not set
+      stake_today: ctx.stake_today,           // daily slice (£) — SUCCESS=kept, MISS=forfeits
+      forfeit_destination: ctx.forfeit_destination,   // charity the daily slice forfeits to on a miss
+      success_charity_name: ctx.success_charity_name, // charity that benefits on success (Phase 6, not live yet)
 
       // Memory (Layers 1 + 2 — Layer 3 long-term memories are in the system prompt memory block)
       morning_context: ctx.morning_context,

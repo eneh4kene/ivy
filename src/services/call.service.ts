@@ -208,10 +208,15 @@ class CallService {
       firstScore, latestScore, recentLifeMarkers,
       completedCallCount, buddy,
       activeSeason, currentSprint, circleContext,
+      houseDefaultCharity,
     ] = await Promise.all([
       prisma.user.findUnique({
         where: { id: userId },
-        include: { preferredCharity: true, company: { select: { name: true } } },
+        include: {
+          preferredCharity: true,
+          dislikedCharity: true,
+          company: { select: { name: true } },
+        },
       }),
       prisma.streak.findUnique({ where: { userId } }),
       prisma.workout.count({ where: { userId, status: { in: ['COMPLETED', 'PARTIAL'] }, createdAt: { gte: weekAgo } } }),
@@ -238,6 +243,8 @@ class CallService {
       seasonService.getActiveSeason(userId),
       seasonService.getCurrentSprint(userId),
       circleService.getCircleContextForUser(userId),
+      // House-default charity for MIDDLE forfeit mode (§9 decision 5)
+      prisma.charity.findFirst({ where: { isHouseDefault: true, isActive: true }, select: { name: true } }),
     ]);
 
     const daysLeftInSprint = currentSprint
@@ -338,11 +345,58 @@ class CallService {
       ? Math.floor(differenceInDays(now, onboardedAt) / 7)
       : 0;
 
-    // Phase 5: per-completion donation amount is retired (§8). donation_amount passed to
-    // the prompt context is kept for backward compat with existing prompt templates but
-    // is now a flat value — charity funding comes from stake forfeits/corporate pool, not
-    // a per-tier per-call deduction.
+    // Phase 5: per-completion donation amount is retired (§8). donation_amount kept for
+    // backward compat only — charity funding now comes from stake forfeits/corporate pool.
     const donation_amount = 1.0;
+
+    // ── Stake context fields (product-pricing-rework.md §2 + §3) ──────────────
+    // stake_weekly: the user's weekly stake amount (user-set; null if not configured)
+    // stake_today: daily slice = weekly ÷ 7, rounded to 2dp
+    // forfeit_destination: the charity/destination that gets the money on a miss
+    //   - MIDDLE mode → house-default charity (a vetted charity the user did NOT choose)
+    //   - SAVAGE mode → the charity they actively dislike
+    // success_charity_name: their preferred charity (for Phase-6 corporate success donations)
+    const stake_weekly = user?.stakeWeeklyAmount != null
+      ? Number(user.stakeWeeklyAmount)
+      : null;
+    const stake_today = stake_weekly != null
+      ? Math.round((stake_weekly / 7) * 100) / 100
+      : null;
+    const forfeit_destination = (() => {
+      if (!user) return null;
+      if (user.forfeitMode === 'SAVAGE') {
+        // Savage: the charity they actively dislike
+        return (user as any).dislikedCharity?.name ?? null;
+      }
+      // MIDDLE (default): house charity they did NOT choose
+      return houseDefaultCharity?.name ?? null;
+    })();
+    const success_charity_name = user?.preferredCharity?.name ?? null;
+
+    // Season-level stake outcomes (for season_close flow) — sum from StakeCycle records
+    // Query inline here to keep getUserContext self-contained; OK to be null if no cycles.
+    const seasonStakeAgg = activeSeason
+      ? await prisma.stakeCycle.aggregate({
+          where: {
+            userId,
+            periodStart: { gte: activeSeason.startDate },
+            periodEnd: { lte: activeSeason.endDate },
+          },
+          _sum: { stakeAmount: true, capturedAmount: true },
+        }).catch(() => null)
+      : null;
+    // stake_kept = total authorized minus total captured (forfeited) for the season
+    const seasonTotalAuthorized = seasonStakeAgg?._sum?.stakeAmount != null
+      ? Number(seasonStakeAgg._sum.stakeAmount)
+      : null;
+    const seasonTotalForfeited = seasonStakeAgg?._sum?.capturedAmount != null
+      ? Number(seasonStakeAgg._sum.capturedAmount)
+      : null;
+    const stake_kept = seasonTotalAuthorized != null && seasonTotalForfeited != null
+      ? Math.round((seasonTotalAuthorized - seasonTotalForfeited) * 100) / 100
+      : null;
+    const stake_forfeited = seasonTotalForfeited;
+    // ────────────────────────────────────────────────────────────────────────────
 
     const days_since_workout = streak?.lastWorkoutDate
       ? differenceInDays(now, new Date(streak.lastWorkoutDate))
@@ -366,9 +420,22 @@ class CallService {
       track: user?.track,
       track_detail: user?.trackDetail ?? null, // personal specificity — Ivy uses this in conversation
       weekly_goal: user?.callFrequency ?? 3,
+      // charity_name kept for backward compat — it is the user's PREFERRED / success charity.
+      // Do NOT use this as "where the money goes on success" — Phase-6 corporate donation is not built yet.
       charity_name: user?.preferredCharity?.name ?? null,
       monthly_wallet: Number(impactWallet?.monthlyLimit ?? 0),
       donation_amount,
+
+      // Stake commitment device (product-pricing-rework.md §2 + §3)
+      // SUCCESS: stake_today is RELEASED — user KEEPS their money. Never say "goes to charity" on success.
+      // MISS: stake_today FORFEITS to forfeit_destination. Mention gently; the stake IS the teeth.
+      stake_weekly,                // user's weekly stake amount in £ (null if not configured)
+      stake_today,                 // daily slice = stake_weekly / 7 (null if no stake)
+      forfeit_destination,         // name of the charity the forfeited slice goes to on a miss
+      success_charity_name,        // user's preferred charity (for Phase-6 corporate donation on success — not live yet)
+      // Season-level stake outcome totals (used in season_close flow)
+      stake_kept,                  // cumulative stake returned to user this season (£)
+      stake_forfeited,             // cumulative stake captured/forfeited this season (£)
 
       // Personal context
       minimum_action: user?.minimumMode ?? null,

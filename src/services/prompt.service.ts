@@ -39,11 +39,15 @@ const FLOWS: Record<string, FlowFn> = {
     const minimum = ctx.minimum_action ?? 'even a 10-minute version counts';
     const track = ctx.track ?? 'session';
     const plan = ctx.todays_plan ?? 'none yet';
-    const donation = ctx.donation_amount ?? 1;
-    const charity = ctx.charity_name ?? 'your charity';
+    // Stake framing: this is an opt-in morning call — arming is normally the async VN (§1c).
+    // Remind them their stake is on the line; completing keeps their money safe.
+    const stakeToday = ctx.stake_today ?? null;
+    const stakeLine = stakeToday
+      ? `STAKE REMINDER: "Your £${stakeToday} is on the line today — completing keeps it safe." Once, naturally.`
+      : '';
 
     return [
-      `THIS CALL: Morning Planning`,
+      `THIS CALL: Morning Planning (opt-in live call)`,
       `Target: 60-90 seconds.`,
       '',
       `FLOW:`,
@@ -55,7 +59,7 @@ const FLOWS: Record<string, FlowFn> = {
       '',
       `3. HESITATION: Offer the minimum — "${minimum}". ${gift}`.trim(),
       '',
-      `4. CHARITY TIE: "That'll send £${donation} to ${charity} when you check it off." Once, naturally.`,
+      stakeLine ? `4. ${stakeLine}` : '',
       '',
       `5. CLOSE: Confirm the plan in one sentence. Send off with energy.`,
     ].filter(Boolean).join('\n');
@@ -66,38 +70,45 @@ const FLOWS: Record<string, FlowFn> = {
       ? `Sprint ${ctx.sprint_number} closes in ${ctx.days_left_in_sprint} day${ctx.days_left_in_sprint === 1 ? '' : 's'}.`
       : '';
     const track = ctx.track ?? 'session';
-    const donation = ctx.donation_amount ?? 1;
-    const charity = ctx.charity_name ?? 'your charity';
     const specificity = ctx.probe_for_specificity
       ? 'Do NOT confirm the plan until you have a specific time AND location.'
       : 'At minimum, get a time.';
+    // Stake framing: completing keeps their stake safe; missing forfeits the day's slice.
+    const stakeToday = ctx.stake_today ?? null;
+    const stakeLine = stakeToday
+      ? `STAKE TIE: "Your £${stakeToday} is safe once it's done." ${sprint}`.trim()
+      : sprint;
 
     return [
-      `THIS CALL: Morning Planning (Calendar-Aware)`,
+      `THIS CALL: Morning Planning (Calendar-Aware, opt-in live call)`,
       `Target: 90 seconds.`,
       '',
       `FLOW:`,
       `1. Lead with calendar: "I looked at your day." Identify the best window or flag conflicts.`,
       `2. Problem-solve if needed: alternative time, shorter version, still a ${track} session.`,
       `3. Confirm: lock in time + activity. ${specificity}`,
-      `4. CHARITY TIE: "That's £${donation} to ${charity} when it's done." ${sprint}`.trim(),
+      stakeLine ? `4. ${stakeLine}` : '',
       `5. CLOSE: "If anything shifts, you know where I am."`,
-    ].join('\n');
+    ].filter(Boolean).join('\n');
   },
 
   evening_completed: (ctx) => {
     const streak = ctx.current_streak;
+    // Stake framing: SUCCESS = they KEEP their money. Do NOT say "£X goes to charity."
+    // Streaks are acknowledgement only — no "bonus sent to charity" wallet claims.
+    const stakeToday = ctx.stake_today ?? null;
+    const stakeConfirm = stakeToday
+      ? `"Your £${stakeToday} is safe — you kept it."`
+      : `"Your stake's intact."`;
     const streakLine = (() => {
-      if (streak >= 90) return `90 days. A full quarter. That's not motivation — that's discipline. £25 bonus sent.`;
-      if (streak >= 30) return `30 days. £10 bonus to ${ctx.charity_name ?? 'your charity'}. Look at what you built.`;
+      if (streak >= 90) return `90 days. A full quarter. That's not motivation — that's discipline.`;
+      if (streak >= 30) return `30 days straight. Look at what you built.`;
       if (streak >= 21) return `21 days. They say that's how long it takes. You're there.`;
       if (streak >= 14) return `Two weeks. Consistency is becoming your default.`;
       if (streak >= 7) return `Full week. You're building something.`;
       if (streak > 1) return `${streak} in a row. Keep building.`;
       return '';
     })();
-    const donation = ctx.donation_amount ?? 1;
-    const charity = ctx.charity_name ?? 'your charity';
 
     return [
       `THIS CALL: Evening Review — COMPLETED`,
@@ -105,7 +116,7 @@ const FLOWS: Record<string, FlowFn> = {
       '',
       `FLOW:`,
       `1. Confirm it. Celebrate calibrated to the streak.`,
-      `   Standard: "£${donation} to ${charity}. Done."`,
+      `   Standard: ${stakeConfirm} Done.`,
       streakLine ? `   Milestone: "${streakLine}"` : '',
       `   After near-miss (if morning_context suggests hesitation): "You almost didn't, but you did. That's the hard part."`,
       '',
@@ -130,6 +141,15 @@ const FLOWS: Record<string, FlowFn> = {
     const gift = ctx.gift_frame
       ? `Gift frame (last resort): "You said you're doing this for ${ctx.gift_frame}. What would they say?"`
       : '';
+    // Stake framing: on a miss, the day's slice forfeits to their destination.
+    // State the consequence gently — the stake IS the teeth; never pile on guilt.
+    const stakeToday = ctx.stake_today ?? null;
+    const forfeitDest = ctx.forfeit_destination ?? null;
+    const forfeitLine = stakeToday && forfeitDest
+      ? `STAKE: Mention once, gently: "That day's £${stakeToday} goes to ${forfeitDest}." Don't dwell — it's the mechanic, not a punishment.`
+      : stakeToday
+        ? `STAKE: Mention once, gently: "That day's £${stakeToday} forfeits." Don't dwell.`
+        : '';
 
     return [
       `THIS CALL: Evening Review — MISSED`,
@@ -139,8 +159,9 @@ const FLOWS: Record<string, FlowFn> = {
       `1. "Got it. No judgment. What happened?" — listen, validate briefly, don't linger.`,
       `2. If early enough in the evening: "Anything small you could do tonight?" Offer the minimum.`,
       `3. If day is done: "Rest day it is."`,
-      `4. RESET: "Tomorrow — what's the plan?" Get a specific intention.`,
-      gift ? `5. ${gift}` : '',
+      forfeitLine ? `4. ${forfeitLine}` : '',
+      `5. RESET: "Tomorrow — what's the plan?" Get a specific intention.`,
+      gift ? `6. ${gift}` : '',
       '',
       `PATTERN RULES:`,
       `- One miss: normalise it. "One miss doesn't break a streak."`,
@@ -150,8 +171,12 @@ const FLOWS: Record<string, FlowFn> = {
   },
 
   evening_partial: (ctx) => {
-    const donation = ctx.donation_amount ?? 1;
-    const charity = ctx.charity_name ?? 'your charity';
+    // Stake framing: PARTIAL = a completed/partial day — their stake slice is RELEASED (they keep it).
+    // Do NOT say "£X goes to charity" on partial success.
+    const stakeToday = ctx.stake_today ?? null;
+    const stakeConfirm = stakeToday
+      ? `"Partial counts — your £${stakeToday} is safe."`
+      : `"Partial counts."`;
 
     return [
       `THIS CALL: Evening Review — PARTIAL`,
@@ -159,7 +184,7 @@ const FLOWS: Record<string, FlowFn> = {
       '',
       `FLOW:`,
       `1. Honour it immediately: "You planned [full] but did [partial]. That counts. Partial is infinitely better than zero."`,
-      `2. "£${donation} to ${charity}."`,
+      `2. ${stakeConfirm}`,
       `3. "What happened that cut it short?" — brief, curious, not accusatory.`,
       `4. "Tomorrow — full session or adjusted plan?"`,
     ].join('\n');
@@ -170,6 +195,15 @@ const FLOWS: Record<string, FlowFn> = {
     const openLine = plan
       ? `"How did the ${plan} go today?"`
       : `"How did today go?"`;
+    // Stake framing: success = keep money; miss = forfeit.
+    const stakeToday = ctx.stake_today ?? null;
+    const forfeitDest = ctx.forfeit_destination ?? null;
+    const completedStakeLine = stakeToday
+      ? `Celebrate. "Your £${stakeToday} is safe — you kept it." Streak acknowledgment.`
+      : `Celebrate. Streak acknowledgment.`;
+    const missedStakeLine = stakeToday && forfeitDest
+      ? `"No judgment. What happened?" Note gently that the day's £${stakeToday} forfeits to ${forfeitDest}. Pivot to tomorrow.`
+      : `"No judgment. What happened?" One sentence. Pivot to tomorrow.`;
 
     return [
       `THIS CALL: Evening Review`,
@@ -178,9 +212,9 @@ const FLOWS: Record<string, FlowFn> = {
       `FLOW:`,
       `1. Open: ${openLine}`,
       `2. Listen to determine outcome — then follow the appropriate path:`,
-      `   COMPLETED → Celebrate. £${ctx.donation_amount ?? 1} to ${ctx.charity_name ?? 'your charity'}. Streak acknowledgment.`,
-      `   PARTIAL → "That counts. Partial beats zero."`,
-      `   MISSED → "No judgment. What happened?" One sentence. Pivot to tomorrow.`,
+      `   COMPLETED → ${completedStakeLine}`,
+      `   PARTIAL → "That counts. Partial beats zero." Your stake's intact.`,
+      `   MISSED → ${missedStakeLine}`,
       `3. Tomorrow: plant a seed for the plan. Don't over-commit.`,
     ].join('\n');
   },
@@ -201,8 +235,12 @@ const FLOWS: Record<string, FlowFn> = {
     const gift = ctx.gift_frame
       ? `Gift frame: "You're doing this for ${ctx.gift_frame}. Do it for them today."`
       : '';
-    const donation = ctx.donation_amount ?? 1;
-    const charity = ctx.charity_name ?? 'your charity';
+    // Stake is the lever: doing the minimum keeps their £X safe.
+    const stakeToday = ctx.stake_today ?? null;
+    const forfeitDest = ctx.forfeit_destination ?? null;
+    const stakeLever = stakeToday
+      ? `Stake lever: "Doing the minimum keeps your £${stakeToday} safe${forfeitDest ? ` — otherwise it goes to ${forfeitDest}` : ''}." Use once if they're wavering.`
+      : '';
 
     return [
       `THIS CALL: Rescue — they reached out because they're about to skip.`,
@@ -214,15 +252,16 @@ const FLOWS: Record<string, FlowFn> = {
       `3. OPTIONS: "Full session, minimum, or a real rest day? No wrong answer — be honest."`,
       `4. NUDGE LADDER — escalate in this order if they're wavering:`,
       `   1st: Social proof: "Most people feeling like this still do something small."`,
-      `   2nd: Consequence: "${minimum} keeps your ${streak}-day streak alive."`,
-      `   3rd: Identity: "You've done ${ctx.total_workouts ?? '?'} sessions. You're someone who shows up."`,
-      gift ? `   4th: ${gift}` : '',
+      `   2nd: Streak: "${minimum} keeps your ${streak}-day streak alive."`,
+      stakeLever ? `   3rd: ${stakeLever}` : '',
+      `   4th: Identity: "You've done ${ctx.total_workouts ?? '?'} sessions. You're someone who shows up."`,
+      gift ? `   5th: ${gift}` : '',
       `5. VERBAL COMMITMENT: "Say it out loud: 'I'm going to [minimum] by [time].'" Wait for it.`,
       `6. CLOSE: "Text me 'done' when it's done."`,
       '',
       `RESCUE RULES:`,
       `- If they choose a real rest day: "You called instead of disappearing. That's growth." Then: "Tomorrow's plan?"`,
-      `- Even the minimum sends £${donation} to ${charity}. Mention it once.`,
+      `- Doing the minimum keeps their stake safe. Mention it once.`,
       `- Move fast — they called because they want to be talked in.`,
     ].filter(Boolean).join('\n');
   },
@@ -328,7 +367,20 @@ const FLOWS: Record<string, FlowFn> = {
 
   onboarding: (ctx) => {
     const track = ctx.track ?? '(to confirm)';
-    const charity = ctx.charity_name ?? 'their chosen charity';
+    const stakeWeekly = ctx.stake_weekly ?? null;
+    const forfeitDest = ctx.forfeit_destination ?? null;
+    const successCharity = ctx.success_charity_name ?? ctx.charity_name ?? null;
+
+    // Stake + VN arming explanation: their own money, set weekly; completing keeps it.
+    // Missing forfeits the day's slice to forfeit_destination.
+    // Morning arming = spoken voice note (NOT a live call by default).
+    const stakeLine = stakeWeekly
+      ? `"Your £${stakeWeekly}/week stake is your commitment device — your own money, set by you. Completing each day keeps your daily slice. Miss one and that slice goes to ${forfeitDest ?? 'a charity you didn\'t choose'}. The stake isn't ours — it's yours. That's the teeth." Keep it simple, one explanation.`
+      : `"Your stake is your commitment device — your own money on the line. Complete the day and you keep it. Miss and it forfeits. That's the teeth." Keep it simple.`;
+    const vnLine = `MORNING VN: "Each morning you'll drop a quick voice note — what you're taking on today, said out loud. That arms the day. No VN = unarmed = the day doesn't count."`;
+    const successCharityLine = successCharity
+      ? `SUCCESS FRAMING: On days you complete, ${successCharity} benefits (via a corporate donation — it fires when the system is live). Tonight it's about keeping your stake.`
+      : '';
 
     return [
       `THIS CALL: Onboarding — first call with Ivy.`,
@@ -346,12 +398,14 @@ const FLOWS: Record<string, FlowFn> = {
       '',
       `4. FIRST SESSION (2 min): "Let's plan tomorrow." What, when, where. Get a specific commitment.`,
       '',
-      `5. DONATION MECHANIC (1 min): "Every completed session sends money to ${charity}. You build a habit and make an impact." Keep it simple.`,
+      `5. STAKE + ARMING (2 min): ${stakeLine}`,
+      `   ${vnLine}`,
+      successCharityLine ? `   ${successCharityLine}` : '',
       '',
-      `6. SCHEDULE (2 min): Morning call time? Evening call time? Which days?`,
+      `6. SCHEDULE (2 min): Evening call time? Which days? (Morning arming is async — they record a voice note, not a call.)`,
       '',
-      `7. CLOSE: "You've just made your first commitment. I'll call you tomorrow morning." End with energy.`,
-    ].join('\n');
+      `7. CLOSE: "You've just made your first commitment. Tomorrow morning, drop your voice note — I'll hear it." End with energy.`,
+    ].filter(Boolean).join('\n');
   },
 
   season_close: (ctx) => {
@@ -380,8 +434,21 @@ const FLOWS: Record<string, FlowFn> = {
       mixed: `"You kept coming back. That's the whole point."`,
     }[consistency];
 
-    const totalDonated = ctx.total_donated ?? 0;
-    const charity = ctx.charity_name ?? 'your charity';
+    // Stake outcomes framing: what they kept vs. forfeited is the meaningful number now,
+    // not "total donated" (which is the legacy wallet mechanic).
+    const totalSessions = ctx.total_workouts ?? '?';
+    const stakeKept = ctx.stake_kept ?? null;   // cumulative stake returned (released) this season
+    const stakeForfeited = ctx.stake_forfeited ?? null; // cumulative stake forfeited this season
+    const successCharity = ctx.success_charity_name ?? ctx.charity_name ?? null;
+
+    // Build the stats line around stake outcomes, not donation totals
+    const statsLine = (() => {
+      const parts: string[] = [`Total sessions: ${totalSessions}.`];
+      if (stakeKept != null) parts.push(`Stake kept: £${stakeKept}.`);
+      if (stakeForfeited != null && Number(stakeForfeited) > 0) parts.push(`Forfeited: £${stakeForfeited}.`);
+      if (successCharity && stakeKept) parts.push(`${successCharity} benefited from your successful days.`);
+      return parts.join(' ');
+    })();
 
     return [
       `THIS CALL: Season Close — Season ${seasonNum} is done.`,
@@ -395,7 +462,7 @@ const FLOWS: Record<string, FlowFn> = {
       `2. ARC REVIEW (5 min): Walk the season — highs, hard stretches, moments that mattered. ${arcNote}`.trim(),
       '',
       `3. TRANSFORMATION (3 min): What's genuinely different now vs. Day 1? Real shifts, not just stats.`,
-      `   Total sessions: ${ctx.total_workouts ?? '?'}. Total donated: £${totalDonated} to ${charity}.`,
+      `   ${statsLine}`,
       '',
       ltMem ? `4. LONG-TERM MEMORIES (3 min): Draw on what you know about them.\n${ltMem}` : `4. LONG-TERM MEMORIES (3 min): Surface specific moments you remember. Make them feel known.`,
       '',
@@ -487,9 +554,14 @@ class PromptService {
     const weeksLine = ctx.weeks_in_program > 0
       ? `${ctx.weeks_in_program} week${ctx.weeks_in_program === 1 ? '' : 's'} in`
       : 'just starting';
-    const donationLine = ctx.charity_name
-      ? `Every completed session sends £${ctx.donation_amount ?? 1} to ${ctx.charity_name}.`
-      : '';
+    // Stake framing: their own money on the line — completing keeps it, missing forfeits to their destination.
+    // Do NOT say "£X goes to charity" on success — that is the legacy wallet mechanic (now removed).
+    // The corporate donation on success (Phase 6) is not built yet; omit until live.
+    const stakeLine = ctx.stake_today
+      ? `Today's stake: £${ctx.stake_today} — kept on success, forfeited${ctx.forfeit_destination ? ` to ${ctx.forfeit_destination}` : ''} on a miss.`
+      : ctx.stake_weekly
+        ? `Weekly stake: £${ctx.stake_weekly} — their own money. Success = kept; miss = forfeited.`
+        : '';
     const b2bLine = isB2B && ctx.company_wellness_theme
       ? `Company programme: "${ctx.company_wellness_theme}".`
       : '';
@@ -500,7 +572,7 @@ class PromptService {
       '',
       `VOICE: Warm and direct — you care whether they actually do the thing. No filler openings ("Great!", "Absolutely!"). Say what needs to be said, gently but without hedging. Match their energy. Contractions are fine. Occasional warmth ("Hmm," "Ah") — never robotic.`,
       '',
-      `ABOUT ${name.toUpperCase()}: ${weeksLine}. Focus: ${trackLine}. Goal: "${goal}". ${donationLine} ${b2bLine}`.trim(),
+      `ABOUT ${name.toUpperCase()}: ${weeksLine}. Focus: ${trackLine}. Goal: "${goal}". ${stakeLine} ${b2bLine}`.trim(),
     ].join('\n');
   }
 
@@ -560,14 +632,26 @@ class PromptService {
   }
 
   private standingRules(ctx: Record<string, any>): string {
-    const charityLine = ctx.charity_name ? `- Refer to their charity by name: ${ctx.charity_name}.` : '';
+    // Name the forfeit/impact destination where relevant; never name success charity as "where the money goes" on a success
+    const forfeitCharityLine = ctx.forfeit_destination
+      ? `- Forfeit destination: "${ctx.forfeit_destination}" — name it if the forfeit consequence is relevant to this call.`
+      : '';
+    const successCharityLine = ctx.success_charity_name
+      ? `- Success charity (Phase 6, not yet funded): "${ctx.success_charity_name}" — do NOT reference as "where your donation goes today." Omit unless directly relevant.`
+      : '';
+    // One-line stake reminder to ground every call
+    const stakeReminder = ctx.stake_today
+      ? `- Today's stake: £${ctx.stake_today}. Success = they keep it. Miss = it forfeits. Never say it goes to charity on success.`
+      : '';
 
     return [
       `ALWAYS:`,
       `- Get specifics before confirming any plan (at minimum: what + when)`,
       `- If they say "probably", "maybe", "I'll try", "hopefully" — treat as avoidance. Probe once: "What would it take to make that a yes?"`,
       `- Ask one question at a time`,
-      charityLine,
+      forfeitCharityLine,
+      successCharityLine,
+      stakeReminder,
       `- Keep calls to the target length — Ivy respects their time`,
       '',
       `NEVER:`,
@@ -575,6 +659,7 @@ class PromptService {
       `- Read memory back verbatim — weave it in naturally`,
       `- Let a miss spiral into guilt — one sentence on what happened, then forward`,
       `- Invent details — if something is null or unknown, don't fabricate`,
+      `- Say "your £X goes to charity" on a successful day — on success the stake is RETURNED, not donated`,
     ].filter(Boolean).join('\n');
   }
 
