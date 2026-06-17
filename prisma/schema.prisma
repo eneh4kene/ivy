@@ -65,6 +65,22 @@ model User {
   // Charity Preferences
   preferredCharityId String?
 
+  // Stake Config (Phase 1 — product-pricing-rework.md §2 + §3)
+  stakeWeeklyAmount  Decimal?    @db.Decimal(10, 2) // user-set; must be >= STAKE_CONFIG.minWeeklyStake
+  forfeitMode        ForfeitMode @default(MIDDLE)
+  dislikedCharityId  String?     // Savage mode: the anti-charity destination
+  armingWindowStart  String?     // HH:MM — user's chosen arming window open time
+  armingWindowEnd    String?     // HH:MM — user's chosen arming window deadline
+
+  // Arming-chase opt-in (Phase 3 — §5b-i, §9 decision 4b)
+  // Live Ivy-calls-you chase when the user hasn't armed. Opt-in, capped 8/user/month.
+  armingChaseEnabled   Boolean   @default(false) // user opt-in; never defaulted true
+  chaseCallsThisMonth  Int       @default(0)     // resets at the start of each calendar month
+  chaseCapMonthStart   DateTime? // timestamp of when the current monthly window started
+
+  // Morning call is OPT-IN only — the default daily loop is the async VN, not a live morning call (§1c)
+  morningCallOptIn     Boolean   @default(false)
+
   // Calendar Integration (Elite+)
   googleCalendarConnected    Boolean   @default(false)
   googleCalendarRefreshToken String?
@@ -93,7 +109,8 @@ model User {
 
   // Relationships
   company          Company?            @relation(fields: [companyId], references: [id])
-  preferredCharity Charity?            @relation(fields: [preferredCharityId], references: [id])
+  preferredCharity Charity?            @relation("UserPreferredCharity", fields: [preferredCharityId], references: [id])
+  dislikedCharity  Charity?            @relation("UserDislikedCharity", fields: [dislikedCharityId], references: [id])
   workouts         Workout[]
   calls            Call[]
   donations        Donation[]
@@ -111,6 +128,8 @@ model User {
   callMemories        CallMemory[]
   circleGameEvents    CircleGameEvent[]
   circleCatchups      CircleCatchup[]
+  stakeCycles         StakeCycle[]
+  voiceNotes          VoiceNote[]
   coachProfile        CoachProfile?       // set if this user is a COACH
   clients             User[]              @relation("CoachClients")
   coach               User?               @relation("CoachClients", fields: [coachId], references: [id])
@@ -130,11 +149,33 @@ enum CommStyle {
 
 enum SubscriptionTier {
   FREE
-  PRO       // B2C: £70/mo - "Ivy" - daily AI calls
-  ELITE     // B2C: £99/mo - "Ivy Plus" - + Circles
-  CONCIERGE // B2C: £149/mo - "Ivy Concierge" - + pro coaches
+  PRO       // B2C: £42/mo - "Ivy" - the full system (one tier; display name "Ivy")
+  ELITE     // B2C: £99/mo - "Ivy Plus" - RETIRED (kept for migration; collapse to PRO in Phase 5)
+  CONCIERGE // B2C: £149/mo - "Ivy Concierge" - RETIRED (kept for migration; collapse to PRO in Phase 5)
   B2B       // Company-sponsored
   COACH     // PT / personal coach account — manages clients
+}
+
+// ============================================
+// STAKE MECHANIC ENUMS
+// ============================================
+
+enum ForfeitMode {
+  MIDDLE  // Default: forfeits to a house charity the user did NOT choose
+  SAVAGE  // Opt-in: forfeits to a cause the user actively dislikes
+}
+
+enum StakeCycleStatus {
+  AUTHORIZED // PaymentIntent authorised; no capture yet
+  SETTLED    // Cycle ended; forfeited slices captured, released slices voided
+  VOIDED     // Whole cycle voided (e.g. grace, error)
+  FAILED     // Auth or capture failed
+}
+
+enum SliceOutcome {
+  RELEASED  // Day succeeded; slice returned to user (not captured)
+  FORFEITED // Day missed; slice captured and sent to forfeit destination
+  PENDING   // Cycle still open; outcome not yet determined
 }
 
 // ============================================
@@ -202,12 +243,18 @@ model Charity {
 
   isActive Boolean @default(true)
 
+  // Stake mechanic — flags a charity as the Middle-mode forfeit destination pool
+  isHouseDefault Boolean @default(false)
+
   // Relationships
-  users        User[]
-  donations    Donation[]
-  userCharities UserCharity[]
+  preferredByUsers  User[]        @relation("UserPreferredCharity")
+  dislikedByUsers   User[]        @relation("UserDislikedCharity")
+  donations         Donation[]
+  userCharities     UserCharity[]
+  sprintGoals       CircleSprintGoal[] @relation("SprintGoalCharity") // Phase 4b: collective charity goal
 
   @@index([category])
+  @@index([isHouseDefault])
   @@map("charities")
 }
 
@@ -256,8 +303,20 @@ model Workout {
   planningCallId String?
   reviewCallId   String?
 
+  // Stake mechanic (Phase 1 — product-pricing-rework.md §2 + Phase 1 bullets)
+  armedAt          DateTime?    // when the morning VN was accepted (arming timestamp)
+  voiceNoteId      String?      @unique // FK to the canonical arming VoiceNote for this day (1:1)
+  stakeCycleId     String?      // FK to StakeCycle this workout belongs to
+  stakeSliceAmount Decimal?     @db.Decimal(10, 2) // daily stake slice (weeklyAmount / 7)
+  sliceOutcome     SliceOutcome @default(PENDING)
+
+  // Relationships
+  voiceNote    VoiceNote?  @relation("WorkoutArmedVoiceNote", fields: [voiceNoteId], references: [id])
+  stakeCycle   StakeCycle? @relation(fields: [stakeCycleId], references: [id])
+
   @@index([userId, plannedDate])
   @@index([status])
+  @@index([stakeCycleId])
   @@map("workouts")
 }
 
@@ -316,7 +375,7 @@ model Call {
 }
 
 enum CallType {
-  MORNING_PLANNING  // Plan today's workout
+  MORNING_PLANNING  // Plan today's workout (legacy / opt-in preference; async VN is the default)
   EVENING_REVIEW    // Confirm completion
   RESCUE            // User-initiated "I'm about to skip"
   WEEKLY_PLANNING   // Sunday review + plan ahead
@@ -324,6 +383,7 @@ enum CallType {
   ONBOARDING        // First call setup
   SEASON_CLOSE      // Ceremonial end-of-season call
   COACH_PONDER      // Biweekly Ivy → coach synthesis call
+  ARMING_CHASE      // Opt-in live chase call when user hasn't armed (capped per §5b-i)
 }
 
 enum CallStatus {
@@ -349,12 +409,16 @@ model Donation {
   charity   Charity @relation(fields: [charityId], references: [id])
 
   // Amount
-  amount       Decimal      @db.Decimal(10, 2)
-  currency     String       @default("GBP")
+  amount       Decimal         @db.Decimal(10, 2)
+  currency     String          @default("GBP")
   donationType DonationType
+  source       DonationSource? // null for legacy wallet donations; set for stake-era donations
 
   // Related Workout (if applicable)
   workoutId String?
+
+  // Related StakeCycle (for STAKE_SUCCESS / STAKE_FORFEIT)
+  stakeCycleId String?
 
   // Streak Bonus Details
   streakDays Int?
@@ -365,18 +429,30 @@ model Donation {
   dispatchError    String?
   dispatchedAt     DateTime?
 
+  // Relationships
+  stakeCycle StakeCycle? @relation(fields: [stakeCycleId], references: [id])
+
   @@index([userId, createdAt])
   @@index([charityId])
   @@index([dispatchStatus])
+  @@index([stakeCycleId])
   @@map("donations")
 }
 
 enum DonationType {
-  COMPLETION     // £1-2 per workout completion
-  STREAK_7_DAY   // £3 bonus
-  STREAK_30_DAY  // £10 bonus
-  STREAK_90_DAY  // £25 bonus
+  COMPLETION     // £1-2 per workout completion (legacy wallet mechanic)
+  STREAK_7_DAY   // £3 bonus (legacy wallet mechanic)
+  STREAK_30_DAY  // £10 bonus (legacy wallet mechanic)
+  STREAK_90_DAY  // £25 bonus (legacy wallet mechanic)
   MANUAL         // Admin-triggered
+  STAKE_SUCCESS  // Corporate-funded donation fired on a successful day
+  STAKE_FORFEIT  // User's own stake forfeited to charity on a missed/unarmed day
+}
+
+enum DonationSource {
+  USER_STAKE  // Comes from the user's own staked money (STAKE_FORFEIT)
+  CORPORATE   // Comes from a corporate/CSR sponsor pool (STAKE_SUCCESS)
+  SPONSOR     // Direct sponsor contribution (future Phase 6)
 }
 
 // ============================================
@@ -403,6 +479,77 @@ model ImpactWallet {
   lifetimeDonated Decimal @db.Decimal(10, 2) @default(0)
 
   @@map("impact_wallets")
+}
+
+// ============================================
+// STAKE CYCLES (Phase 1 — product-pricing-rework.md §2)
+// ============================================
+
+model StakeCycle {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Cycle window (weekly — fits Stripe ~7-day auth window)
+  periodStart DateTime
+  periodEnd   DateTime
+
+  // Stripe auth-and-capture
+  stakeAmount            Decimal          @db.Decimal(10, 2) // full weekly stake amount authorised
+  stripePaymentIntentId  String?          @unique            // the manual-capture PaymentIntent
+  capturedAmount         Decimal          @db.Decimal(10, 2) @default(0) // sum of forfeited slices actually captured
+
+  // Lifecycle
+  status      StakeCycleStatus @default(AUTHORIZED)
+
+  // Day-level counters (denormalised for quick settlement logic)
+  daysArmed     Int @default(0) // days the VN was recorded before the deadline
+  daysCompleted Int @default(0) // armed days where the evening review was positive
+  daysForfeited Int @default(0) // missed/unarmed days whose slice was captured
+  graceUsed     Int @default(0) // number of grace skips consumed this cycle
+
+  // Relationships
+  workouts  Workout[]
+  donations Donation[]
+
+  @@index([userId, periodStart])
+  @@index([status])
+  @@map("stake_cycles")
+}
+
+// ============================================
+// VOICE NOTES (Phase 1 — product-pricing-rework.md §1c + §4)
+// ============================================
+
+model VoiceNote {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Link to the day's workout (the arming unit)
+  workoutId String? // nullable so an orphaned VN can be stored and matched later
+
+  // Audio source — one of these will be set depending on ingestion channel
+  audioUrl        String? // URL to uploaded audio blob (PWA MediaRecorder path, per §1e)
+  telegramFileId  String? // Telegram file_id (stopgap beta path only — see §1e)
+
+  // Transcription (via Whisper / transcription.service.ts)
+  transcript  String?  @db.Text
+  recordedAt  DateTime
+  durationSec Int?     // seconds; populated from media metadata or Whisper response
+
+  // Relationships
+  // Virtual back-relation for Workout.voiceNote (1:1; FK lives on Workout.voiceNoteId)
+  armedWorkout  Workout? @relation("WorkoutArmedVoiceNote")
+
+  @@index([userId, recordedAt])
+  @@index([workoutId])
+  @@map("voice_notes")
 }
 
 // ============================================
@@ -583,6 +730,18 @@ model CircleSprintGoal {
 
   setByUserId String?  // facilitator who proposed it
 
+  // Phase 4b — Collective charity goal (§4b mechanic 2): the circle nominates
+  // a shared cause for this sprint.  When the linked collective game hits its
+  // target the backend sets collectiveGoalHitAt.
+  // IMPORTANT: no donation is fired here — the actual group donation rides on
+  // STAKE_SUCCESS which requires Phase 6 corporate funding.
+  // TODO(phase6): wire STAKE_SUCCESS donations to this charity once corporate
+  //               funding layer is live (product-pricing-rework.md §6).
+  collectiveCharityGoalId String?  // FK to Charity; the shared sprint cause
+  collectiveGoalHitAt     DateTime? // set when collective game target is reached
+
+  collectiveCharity Charity? @relation("SprintGoalCharity", fields: [collectiveCharityGoalId], references: [id], onDelete: SetNull)
+
   @@unique([circleId, sprintNumber])
   @@index([circleId])
   @@map("circle_sprint_goals")
@@ -601,6 +760,12 @@ model IvyCircleMember {
   role     String  @default("member") // "member" | "facilitator"
   isActive Boolean @default(true)
   joinedAt DateTime @default(now())
+
+  // Phase 4b — Witnessed stakes (§4b mechanic 1): opt-in visibility flag.
+  // When true, this member's stake status (armed/completed/forfeited + slice amount)
+  // is surfaced to other members of the same circle.
+  // NO money movement — visibility only.
+  shareStakeWithCircle Boolean @default(false)
 
   @@unique([circleId, userId])
   @@index([userId])

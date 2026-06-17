@@ -23,6 +23,7 @@ import circleRoutes from './api/routes/circle.routes';
 import adminRoutes from './api/routes/admin.routes';
 import coachRoutes from './api/routes/coach.routes';
 import inviteRoutes from './api/routes/invite.routes';
+import voiceNotesRoutes from './api/controllers/voice-notes.controller';
 
 const app: Application = express();
 
@@ -108,6 +109,7 @@ app.use('/api/circles', circleRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/coach', coachRoutes);
 app.use('/api/invite', inviteRoutes);
+app.use('/api/voice-notes', voiceNotesRoutes);
 app.use('/webhooks', webhookRoutes);
 
 // 404 handler

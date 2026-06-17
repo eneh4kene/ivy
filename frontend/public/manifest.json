@@ -1,76 +1,80 @@
 {
-  "name": "Ivy — AI Accountability",
+  "name": "Ivy — The accountability that has teeth",
   "short_name": "Ivy",
-  "description": "The product that makes you better at being who you said you would be.",
-  "start_url": "/",
+  "description": "Put your money where your commitment is. Follow through or your stake goes somewhere you'd hate.",
+  "start_url": "/daily",
+  "id": "/daily",
   "display": "standalone",
-  "background_color": "#0a0a0a",
-  "theme_color": "#10b981",
+  "display_override": ["standalone", "minimal-ui"],
+  "background_color": "#0b0d0a",
+  "theme_color": "#0b0d0a",
   "orientation": "portrait-primary",
-  "categories": ["health", "fitness", "lifestyle"],
+  "categories": ["health", "fitness", "lifestyle", "productivity"],
+  "lang": "en-GB",
+  "dir": "ltr",
   "icons": [
     {
       "src": "/icons/icon-72x72.png",
       "sizes": "72x72",
       "type": "image/png",
-      "purpose": "maskable any"
+      "purpose": "any"
     },
     {
       "src": "/icons/icon-96x96.png",
       "sizes": "96x96",
       "type": "image/png",
-      "purpose": "maskable any"
+      "purpose": "any"
     },
     {
       "src": "/icons/icon-128x128.png",
       "sizes": "128x128",
       "type": "image/png",
-      "purpose": "maskable any"
+      "purpose": "any"
     },
     {
       "src": "/icons/icon-144x144.png",
       "sizes": "144x144",
       "type": "image/png",
-      "purpose": "maskable any"
+      "purpose": "any"
     },
     {
       "src": "/icons/icon-152x152.png",
       "sizes": "152x152",
       "type": "image/png",
-      "purpose": "maskable any"
+      "purpose": "any"
     },
     {
       "src": "/icons/icon-192x192.png",
       "sizes": "192x192",
       "type": "image/png",
-      "purpose": "maskable any"
+      "purpose": "maskable"
     },
     {
       "src": "/icons/icon-384x384.png",
       "sizes": "384x384",
       "type": "image/png",
-      "purpose": "maskable any"
+      "purpose": "any"
     },
     {
       "src": "/icons/icon-512x512.png",
       "sizes": "512x512",
       "type": "image/png",
-      "purpose": "maskable any"
+      "purpose": "maskable"
     }
   ],
   "shortcuts": [
     {
-      "name": "Dashboard",
-      "short_name": "Dashboard",
-      "description": "View your streak and today's progress",
-      "url": "/dashboard",
+      "name": "Daily loop",
+      "short_name": "Today",
+      "description": "Drop your morning voice note or review your evening",
+      "url": "/daily",
       "icons": [{ "src": "/icons/icon-96x96.png", "sizes": "96x96" }]
     },
     {
-      "name": "Log Workout",
-      "short_name": "Log",
-      "description": "Log today's commitment",
-      "url": "/workouts",
+      "name": "My Circle",
+      "short_name": "Circle",
+      "description": "See how your group is doing",
+      "url": "/circles",
       "icons": [{ "src": "/icons/icon-96x96.png", "sizes": "96x96" }]
     }
   ],

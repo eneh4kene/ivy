@@ -164,7 +164,8 @@ class SeasonService {
     }
 
     // If user is in a Circle, create/ensure a sprint session is scheduled
-    if (sprint && ['ELITE', 'CONCIERGE', 'B2B'].includes(user?.subscriptionTier ?? '')) {
+    // Phase 5: one tier — Circles/sprint sessions available to all paid users (PRO = "Ivy", B2B).
+    if (sprint && ['PRO', 'ELITE', 'CONCIERGE', 'B2B'].includes(user?.subscriptionTier ?? '')) {
       await this.scheduleCircleSprintSession(userId, sprintId, sprint.number).catch((err) =>
         logger.warn(`Circle session scheduling failed for user ${userId}:`, err)
       );

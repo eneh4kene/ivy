@@ -12,6 +12,11 @@ import seasonService from './services/season.service';
 import coachService from './services/coach.service';
 import { getServiceCostSummary } from './services/usage.service';
 import { sendTelegramAdmin } from './utils/telegram-admin';
+import {
+  runArmingForStage,
+  openStakeCyclesForActiveUsers,
+  settleExpiredStakeCycles,
+} from './services/arming.service';
 
 // Start Bull processors
 import './workers/call.processor';
@@ -57,9 +62,12 @@ cron.schedule('0 2 1 * *', async () => {
   await dispatchPendingDonations().catch((err) => logger.error('Donation dispatch error:', err));
 });
 
-// Every day at midnight UTC — schedule today's calls for all active users
+// Every day at midnight UTC — schedule today's EVENING calls for all active users
+// (Morning live call replaced by VN arming loop for everyone — §1c.
+//  scheduleDailyCalls now only schedules the evening review call.
+//  Morning MORNING_PLANNING is opt-in preference only; arming = VN for all.)
 cron.schedule('0 0 * * *', async () => {
-  logger.info('Scheduling daily calls...');
+  logger.info('Scheduling daily evening calls...');
   try {
     const users = await prisma.user.findMany({
       where: { isActive: true, isOnboarded: true, subscriptionTier: { notIn: ['FREE', 'COACH'] } },
@@ -79,6 +87,62 @@ cron.schedule('0 0 * * *', async () => {
   } catch (err) {
     logger.error('Daily call scheduling error:', err);
   }
+});
+
+// ── Arming loop — morning VN prompt + escalation ladder (Phase 3) ─────────
+//
+// Design: crons run every 5 minutes; runArmingForStage() checks each user's
+// arming window against the current time with a ±3-minute tolerance window.
+// This avoids per-user Bull-queue jobs while still delivering prompts within
+// ~5 minutes of the user's chosen window.
+//
+// Stage timing relative to user's armingWindowStart (S) and armingWindowEnd (E):
+//   PROMPT       — fires at S
+//   REMINDER     — fires at S + 75 min (if still unarmed)
+//   FINAL_NOTICE — fires at E − 15 min (if still unarmed; buddy nudge + optional ARMING_CHASE)
+//   DEADLINE     — fires at E (unarmed → MISSED + FORFEITED)
+//
+// §1d: The morning VN is voice for ALL users regardless of CommStyle.
+// §1e: Push primary; SMS fallback for PROMPT only if no push subscription.
+// §9 d4b: ARMING_CHASE capped at 8/user/month, opt-in only.
+
+cron.schedule('*/5 * * * *', async () => {
+  const now = new Date();
+  await runArmingForStage('PROMPT', now).catch((err) =>
+    logger.error('Arming PROMPT stage error:', err)
+  );
+  await runArmingForStage('REMINDER', now).catch((err) =>
+    logger.error('Arming REMINDER stage error:', err)
+  );
+  await runArmingForStage('FINAL_NOTICE', now).catch((err) =>
+    logger.error('Arming FINAL_NOTICE stage error:', err)
+  );
+  await runArmingForStage('DEADLINE', now).catch((err) =>
+    logger.error('Arming DEADLINE stage error:', err)
+  );
+});
+
+// ── StakeCycle open — every Monday at 00:05 UTC ───────────────────────────
+// Opens a new weekly StakeCycle for all eligible users.
+// Runs 5 min after midnight to let the daily call scheduler run first.
+// openStakeCycle() guards against duplicate open cycles — safe to re-run.
+cron.schedule('5 0 * * 1', async () => {
+  logger.info('Opening weekly StakeCycles...');
+  await openStakeCyclesForActiveUsers().catch((err) =>
+    logger.error('StakeCycle open job error:', err)
+  );
+});
+
+// ── StakeCycle settle — every Sunday at 23:55 UTC ─────────────────────────
+// Settles all StakeCycles whose periodEnd has passed.
+// settleStakeCycle() captures forfeited slices and releases the rest.
+// SAFETY: real Stripe capture — never run against production until Phase 2
+// money-flow checkpoint is cleared (§ Phase 2 ✋).
+cron.schedule('55 23 * * 0', async () => {
+  logger.info('Settling expired StakeCycles...');
+  await settleExpiredStakeCycles().catch((err) =>
+    logger.error('StakeCycle settle job error:', err)
+  );
 });
 
 // Every day at 1am UTC — advance sprint and season statuses based on current date

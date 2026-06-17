@@ -10,7 +10,7 @@ import circleGameService from './circle-game.service';
 import circleCatchupService from './circle-catchup.service';
 import coachService from './coach.service';
 
-export type CallType = 'MORNING_PLANNING' | 'EVENING_REVIEW' | 'RESCUE' | 'WEEKLY_PLANNING' | 'MONTHLY_CHECKIN' | 'ONBOARDING' | 'SEASON_CLOSE' | 'COACH_PONDER';
+export type CallType = 'MORNING_PLANNING' | 'EVENING_REVIEW' | 'RESCUE' | 'WEEKLY_PLANNING' | 'MONTHLY_CHECKIN' | 'ONBOARDING' | 'SEASON_CLOSE' | 'COACH_PONDER' | 'ARMING_CHASE';
 
 class CallService {
   /**
@@ -110,7 +110,7 @@ class CallService {
    * Schedule daily calls for a user (morning and evening)
    */
   async scheduleDailyCalls(userId: string, date: Date) {
-    const user = await prisma.user.findUnique({
+    const user = (await prisma.user.findUnique({
       where: { id: userId },
       select: {
         id: true,
@@ -120,7 +120,12 @@ class CallService {
         preferredDays: true,
         callFrequency: true,
         coachId: true, // coach clients get one call/day (morning only) to halve voice COGS
-      },
+        morningCallOptIn: true, // live morning call is opt-in only; default loop is the async VN (§1c)
+      } as any,
+    })) as (null | {
+      id: string; morningCallTime: string | null; eveningCallTime: string | null;
+      timezone: string; preferredDays: string | null; callFrequency: number;
+      coachId: string | null; morningCallOptIn: boolean;
     });
 
     if (!user) {
@@ -166,7 +171,9 @@ class CallService {
       return fromZonedTime(`${localDateStr}T${hhmm}:00`, tz);
     };
 
-    if (user.morningCallTime) {
+    // Live morning call is OPT-IN only (§1c). Default daily loop = async morning VN (arming.service),
+    // so a live MORNING_PLANNING call is scheduled only when the user explicitly opted in.
+    if (user.morningCallTime && user.morningCallOptIn) {
       const morningUTC = toUTC(user.morningCallTime);
       if (isBefore(now, morningUTC)) {
         const morningCall = await this.scheduleCall(userId, 'MORNING_PLANNING', morningUTC, await this.getUserContext(userId));
@@ -244,8 +251,8 @@ class CallService {
     let long_term_memories: string | null = null;
 
     if (callType) {
-      const [morningCall, eveningCall, recentSummaries, ltMemories] = await Promise.all([
-        // Layer 1a: for EVENING_REVIEW — what was planned this morning?
+      const [morningCall, morningVN, eveningCall, recentSummaries, ltMemories] = await Promise.all([
+        // Layer 1a: for EVENING_REVIEW — the live morning-call summary (only for opt-in morning-call users)
         callType === 'EVENING_REVIEW'
           ? prisma.call.findFirst({
               where: {
@@ -255,6 +262,20 @@ class CallService {
               },
               orderBy: { scheduledAt: 'desc' },
               select: { callSummary: true },
+            })
+          : Promise.resolve(null),
+
+        // Layer 1a (VN): for EVENING_REVIEW — today's spoken morning voice note. This is the DEFAULT
+        // arming path (§1c/Phase 4): "this morning you said you'd…" comes from the VN transcript.
+        callType === 'EVENING_REVIEW'
+          ? prisma.voiceNote.findFirst({
+              where: {
+                userId,
+                NOT: { transcript: null },
+                recordedAt: { gte: startOfDay(now), lte: endOfDay(now) },
+              },
+              orderBy: { recordedAt: 'desc' },
+              select: { transcript: true },
             })
           : Promise.resolve(null),
 
@@ -289,7 +310,8 @@ class CallService {
         }),
       ]);
 
-      morning_context = morningCall?.callSummary ?? null;
+      // Prefer the spoken morning VN (the default arming mechanic); fall back to the live morning-call summary.
+      morning_context = morningVN?.transcript ?? morningCall?.callSummary ?? null;
       last_evening_context = eveningCall?.callSummary ?? null;
 
       if (recentSummaries.length) {
@@ -316,8 +338,11 @@ class CallService {
       ? Math.floor(differenceInDays(now, onboardedAt) / 7)
       : 0;
 
-    const donationAmounts: Record<string, number> = { FREE: 1.0, PRO: 1.0, ELITE: 1.5, CONCIERGE: 2.0, B2B: 1.0 };
-    const donation_amount = donationAmounts[user?.subscriptionTier ?? 'PRO'] ?? 1.0;
+    // Phase 5: per-completion donation amount is retired (§8). donation_amount passed to
+    // the prompt context is kept for backward compat with existing prompt templates but
+    // is now a flat value — charity funding comes from stake forfeits/corporate pool, not
+    // a per-tier per-call deduction.
+    const donation_amount = 1.0;
 
     const days_since_workout = streak?.lastWorkoutDate
       ? differenceInDays(now, new Date(streak.lastWorkoutDate))
@@ -357,7 +382,8 @@ class CallService {
       evening_window: user?.eveningCallTime ?? null,
       preferred_days,
       calendar_connected: user?.googleCalendarConnected || user?.outlookCalendarConnected || false,
-      missed_call_recovery: ['ELITE', 'CONCIERGE'].includes(user?.subscriptionTier ?? ''),
+      // Phase 5: missed_call_recovery is available to all paid users (one tier).
+      missed_call_recovery: ['PRO', 'ELITE', 'CONCIERGE', 'B2B', 'COACH'].includes(user?.subscriptionTier ?? ''),
       calls_per_week: user?.callFrequency ?? 2,
 
       // Stats

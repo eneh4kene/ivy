@@ -2,7 +2,7 @@ import prisma from '../utils/prisma';
 import { CreateUserInput, UpdateUserInput } from '../types/user.schema';
 import { BadRequestError, ConflictError, NotFoundError } from '../utils/errors';
 import logger from '../utils/logger';
-import { IMPACT_WALLET_MONTHLY } from '../config/pricing';
+// IMPACT_WALLET_MONTHLY import removed in Phase 5: bundled wallet allocation retired (§8).
 import seasonService from './season.service';
 import callService from './call.service';
 
@@ -236,28 +236,28 @@ class UserService {
   }
 
   /**
-   * Initialize user's Impact Wallet and Streak
+   * Initialize user's Impact Wallet and Streak.
+   *
+   * Phase 5 (§8): the bundled wallet allocation (monthlyLimit / dailyCap) is
+   * retired. The ImpactWallet row is still created for lifetimeDonated tracking,
+   * but monthlyLimit and dailyCap are set to 0 (no allocation). The tier parameter
+   * is no longer used for wallet sizing; it is kept in the signature for callers
+   * that pass it.
    */
-  async initializeUserResources(userId: string, subscriptionTier: string) {
-    // Trial users get PRO wallet — they experience the real product from day one
-    const tierKey = ['PRO', 'ELITE', 'CONCIERGE'].includes(subscriptionTier)
-      ? subscriptionTier
-      : 'PRO'
-    const walletConfig = IMPACT_WALLET_MONTHLY[tierKey] ?? IMPACT_WALLET_MONTHLY['PRO']
-    const monthlyLimit = walletConfig.GBP
-    const dailyCap = Math.round((monthlyLimit / 30) * 100) / 100
-
+  async initializeUserResources(userId: string, _subscriptionTier: string) {
+    // Create the ImpactWallet row for lifetime-donated tracking only.
+    // monthlyLimit and dailyCap are 0 — no bundled allocation post-rework.
     await prisma.impactWallet.upsert({
       where: { userId },
       create: {
         userId,
-        monthlyLimit,
-        dailyCap,
+        monthlyLimit: 0,
+        dailyCap: 0,
         currentMonthSpent: 0,
         lifetimeDonated: 0,
         monthStartDate: new Date(),
       },
-      update: { monthlyLimit, dailyCap },
+      update: {},  // never downgrade an existing wallet row
     });
 
     // Create Streak record

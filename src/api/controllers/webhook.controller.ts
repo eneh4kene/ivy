@@ -13,6 +13,12 @@ import { serverAnalytics } from '../../lib/analytics';
 import { handleMissedCall as handleMissedCallComms, handleDroppedCall } from '../../services/communication.service';
 import circleCatchupService from '../../services/circle-catchup.service';
 import coachService from '../../services/coach.service';
+import {
+  handlePaymentIntentSucceeded,
+  handlePaymentIntentCanceled,
+  handlePaymentIntentPaymentFailed,
+  handlePaymentIntentRequiresAction,
+} from '../../services/stake.service';
 import transcriptionService from '../../services/transcription.service';
 import { flattenContext } from '../../utils/retell';
 import { sendSuccess } from '../../utils/response';
@@ -300,6 +306,27 @@ class WebhookController {
         case 'invoice.payment_failed':
           // Handle failed payment
           await paymentService.handlePaymentFailed(event.data.object);
+          break;
+
+        // ── Stake PaymentIntent events (auth-and-capture cycle) ──────────────
+        case 'payment_intent.succeeded':
+          // Card auth hold confirmed — mark StakeCycle AUTHORIZED (if not already)
+          await handlePaymentIntentSucceeded(event.data.object);
+          break;
+
+        case 'payment_intent.canceled':
+          // Auth voided (either by us on full-release settle, or by user/expiry)
+          await handlePaymentIntentCanceled(event.data.object);
+          break;
+
+        case 'payment_intent.payment_failed':
+          // Auth failed (card declined, insufficient funds, etc.)
+          await handlePaymentIntentPaymentFailed(event.data.object);
+          break;
+
+        case 'payment_intent.requires_action':
+          // 3DS/SCA required — log; user must complete authentication
+          await handlePaymentIntentRequiresAction(event.data.object);
           break;
 
         default:

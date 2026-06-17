@@ -53,6 +53,12 @@ const envSchema = z.object({
   EVERY_ORG_API_KEY: z.string().optional(),
   EVERY_ORG_API_SECRET: z.string().optional(),
 
+  // Cloudflare R2 — voice-note audio storage (optional; app runs without it)
+  R2_ACCOUNT_ID: z.string().optional(),
+  R2_ACCESS_KEY_ID: z.string().optional(),
+  R2_SECRET_ACCESS_KEY: z.string().optional(),
+  R2_BUCKET: z.string().optional(),
+
   // Anthropic (call insight extraction + behavioural synthesis)
   ANTHROPIC_API_KEY: z.string().optional(),
 

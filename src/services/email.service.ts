@@ -45,7 +45,9 @@ function shell(body: string, brand?: Brand): string {
 }
 
 const TIER_NAMES: Record<string, string> = {
-  PRO: 'Ivy', ELITE: 'Ivy Plus', CONCIERGE: 'Ivy Concierge',
+  // Phase 5: PRO is the single paid B2C tier, display name "Ivy".
+  // ELITE/CONCIERGE kept as fallback display names for grandfathered webhook events during migration.
+  PRO: 'Ivy', ELITE: 'Ivy', CONCIERGE: 'Ivy',
   B2B: 'Ivy for Teams', COACH: 'Ivy Coach',
 };
 

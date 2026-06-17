@@ -51,6 +51,7 @@ dump.rdb
 # Local dev files — not for repo
 ngrok.yml
 .env.example
+.claude/settings.local.json
 *.md
 !README.md
 !docs/*.md

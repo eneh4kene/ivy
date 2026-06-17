@@ -26,7 +26,8 @@ class PaymentController {
 
       const { tier, currency: bodyCurrency, promoCode } = req.body;
 
-      if (!tier || !['PRO', 'ELITE', 'CONCIERGE', 'B2B'].includes(tier)) {
+      // Phase 5: one paid B2C tier = PRO ("Ivy"). ELITE/CONCIERGE are retired.
+      if (!tier || !['PRO', 'B2B'].includes(tier)) {
         sendError(res, 'Invalid subscription tier', 400);
         return;
       }

@@ -3,7 +3,8 @@ import { CreateWorkoutInput, UpdateWorkoutInput, CompleteWorkoutInput, GetWorkou
 import { NotFoundError, BadRequestError } from '../utils/errors';
 import logger from '../utils/logger';
 import { startOfDay, differenceInDays } from 'date-fns';
-import donationService from './donation.service';
+// donationService import removed in Phase 5: COMPLETION donation path retired (§8).
+// Streak bonuses still use prisma.donation.create directly in awardStreakBonus.
 import { sendPushToUser, pushTemplates } from './push.service';
 import { serverAnalytics } from '../lib/analytics';
 import circleGameService from './circle-game.service';
@@ -145,12 +146,18 @@ class WorkoutService {
     const workout = await this.getWorkoutById(workoutId, userId);
 
     // Update workout status
+    const followedThrough = data.status === 'COMPLETED' || data.status === 'PARTIAL';
+
     const updatedWorkout = await prisma.workout.update({
       where: { id: workoutId },
       data: {
         status: data.status,
-        completedAt: data.status === 'COMPLETED' || data.status === 'PARTIAL' ? new Date() : undefined,
+        completedAt: followedThrough ? new Date() : undefined,
         skippedReason: data.skippedReason,
+        // Phase 4: resolve the day's stake slice. Follow-through (incl. negotiated minimum) RELEASES
+        // the slice; skip/miss FORFEITS it. Stake-level grace is applied later in settleStakeCycle,
+        // so a forfeit here can still be waived at settlement (separate from streak grace below).
+        sliceOutcome: followedThrough ? 'RELEASED' : 'FORFEITED',
       },
     });
 
@@ -176,38 +183,15 @@ class WorkoutService {
         }
       }
 
-      // Fire donation — non-blocking, failure never breaks the completion flow
-      try {
-        const userCharities = await prisma.userCharity.findMany({
-          where: { userId },
-          orderBy: { priority: 'asc' },
-          select: { charityId: true },
-        })
-
-        // Fall back to preferredCharityId if no UserCharity rows yet
-        let charityIds = userCharities.map((uc) => uc.charityId)
-        if (charityIds.length === 0) {
-          const user = await prisma.user.findUnique({
-            where: { id: userId },
-            select: { preferredCharityId: true },
-          })
-          if (user?.preferredCharityId) charityIds = [user.preferredCharityId]
-        }
-
-        if (charityIds.length > 0) {
-          const totalAmount = await donationService.calculateDonationAmount(userId)
-          const perCharity = Math.round((totalAmount / charityIds.length) * 100) / 100
-
-          for (const charityId of charityIds) {
-            const canDonate = await donationService.canMakeDonation(userId, perCharity)
-            if (canDonate.allowed) {
-              await donationService.createDonation(userId, charityId, perCharity, 'COMPLETION', workoutId)
-            }
-          }
-        }
-      } catch (donationErr) {
-        logger.warn(`Donation failed for workout ${workoutId} — streak preserved`, donationErr)
-      }
+      // Phase 5 (§8 of docs/product-pricing-rework.md): the COMPLETION-type bundled
+      // wallet donation is RETIRED. Under the rework follow-through RELEASES the
+      // user's stake (already wired in Phase 4 via sliceOutcome = 'RELEASED' above).
+      // Charity funding comes from stake forfeits (STAKE_FORFEIT donations) and the
+      // Phase 6 corporate/CSR pool (STAKE_SUCCESS donations) — NOT from a
+      // per-completion wallet debit.
+      //
+      // Streak bonuses (STREAK_7_DAY / STREAK_30_DAY / STREAK_90_DAY) still fire
+      // below via checkStreakBonuses — those are separate and remain active.
 
       // Award bonus grace day for double-completion (non-minimum workout on a day already completed)
       if (data.status === 'COMPLETED' && !workout.isMinimum) {

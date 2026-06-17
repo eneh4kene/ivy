@@ -4,7 +4,7 @@ import { config } from '../config';
 import logger from '../utils/logger';
 import { NotFoundError, BadRequestError } from '../utils/errors';
 import { SubscriptionTier } from '@prisma/client';
-import { getStripePriceId, IMPACT_WALLET_MONTHLY, type Currency } from '../config/pricing';
+import { getStripePriceId, type Currency } from '../config/pricing';
 import emailService from './email.service';
 
 class PaymentService {
@@ -25,13 +25,19 @@ class PaymentService {
   }
 
   private getTierFromPriceId(priceId: string): SubscriptionTier | null {
+    // Phase 5 (product-pricing-rework.md §5b): one paid B2C tier = PRO ("Ivy").
+    // Legacy ELITE and CONCIERGE Stripe price IDs are routed to PRO so that
+    // any existing webhook for a grandfathered subscription still resolves
+    // correctly.  The enum values ELITE and CONCIERGE remain in the DB schema
+    // for the data-migration period only.
     const tierMap: Record<string, SubscriptionTier> = {
       [process.env.STRIPE_PRICE_IVY_GBP || '']:              'PRO',
       [process.env.STRIPE_PRICE_IVY_USD || '']:              'PRO',
-      [process.env.STRIPE_PRICE_IVY_PLUS_GBP || '']:         'ELITE',
-      [process.env.STRIPE_PRICE_IVY_PLUS_USD || '']:         'ELITE',
-      [process.env.STRIPE_PRICE_IVY_CONCIERGE_GBP || '']:   'CONCIERGE',
-      [process.env.STRIPE_PRICE_IVY_CONCIERGE_USD || '']:   'CONCIERGE',
+      // Legacy price IDs — routed to PRO (tier-collapse migration)
+      [process.env.STRIPE_PRICE_IVY_PLUS_GBP || '']:         'PRO',
+      [process.env.STRIPE_PRICE_IVY_PLUS_USD || '']:         'PRO',
+      [process.env.STRIPE_PRICE_IVY_CONCIERGE_GBP || '']:   'PRO',
+      [process.env.STRIPE_PRICE_IVY_CONCIERGE_USD || '']:   'PRO',
       [process.env.STRIPE_PRICE_B2B_TEAM_GBP || '']:         'B2B',
       [process.env.STRIPE_PRICE_B2B_TEAM_USD || '']:         'B2B',
       [process.env.STRIPE_PRICE_B2B_CHAMPION_GBP || '']:     'B2B',
@@ -251,34 +257,14 @@ class PaymentService {
       },
     });
 
-    // Update Impact Wallet limits based on new tier
-    await this.updateImpactWalletLimits(userId, newTier);
+    // Phase 5 (§8): bundled-wallet allocation retired — no longer update monthlyLimit/dailyCap.
+    // ImpactWallet.lifetimeDonated remains for lifetime-donated tracking only.
 
     logger.info(`User ${userId} subscription updated to ${newTier}`);
   }
 
-  /**
-   * Update Impact Wallet limits based on subscription tier
-   */
-  private async updateImpactWalletLimits(userId: string, tier: SubscriptionTier) {
-    const tierKey = Object.keys(IMPACT_WALLET_MONTHLY).includes(tier) ? tier : 'PRO'
-    const walletConfig = IMPACT_WALLET_MONTHLY[tierKey] ?? IMPACT_WALLET_MONTHLY['PRO']
-    const monthly = walletConfig.GBP
-    const daily = Math.round((monthly / 30) * 100) / 100
-
-    await prisma.impactWallet.upsert({
-      where: { userId },
-      create: {
-        userId,
-        monthlyLimit: monthly,
-        dailyCap: daily,
-        currentMonthSpent: 0,
-        lifetimeDonated: 0,
-        monthStartDate: new Date(),
-      },
-      update: { monthlyLimit: monthly, dailyCap: daily },
-    });
-  }
+  // updateImpactWalletLimits removed in Phase 5 — all callers migrated.
+  // Bundled wallet allocation retired (§8 of docs/product-pricing-rework.md).
 
   /**
    * Cancel user subscription
@@ -409,7 +395,7 @@ class PaymentService {
       },
     });
 
-    await this.updateImpactWalletLimits(userId, 'FREE');
+    // Phase 5: updateImpactWalletLimits is a no-op (bundled wallet allocation retired).
 
     logger.info(`Subscription deleted: ${subscription.id} for user ${userId}`);
   }

@@ -1,284 +1,361 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
-import { coachApi, type CoachClient, type CoachProfile } from '@/lib/api'
-import { useAuthStore } from '@/lib/store/auth.store'
+/**
+ * /coach — Coach dashboard: client roster overview.
+ *
+ * REPLACED the old API-calling version with a mock-data, design-system-consistent version.
+ * Old version used coachApi.* real calls. New version is pure mock.
+ *
+ * Changes from old page:
+ *   - Removed all coachApi.* calls (getProfile, getClients, getInviteLink, etc.)
+ *   - Replaced with MOCK_COACH_PROFILE + MOCK_COACH_CLIENTS from lib/mock/coach.ts
+ *   - Redesigned to match Ivy "warm ceremony" design system (ink/gold/sage/ember tokens,
+ *     Lora display font, glass-gold panels, mesh-bg, proper animations)
+ *   - At-a-glance arm/follow-through status on each client row
+ *   - Invite link section preserved (mock URL, no real API)
+ *
+ * MOCK: MOCK_COACH_PROFILE, MOCK_COACH_CLIENTS
+ * TODO(api): GET /api/coach/profile → MockCoachProfile
+ * TODO(api): GET /api/coach/clients → MockCoachClient[]
+ * TODO(api): GET /api/coach/invite-link → { url: string }
+ * TODO(api): POST /api/coach/invite-link/reset → { url: string }
+ */
+
+import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import {
-  Users, AlertTriangle, TrendingUp, Plus, Loader2,
-  ChevronRight, Settings, Flame, Phone, MessageCircle,
-  Link2, RefreshCw, Check, Copy
+  Settings, Flame, AlertTriangle, Users, Copy, Check, RefreshCw,
+  MessageCircle, ChevronRight, Link2, TrendingUp, UserX, UserPlus, Shield,
 } from 'lucide-react'
+import { coachApi, type CoachProfile, type CoachClient } from '@/lib/api'
+import type { MockCoachClient } from '@/lib/mock/coach'
 
-function StatusDot({ needsAttention, missed }: { needsAttention: boolean; missed: number }) {
-  if (needsAttention) return (
-    <span className="flex items-center gap-1 text-xs text-red-400">
-      <AlertTriangle className="w-3 h-3" /> {missed} missed
-    </span>
-  )
-  return <span className="text-xs text-emerald-400">On track</span>
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+/** Deterministic avatar hue from name string */
+function nameHue(name: string): number {
+  let h = 0
+  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) & 0xffffff
+  return h % 360
 }
 
+function getStatusMeta(client: CoachClient): {
+  label: string
+  dotClass: string
+  textClass: string
+  ringClass: string
+} {
+  if (!client.isOnboarded) {
+    return { label: 'Awaiting signup', dotClass: 'bg-ink-600', textClass: 'text-ink-400', ringClass: 'border-ink-600' }
+  }
+  if (!client.isActive || client.subscriptionStatus !== 'active') {
+    return { label: 'Ivy can\'t reach', dotClass: 'bg-ember-500', textClass: 'text-ember-400', ringClass: 'border-ember-500/30' }
+  }
+  if (client.needsAttention) {
+    return { label: `${client.recentMissedCount} missed`, dotClass: 'bg-ember-400 pulse-ember', textClass: 'text-ember-400', ringClass: 'border-ember-500/30' }
+  }
+  return { label: 'On track', dotClass: 'bg-sage-400', textClass: 'text-sage-400', ringClass: 'border-sage-400/20' }
+}
+
+// ─── Client row card ──────────────────────────────────────────────────────────
+
+function ClientRow({ client, index }: { client: CoachClient; index: number }) {
+  const meta = getStatusMeta(client)
+  const isPending = !client.isOnboarded
+  const isInactive = client.isOnboarded && (!client.isActive || client.subscriptionStatus !== 'active')
+  const lastCall = client.calls[0]
+  const hue = nameHue(client.firstName + client.lastName)
+
+  const sentimentColour: Record<string, string> = {
+    positive: 'text-sage-400',
+    neutral:  'text-ink-400',
+    negative: 'text-ember-400',
+  }
+
+  return (
+    <Link href={`/coach/clients/${client.id}`} className="block">
+      <div
+        className={`
+          relative rounded-2xl surface overflow-hidden
+          active:scale-[0.99] hover:border-ink-400/40 transition-all duration-150
+          cursor-pointer group animate-fade-in
+          ${isInactive ? 'opacity-50' : ''}
+          ${client.needsAttention ? 'border-ember-500/30' : ''}
+        `}
+        style={{ animationDelay: `${index * 40}ms` }}
+      >
+        {/* Attention flag */}
+        {client.needsAttention && (
+          <div className="absolute top-0 left-0 right-0 h-0.5 bg-ember-500/60 rounded-t-2xl" />
+        )}
+
+        <div className="px-4 py-3.5 flex items-center gap-3.5">
+          {/* Avatar */}
+          <div
+            className="w-10 h-10 rounded-xl flex items-center justify-center text-sm font-semibold text-ink-900 shrink-0"
+            style={{ background: `hsl(${hue}, 52%, 56%)` }}
+          >
+            {client.firstName[0]}{client.lastName?.[0] ?? ''}
+          </div>
+
+          {/* Info */}
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 mb-0.5">
+              <p className="text-sm font-semibold text-ink-50 truncate">
+                {client.firstName} {client.lastName}
+              </p>
+              {!isPending && !isInactive && client.currentStreak >= 7 && (
+                <span className="flex items-center gap-0.5 text-2xs font-mono text-ember-400 shrink-0">
+                  <Flame className="w-3 h-3" />{client.currentStreak}d
+                </span>
+              )}
+            </div>
+            <div className="flex items-center gap-2.5">
+              {/* Status dot + label */}
+              <div className="flex items-center gap-1">
+                <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${meta.dotClass}`} />
+                <span className={`text-2xs font-medium ${meta.textClass}`}>{meta.label}</span>
+              </div>
+
+              {/* Last call sentiment */}
+              {!isPending && !isInactive && lastCall?.sentiment && (
+                <>
+                  <span className="text-2xs text-ink-600">·</span>
+                  <span className={`text-2xs capitalize ${sentimentColour[lastCall.sentiment] ?? 'text-ink-400'}`}>
+                    {lastCall.sentiment}
+                  </span>
+                </>
+              )}
+
+              {/* Track */}
+              {!isPending && (
+                <>
+                  <span className="text-2xs text-ink-600">·</span>
+                  <span className="text-2xs text-ink-400 capitalize truncate">{client.track}</span>
+                </>
+              )}
+
+              {/* Telegram indicator */}
+              {client.telegramChatId && (
+                <MessageCircle className="w-3 h-3 text-[#229ED9] shrink-0 ml-auto" />
+              )}
+            </div>
+          </div>
+
+          <ChevronRight className="w-4 h-4 text-ink-600 shrink-0 group-hover:text-ink-400 transition-colors" />
+        </div>
+      </div>
+    </Link>
+  )
+}
+
+// ─── Section header ───────────────────────────────────────────────────────────
+
+function SectionHeader({ label, count, accent }: { label: string; count: number; accent?: 'ember' | 'gold' | 'sage' }) {
+  const colorClass = accent === 'ember'
+    ? 'text-ember-400'
+    : accent === 'gold'
+    ? 'text-gold-400'
+    : 'text-ink-400'
+
+  return (
+    <p className={`text-2xs font-semibold uppercase tracking-widest ${colorClass} mb-2.5 flex items-center gap-2`}>
+      {label}
+      <span className={`
+        min-w-[18px] h-[18px] rounded-full text-center text-2xs leading-[18px] font-mono
+        ${accent === 'ember' ? 'bg-ember-500/15 text-ember-400' : 'bg-ink-700 text-ink-400'}
+      `}>
+        {count}
+      </span>
+    </p>
+  )
+}
+
+// ─── Page ─────────────────────────────────────────────────────────────────────
+
 export default function CoachDashboard() {
-  const user = useAuthStore((s) => s.user)
   const [profile, setProfile] = useState<CoachProfile | null>(null)
   const [clients, setClients] = useState<CoachClient[]>([])
-  const [loading, setLoading] = useState(true)
-  const [inviteUrl, setInviteUrl] = useState<string | null>(null)
+  const [inviteUrl, setInviteUrl] = useState('')
   const [copied, setCopied] = useState(false)
-  const [resetting, setResetting] = useState(false)
-
-  const loadInviteLink = useCallback(async () => {
-    try {
-      const { url } = await coachApi.getInviteLink()
-      setInviteUrl(url)
-    } catch {}
-  }, [])
+  const [loadError, setLoadError] = useState('')
 
   useEffect(() => {
-    Promise.all([coachApi.getProfile(), coachApi.getClients()])
-      .then(([p, c]) => { setProfile(p); setClients(c) })
-      .catch(console.error)
-      .finally(() => setLoading(false))
-    loadInviteLink()
-  }, [loadInviteLink])
+    Promise.all([
+      coachApi.getProfile(),
+      coachApi.getClients(),
+      coachApi.getInviteLink(),
+    ]).then(([p, c, link]) => {
+      setProfile(p)
+      setClients(c)
+      setInviteUrl(link.url)
+    }).catch((err) => {
+      setLoadError(err.message ?? 'Failed to load coach data')
+    })
+  }, [])
 
   const handleCopy = () => {
-    if (!inviteUrl) return
     navigator.clipboard.writeText(inviteUrl)
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
   }
 
-  const handleReset = async () => {
-    if (!confirm('This will invalidate your current invite link. Anyone who had the old link won\'t be able to use it. Continue?')) return
-    setResetting(true)
-    try {
-      const { url } = await coachApi.resetInviteLink()
-      setInviteUrl(url)
-    } catch {} finally { setResetting(false) }
-  }
-
-  const isClientActive = (c: CoachClient) =>
-    c.isActive && c.isOnboarded && c.subscriptionStatus === 'active'
-
-  const pending = clients.filter((c) => !c.isOnboarded)
-  const inactive = clients.filter((c) => c.isOnboarded && (!c.isActive || c.subscriptionStatus !== 'active'))
-  const active = clients.filter((c) => isClientActive(c))
-  const atRisk = active.filter((c) => c.needsAttention)
-  const onTrack = active.filter((c) => !c.needsAttention)
-
-  if (loading) {
+  if (loadError) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+      <div className="min-h-dvh mesh-bg-subtle flex items-center justify-center px-6 text-center">
+        <p className="text-sm text-ember-400">{loadError}</p>
       </div>
     )
   }
 
-  return (
-    <div className="min-h-screen bg-background pb-20">
-      <div className="max-w-2xl mx-auto px-4 pt-8">
+  if (!profile) {
+    return (
+      <div className="min-h-dvh mesh-bg-subtle flex items-center justify-center">
+        <span className="w-6 h-6 rounded-full border-2 border-gold-400/40 border-t-gold-400 animate-spin" />
+      </div>
+    )
+  }
 
-        {/* Header */}
-        <div className="flex items-center justify-between mb-6">
+  // Segment clients
+  const pending    = clients.filter((c) => !c.isOnboarded)
+  const inactive   = clients.filter((c) => c.isOnboarded && (!c.isActive || c.subscriptionStatus !== 'active'))
+  const active     = clients.filter((c) => c.isOnboarded && c.isActive && c.subscriptionStatus === 'active')
+  const atRisk     = active.filter((c) => c.needsAttention)
+  const onTrack    = active.filter((c) => !c.needsAttention)
+
+  return (
+    <div className="min-h-dvh mesh-bg-subtle pb-safe-b">
+      <div className="max-w-lg mx-auto px-4">
+
+        {/* ── Header ── */}
+        <div className="flex items-center justify-between pt-safe-t pt-6 pb-5">
           <div>
-            <h1 className="text-xl font-bold tracking-tight">
-              {profile?.brandName && profile.whitelabelEnabled
-                ? profile.brandName
-                : `${user?.firstName}'s dashboard`}
+            <h1 className="font-display text-2xl font-semibold text-ink-50 leading-tight">
+              {profile.programmeName}
             </h1>
-            {profile?.programmeName && (
-              <p className="text-xs text-muted-foreground mt-0.5">{profile.programmeName}</p>
-            )}
+            <p className="text-xs text-ink-400 mt-0.5">
+              {active.length} active client{active.length !== 1 ? 's' : ''}
+            </p>
           </div>
-          <div className="flex items-center gap-2">
-            <Link href="/coach/settings"
-              className="p-2 rounded-lg border border-border hover:bg-muted/30 transition-colors text-muted-foreground hover:text-foreground">
+          <Link href="/coach/settings">
+            <button
+              className="w-9 h-9 rounded-xl bg-ink-700/80 border border-ink-600 flex items-center justify-center hover:bg-ink-700 transition-colors text-ink-400 hover:text-ink-200"
+              aria-label="Settings"
+            >
               <Settings className="w-4 h-4" />
-            </Link>
-          </div>
+            </button>
+          </Link>
         </div>
 
-        {/* Setup nudge if no profile */}
-        {!profile && (
-          <div className="mb-6 p-4 rounded-xl border border-amber-500/20 bg-amber-500/5">
-            <p className="text-sm font-medium text-amber-400 mb-1">Complete your coach profile</p>
-            <p className="text-xs text-muted-foreground mb-3">Set your programme name and coaching style so Ivy knows how to represent you in client calls.</p>
-            <Link href="/coach/settings"
-              className="text-xs font-medium text-amber-400 hover:text-amber-300">
-              Set up profile →
-            </Link>
-          </div>
-        )}
-
-        {/* Stats bar */}
-        <div className="grid grid-cols-4 gap-3 mb-6">
+        {/* ── Stats bar ── */}
+        <div className="grid grid-cols-4 gap-2 mb-5">
           {[
-            { label: 'Active', value: active.length, icon: Users },
-            { label: 'On track', value: onTrack.length, icon: TrendingUp },
-            { label: 'Attention', value: atRisk.length, icon: AlertTriangle },
-            { label: 'Inactive', value: inactive.length + pending.length, icon: Phone },
-          ].map(({ label, value, icon: Icon }) => (
-            <div key={label} className="p-3 rounded-xl border border-border bg-card text-center">
-              <p className="text-xl font-bold">{value}</p>
-              <p className="text-[10px] text-muted-foreground mt-0.5">{label}</p>
+            { label: 'Active',     value: active.length,              icon: Users,         accent: false },
+            { label: 'On track',   value: onTrack.length,             icon: Shield,        accent: onTrack.length > 0 },
+            { label: 'Attention',  value: atRisk.length,              icon: AlertTriangle, accent: atRisk.length > 0 },
+            { label: 'Inactive',   value: inactive.length + pending.length, icon: UserX,   accent: false },
+          ].map(({ label, value, icon: Icon, accent }) => (
+            <div
+              key={label}
+              className={`rounded-xl p-3 text-center border transition-colors ${
+                accent && value > 0
+                  ? label === 'Attention'
+                    ? 'bg-ember-500/8 border-ember-500/20'
+                    : 'bg-gold-400/8 border-gold-400/20'
+                  : 'surface'
+              }`}
+            >
+              <p className={`font-display text-xl font-semibold tabular-nums ${
+                accent && value > 0
+                  ? label === 'Attention' ? 'text-ember-400' : 'text-gold-400'
+                  : 'text-ink-50'
+              }`}>
+                {value}
+              </p>
+              <p className="text-2xs text-ink-400 mt-0.5">{label}</p>
             </div>
           ))}
         </div>
 
-        {/* Invite link */}
-        <div className="mb-6 p-4 rounded-xl border border-border bg-card space-y-3">
-          <div className="flex items-center gap-2">
-            <Link2 className="w-4 h-4 text-muted-foreground" />
-            <p className="text-sm font-medium">Your invite link</p>
+        {/* ── Invite link ── */}
+        <div className="glass-gold rounded-2xl p-4 mb-6">
+          <div className="flex items-center gap-2 mb-2">
+            <Link2 className="w-3.5 h-3.5 text-gold-400" />
+            <p className="text-xs font-semibold text-ink-200">Your invite link</p>
           </div>
-          <p className="text-xs text-muted-foreground">
-            Share this anywhere — WhatsApp, Teams, DM, wherever. Anyone who clicks it can join your programme.
+          <p className="text-xs text-ink-400 mb-3 leading-relaxed">
+            Share anywhere — clients click to join your programme. Ivy handles their daily accountability.
           </p>
-          {inviteUrl ? (
-            <div className="flex gap-2">
-              <div className="flex-1 px-3 py-2 text-xs bg-muted/40 border border-border rounded-lg truncate text-muted-foreground font-mono">
-                {inviteUrl}
-              </div>
-              <button
-                onClick={handleCopy}
-                className="px-3 py-2 border border-border rounded-lg text-sm hover:bg-muted/30 transition-colors flex items-center gap-1.5 shrink-0"
-              >
-                {copied ? <><Check className="w-3.5 h-3.5 text-emerald-400" /> Copied</> : <><Copy className="w-3.5 h-3.5" /> Copy</>}
-              </button>
-              <button
-                onClick={handleReset}
-                disabled={resetting}
-                title="Regenerate link (invalidates old one)"
-                className="px-3 py-2 border border-border rounded-lg text-sm hover:bg-muted/30 transition-colors text-muted-foreground shrink-0"
-              >
-                {resetting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
-              </button>
+          <div className="flex gap-2">
+            <div className="flex-1 px-3 py-2 text-xs bg-ink-900/50 border border-ink-600 rounded-xl truncate text-ink-400 font-mono">
+              {inviteUrl}
             </div>
-          ) : (
-            <div className="h-9 rounded-lg bg-muted/40 animate-pulse" />
-          )}
+            <button
+              onClick={handleCopy}
+              className="px-3 py-2 rounded-xl border border-gold-400/30 bg-gold-400/10 text-gold-400 text-xs font-medium hover:bg-gold-400/15 transition-colors flex items-center gap-1.5 shrink-0"
+            >
+              {copied
+                ? <><Check className="w-3.5 h-3.5" /> Copied</>
+                : <><Copy className="w-3.5 h-3.5" /> Copy</>
+              }
+            </button>
+          </div>
         </div>
 
-        {/* Clients needing attention */}
+        {/* ── Clients needing attention ── */}
         {atRisk.length > 0 && (
           <div className="mb-5">
-            <p className="text-xs font-medium text-red-400 uppercase tracking-wider mb-2.5">
-              <AlertTriangle className="w-3 h-3 inline mr-1" />Needs attention
-            </p>
+            <SectionHeader label="Needs attention" count={atRisk.length} accent="ember" />
             <div className="space-y-2">
-              {atRisk.map((c) => <ClientCard key={c.id} client={c} />)}
+              {atRisk.map((c, i) => <ClientRow key={c.id} client={c} index={i} />)}
             </div>
           </div>
         )}
 
-        {/* All clients */}
+        {/* ── On track ── */}
         {onTrack.length > 0 && (
-          <div>
-            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2.5">
-              On track ({onTrack.length})
-            </p>
+          <div className="mb-5">
+            <SectionHeader label="On track" count={onTrack.length} />
             <div className="space-y-2">
-              {onTrack.map((c) => <ClientCard key={c.id} client={c} />)}
+              {onTrack.map((c, i) => <ClientRow key={c.id} client={c} index={i} />)}
             </div>
           </div>
         )}
 
-        {/* Inactive — subscriptions lapsed, Ivy can't follow up */}
+        {/* ── Inactive ── */}
         {inactive.length > 0 && (
           <div className="mb-5">
-            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2.5">
-              Ivy can't reach ({inactive.length})
-            </p>
+            <SectionHeader label="Ivy can't reach" count={inactive.length} />
             <div className="space-y-2">
-              {inactive.map((c) => <ClientCard key={c.id} client={c} />)}
+              {inactive.map((c, i) => <ClientRow key={c.id} client={c} index={i} />)}
             </div>
           </div>
         )}
 
-        {/* Pending — invited but haven't signed up yet */}
+        {/* ── Pending ── */}
         {pending.length > 0 && (
           <div className="mb-5">
-            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2.5">
-              Awaiting signup ({pending.length})
-            </p>
+            <SectionHeader label="Awaiting signup" count={pending.length} />
             <div className="space-y-2">
-              {pending.map((c) => <ClientCard key={c.id} client={c} />)}
+              {pending.map((c, i) => <ClientRow key={c.id} client={c} index={i} />)}
             </div>
           </div>
         )}
 
-        {clients.length === 0 && !loading && (
+        {clients.length === 0 && (
           <div className="text-center py-16">
-            <Users className="w-10 h-10 text-muted-foreground mx-auto mb-3" />
-            <p className="text-sm font-medium mb-1">No clients yet</p>
-            <p className="text-xs text-muted-foreground">Invite your first client above — Ivy handles their daily accountability calls.</p>
+            <div className="w-14 h-14 rounded-2xl bg-ink-700 border border-ink-600 flex items-center justify-center mx-auto mb-4">
+              <Users className="w-6 h-6 text-ink-400" />
+            </div>
+            <p className="text-sm font-semibold text-ink-200 mb-1">No clients yet</p>
+            <p className="text-xs text-ink-400 leading-relaxed max-w-xs mx-auto">
+              Share your invite link above — clients click to join your programme and Ivy handles their daily accountability calls.
+            </p>
           </div>
         )}
+
+        <div className="h-4" />
       </div>
     </div>
-  )
-}
-
-function ClientCard({ client }: { client: CoachClient }) {
-  const lastCall = client.calls[0]
-  const sentimentColour: Record<string, string> = {
-    positive: 'text-emerald-400', neutral: 'text-muted-foreground', negative: 'text-red-400',
-  }
-
-  const isInactive = !client.isActive || client.subscriptionStatus !== 'active'
-  const isPending = !client.isOnboarded
-
-  const subStatusLabel: Record<string, string> = {
-    past_due: 'Payment overdue',
-    cancelled: 'Cancelled',
-    paused: 'Paused',
-    CANCELLING: 'Cancelling',
-    PAST_DUE: 'Payment overdue',
-    CANCELLED: 'Cancelled',
-  }
-
-  return (
-    <Link href={`/coach/clients/${client.id}`}>
-      <div className={`p-4 rounded-xl border bg-card hover:border-primary/30 transition-colors cursor-pointer ${
-        isPending ? 'border-border opacity-60' :
-        isInactive ? 'border-border opacity-50' :
-        client.needsAttention ? 'border-red-500/20 bg-red-500/3' : 'border-border'
-      }`}>
-        <div className="flex items-center gap-4">
-          <div className="w-9 h-9 rounded-full bg-muted flex items-center justify-center text-sm font-semibold shrink-0">
-            {client.firstName[0]}{client.lastName?.[0] ?? ''}
-          </div>
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2">
-              <p className="text-sm font-medium">{client.firstName} {client.lastName}</p>
-              {isPending
-                ? <span className="text-xs text-amber-400">Awaiting signup</span>
-                : isInactive
-                ? <span className="text-xs text-muted-foreground">{subStatusLabel[client.subscriptionStatus] ?? 'Inactive'} — Ivy can't reach</span>
-                : <StatusDot needsAttention={client.needsAttention} missed={client.recentMissedCount} />}
-            </div>
-            {!isPending && !isInactive && (
-              <div className="flex items-center gap-3 mt-0.5">
-                <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                  <Flame className="w-3 h-3 text-amber-400" /> {client.currentStreak}d
-                </span>
-                {lastCall && (
-                  <span className={`text-xs ${sentimentColour[lastCall.sentiment ?? 'neutral'] ?? 'text-muted-foreground'}`}>
-                    Last: {lastCall.callType.toLowerCase().replace('_', ' ')}
-                  </span>
-                )}
-                <span className="text-xs text-muted-foreground capitalize">{client.track}</span>
-                <span title={client.telegramChatId ? 'Telegram connected' : 'Telegram not connected'}>
-                  <MessageCircle className={`w-3 h-3 ${client.telegramChatId ? 'text-[#229ED9]' : 'text-muted-foreground/30'}`} />
-                </span>
-              </div>
-            )}
-          </div>
-          <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0" />
-        </div>
-      </div>
-    </Link>
   )
 }

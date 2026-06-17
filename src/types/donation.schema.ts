@@ -5,7 +5,9 @@ export const getDonationsQuerySchema = z.object({
     startDate: z.string().datetime().optional(),
     endDate: z.string().datetime().optional(),
     charityId: z.string().uuid().optional(),
-    donationType: z.enum(['COMPLETION', 'STREAK_7_DAY', 'STREAK_30_DAY', 'STREAK_90_DAY', 'MANUAL']).optional(),
+    // Phase 5: STAKE_FORFEIT and STAKE_SUCCESS added (§1 Phase 1 data model).
+    // COMPLETION is deprecated but retained for historical query compatibility.
+    donationType: z.enum(['COMPLETION', 'STAKE_FORFEIT', 'STAKE_SUCCESS', 'STREAK_7_DAY', 'STREAK_30_DAY', 'STREAK_90_DAY', 'MANUAL']).optional(),
     page: z.string().transform(Number).default('1'),
     limit: z.string().transform(Number).default('20'),
   }),

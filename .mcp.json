@@ -1,0 +1,16 @@
+{
+  "mcpServers": {
+    "stripe": {
+      "type": "http",
+      "url": "https://mcp.stripe.com"
+    },
+    "neon": {
+      "type": "sse",
+      "url": "https://mcp.neon.tech/sse"
+    },
+    "cloudflare-bindings": {
+      "type": "sse",
+      "url": "https://bindings.mcp.cloudflare.com/sse"
+    }
+  }
+}

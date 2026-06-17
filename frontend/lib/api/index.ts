@@ -629,6 +629,50 @@ export const pushApi = {
     const response = await client.post<ApiResponse>('/api/push/unsubscribe', data)
     return response.data
   },
+
+  resubscribe: async (data: { oldEndpoint: string; newSubscription: any }) => {
+    const response = await client.post<ApiResponse>('/api/push/resubscribe', data)
+    return response.data
+  },
+
+  getVapidPublicKey: async (): Promise<string | null> => {
+    const response = await client.get<ApiResponse<{ publicKey: string }>>('/api/push/vapid-public-key')
+    return response.data.data?.publicKey ?? null
+  },
+}
+
+// Voice Notes API
+export const voiceNotesApi = {
+  /**
+   * Upload audio blob to arm today's workout.
+   * Accepts multipart/form-data with fields: audio (Blob), durationSec (optional), workoutId (optional).
+   */
+  submit: async (audio: Blob, durationSec?: number, workoutId?: string): Promise<{
+    voiceNote: { id: string; transcript: string | null; recordedAt: string; durationSec: number | null }
+    workoutId: string | null
+    armed: boolean
+  }> => {
+    const form = new FormData()
+    form.append('audio', audio, 'voice-note.webm')
+    if (durationSec !== undefined) form.append('durationSec', String(durationSec))
+    if (workoutId) form.append('workoutId', workoutId)
+
+    const token = typeof window !== 'undefined' ? localStorage.getItem('ivy_token') : null
+    const res = await fetch(
+      `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/voice-notes`,
+      {
+        method: 'POST',
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        body: form,
+      }
+    )
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}))
+      throw new Error(err?.error?.message ?? `Voice note upload failed: ${res.status}`)
+    }
+    const json = await res.json()
+    return json.data
+  },
 }
 
 // Export all APIs
@@ -643,6 +687,7 @@ export const api = {
   seasons: seasonsApi,
   buddy: buddyApi,
   push: pushApi,
+  voiceNotes: voiceNotesApi,
   circles: circlesApi,
   circleGames: circleGamesApi,
   gameSuggestions: gameSuggestionsApi,

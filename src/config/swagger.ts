@@ -15,10 +15,10 @@ const options: swaggerJsdoc.Options = {
         ## Features
         - 🔐 JWT Authentication with magic links
         - 👥 User management with role-based access
-        - 💳 Stripe subscription management (FREE, PRO, ELITE, CONCIERGE, B2B)
-        - 🏋️ Workout tracking and completion
+        - 💳 Stripe subscription management (FREE trial, PRO "Ivy", B2B, COACH)
+        - 🏋️ Workout tracking and arming/stake flow
         - 📞 AI voice calls via Retell integration
-        - ❤️ Donation tracking per workout
+        - 🎯 Stake-based commitment device (Phase 2)
         - 📊 Transformation scores and statistics
         - 🏢 B2B company management with admin dashboards
         - 🔔 Webhooks for Stripe and Retell events
@@ -27,12 +27,12 @@ const options: swaggerJsdoc.Options = {
         Most endpoints require a valid JWT token in the Authorization header:
         \`Authorization: Bearer <token>\`
 
-        ## Subscription Tiers
-        - **FREE**: Basic workouts and donations
-        - **PRO**: Energy/mood tracking (£29/month)
-        - **ELITE**: Health confidence, Ivy Circle, calendar sync (£49/month)
-        - **CONCIERGE**: Human review, strategy calls, life markers (£99/month)
-        - **B2B**: Company-wide programs with admin dashboard (£53/employee/month)
+        ## Subscription Tiers (Phase 5 — one paid B2C tier)
+        - **FREE**: 14-day trial with full access (stake required)
+        - **PRO** ("Ivy"): The whole system — VN arming, evening review, stake, Circles (£42/mo · $52/mo ⚑ placeholder)
+        - **B2B**: Company-sponsored seats
+        - **COACH**: PT/coach account — flat rate, unlimited clients (£79/$99)
+        - *ELITE/CONCIERGE: retired — any remaining subscribers migrated to PRO*
 
         ## Rate Limiting
         - Authentication endpoints: 5 requests per 15 minutes
@@ -111,7 +111,8 @@ const options: swaggerJsdoc.Options = {
             },
             subscriptionTier: {
               type: 'string',
-              enum: ['FREE', 'PRO', 'ELITE', 'CONCIERGE', 'B2B'],
+              // Phase 5: PRO is the single paid B2C tier; ELITE/CONCIERGE retained for migration period only
+              enum: ['FREE', 'PRO', 'B2B', 'COACH'],
               example: 'PRO',
             },
             role: {

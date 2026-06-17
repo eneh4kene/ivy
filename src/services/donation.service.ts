@@ -6,89 +6,44 @@ import { startOfMonth, endOfMonth, startOfDay, endOfDay } from 'date-fns';
 
 class DonationService {
   /**
-   * Calculate donation amount for a workout completion
-   * Based on user's subscription tier
+   * @deprecated Phase 5 — per-completion wallet donation retired (§8 of
+   * docs/product-pricing-rework.md). The subscription no longer funds a
+   * per-tier donation amount; charity funding now comes from stake forfeits
+   * (STAKE_FORFEIT) and the Phase 6 corporate CSR pool (STAKE_SUCCESS).
+   * This method is retained for any callers not yet migrated; it always
+   * returns 1.0 as a safe fallback.
    */
-  async calculateDonationAmount(userId: string): Promise<number> {
-    const user = await prisma.user.findUnique({
-      where: { id: userId },
-      select: { subscriptionTier: true },
-    });
-
-    if (!user) {
-      throw new NotFoundError('User not found');
-    }
-
-    // Donation amounts by tier
-    const amounts: Record<string, number> = {
-      FREE: 1.0,
-      PRO: 1.0,
-      ELITE: 1.5,
-      CONCIERGE: 2.0,
-      B2B: 1.0,
-    };
-
-    return amounts[user.subscriptionTier] || 1.0;
+  async calculateDonationAmount(_userId: string): Promise<number> {
+    // Bundled wallet allocation retired — return a safe no-op value.
+    return 1.0;
   }
 
   /**
-   * Check if user can make a donation (within daily/monthly limits)
+   * @deprecated Phase 5 — bundled wallet monthly/daily cap gates retired (§8 of
+   * docs/product-pricing-rework.md). The wallet's monthlyLimit and dailyCap are no
+   * longer set on new subscriptions. This method now always returns allowed:true
+   * so that MANUAL and STREAK_* donations still pass through; the cap semantics
+   * are irrelevant without a funded allocation. Retained to avoid breaking callers.
    */
-  async canMakeDonation(userId: string, amount: number): Promise<{ allowed: boolean; reason?: string }> {
-    const wallet = await prisma.impactWallet.findUnique({
-      where: { userId },
-    });
-
-    if (!wallet) {
-      return { allowed: false, reason: 'Impact Wallet not found' };
-    }
-
-    // Check monthly limit
-    if (Number(wallet.currentMonthSpent) + amount > Number(wallet.monthlyLimit)) {
-      return {
-        allowed: false,
-        reason: `Monthly limit reached (£${wallet.monthlyLimit})`,
-      };
-    }
-
-    // Check daily cap
-    const today = new Date();
-    const startOfToday = startOfDay(today);
-    const endOfToday = endOfDay(today);
-
-    const todaysDonations = await prisma.donation.aggregate({
-      where: {
-        userId,
-        createdAt: {
-          gte: startOfToday,
-          lte: endOfToday,
-        },
-      },
-      _sum: {
-        amount: true,
-      },
-    });
-
-    const todaysTotal = Number(todaysDonations._sum.amount || 0);
-
-    if (todaysTotal + amount > Number(wallet.dailyCap)) {
-      return {
-        allowed: false,
-        reason: `Daily cap reached (£${wallet.dailyCap})`,
-      };
-    }
-
+  async canMakeDonation(_userId: string, _amount: number): Promise<{ allowed: boolean; reason?: string }> {
+    // Bundled wallet gate retired — always allow.
     return { allowed: true };
   }
 
+  // ---------------------------------------------------------------------------
+  // INTERNAL — kept private, only used by createDonation for MANUAL type guard
+  // ---------------------------------------------------------------------------
   /**
    * Create a donation
+   * donationType 'COMPLETION' is deprecated (Phase 5 §8) — no longer called from workout.service.
+   * Active types: STAKE_FORFEIT, STAKE_SUCCESS, STREAK_7_DAY, STREAK_30_DAY, STREAK_90_DAY, MANUAL.
+   * COMPLETION is retained in the signature only for backward compatibility during transition.
    */
   async createDonation(
     userId: string,
     charityId: string,
     amount: number,
-    donationType: 'COMPLETION' | 'STREAK_7_DAY' | 'STREAK_30_DAY' | 'STREAK_90_DAY' | 'MANUAL',
+    donationType: 'COMPLETION' | 'STAKE_FORFEIT' | 'STAKE_SUCCESS' | 'STREAK_7_DAY' | 'STREAK_30_DAY' | 'STREAK_90_DAY' | 'MANUAL',
     workoutId?: string,
     streakDays?: number
   ) {
@@ -119,13 +74,8 @@ class DonationService {
       throw new NotFoundError('Charity not found or inactive');
     }
 
-    // Check if donation is allowed (for non-manual donations)
-    if (donationType !== 'MANUAL') {
-      const check = await this.canMakeDonation(userId, amount);
-      if (!check.allowed) {
-        throw new BadRequestError(check.reason || 'Donation not allowed');
-      }
-    }
+    // Phase 5: wallet cap check retired (canMakeDonation is a no-op stub).
+    // All donation types are allowed without a wallet gate.
 
     // Create donation
     const donation = await prisma.donation.create({
@@ -160,7 +110,12 @@ class DonationService {
   }
 
   /**
-   * Update Impact Wallet after a donation
+   * Update Impact Wallet after a donation.
+   *
+   * Phase 5 (§8): the bundled wallet allocation (monthlyLimit / dailyCap /
+   * currentMonthSpent) is retired. Only lifetimeDonated is updated — it is
+   * the single field still relevant post-rework (lifetime impact tracking).
+   * If no wallet row exists yet we silently skip; it is no longer mandatory.
    */
   private async updateWalletAfterDonation(userId: string, amount: number) {
     const wallet = await prisma.impactWallet.findUnique({
@@ -168,33 +123,13 @@ class DonationService {
     });
 
     if (!wallet) {
-      throw new NotFoundError('Impact Wallet not found');
+      // No wallet row — fine post-rework; new users don't get one on subscription.
+      return;
     }
 
-    // Check if we need to reset monthly counter (new month)
-    const now = new Date();
-    const monthStart = startOfMonth(now);
-    const walletMonthStart = startOfMonth(new Date(wallet.monthStartDate));
-
-    let currentMonthSpent = Number(wallet.currentMonthSpent);
-
-    // Reset if new month
-    if (monthStart > walletMonthStart) {
-      currentMonthSpent = 0;
-      await prisma.impactWallet.update({
-        where: { userId },
-        data: {
-          monthStartDate: monthStart,
-          currentMonthSpent: 0,
-        },
-      });
-    }
-
-    // Update wallet
     await prisma.impactWallet.update({
       where: { userId },
       data: {
-        currentMonthSpent: currentMonthSpent + amount,
         lifetimeDonated: {
           increment: amount,
         },

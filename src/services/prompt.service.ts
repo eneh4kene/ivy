@@ -273,8 +273,10 @@ const FLOWS: Record<string, FlowFn> = {
 
   sprint_close: (ctx) => {
     const sprintNum = ctx.sprint_number ?? '?';
-    const isElite = ['ELITE', 'CONCIERGE'].includes(ctx.subscription_tier ?? '');
-    const circleNote = isElite && ctx.circle_name
+    // Phase 5: Circles is available to all paid users (PRO/"Ivy" is the one tier).
+    // ELITE/CONCIERGE kept in check for any grandfathered subscribers during migration.
+    const isPaidUser = ['PRO', 'ELITE', 'CONCIERGE', 'B2B', 'COACH'].includes(ctx.subscription_tier ?? '');
+    const circleNote = isPaidUser && ctx.circle_name
       ? `Circle note: "Your ${ctx.circle_name} session lands this sprint — come with one win and one honest struggle."`
       : '';
     const nextSprint = typeof ctx.sprint_number === 'number' ? ctx.sprint_number + 1 : '?';

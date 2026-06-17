@@ -14,6 +14,12 @@ export const GAME_TEMPLATES = {
       turn_order: [],        // userId array; populated from circle members at game start
       window_hours: 24,      // how long the holder has before the baton drops
       lives: 3,              // group lives before game over
+      // Phase 4b — baton-stake (§4b mechanic 3):
+      // When baton_stake_multiplier > 1, holding the baton raises the holder's OWN
+      // stakeSliceAmount for the window.  Pass → slice restored to base.
+      // Drop → elevated slice forfeits to the holder's OWN destination (never another user's).
+      // GUARDRAIL: money always moves within the same user's own stake.  No inter-user transfer.
+      baton_stake_multiplier: 1, // default 1 = no elevation; set >1 to enable baton-stake
     },
     defaultInstruction: `You're running a baton relay for the circle. {holder_name} currently holds the baton. When they log a workout, pass it to {next_name} and tell the group. If they miss their window, announce the drop, deduct a life, and pass to {next_name} anyway. The group has {lives} lives left. Keep it light and competitive — celebrate passes, commiserate drops, and remind the current holder their window closes at {deadline}.`,
   },
@@ -190,7 +196,7 @@ class CircleGameService {
         break;
 
       case 'collective':
-        ({ updatedState, note } = this.processCollectiveEvent(game, userId, isSuccess, updatedState));
+        ({ updatedState, note } = await this.processCollectiveEvent(game, userId, isSuccess, updatedState));
         break;
 
       default:
@@ -250,10 +256,24 @@ class CircleGameService {
     let extraEventType: string | null = null;
     let extraPayload: Record<string, any> = {};
 
+    // Phase 4b baton-stake multiplier (§4b mechanic 3)
+    // GUARDRAIL: the multiplier raises/lowers the holder's OWN stakeSliceAmount ONLY.
+    // Money is never transferred to or from another user.
+    const batonMultiplier: number = Number(rules.baton_stake_multiplier ?? 1);
+
     if (userId === holderId && isSuccess) {
       // Pass the baton to the next person
       const nextIndex = (currentIndex + 1) % turnOrder.length;
       const nextHolder = turnOrder[nextIndex];
+
+      // Baton-stake: restore previous holder's slice to base, then elevate the new holder's
+      if (batonMultiplier > 1) {
+        // Restore outgoing holder's slice to base (baton released successfully)
+        await this.restoreBaseSlice(userId);
+        // Elevate new holder's slice
+        await this.elevateHolderSlice(nextHolder, batonMultiplier);
+      }
+
       state.current_holder_index = nextIndex;
       state.current_holder_id = nextHolder;
       state.baton_held_since = new Date().toISOString();
@@ -267,10 +287,35 @@ class CircleGameService {
       const windowHours: number = (rules.window_hours as number) ?? 24;
       sendPushToUser(nextHolder, pushTemplates.batonPassed(passer?.firstName ?? 'Someone', windowHours))
         .catch((err) => logger.warn('Baton push failed', err));
+
     } else if (userId === holderId && !isSuccess) {
       // Baton dropped — deduct a life, pass anyway
       const nextIndex = (currentIndex + 1) % turnOrder.length;
       const nextHolder = turnOrder[nextIndex];
+
+      // Baton-stake: the elevated slice is already set on the holder's workout.
+      // The larger slice will forfeit to THEIR OWN destination in settleStakeCycle.
+      // We restore to base for the incoming holder (fresh start for them).
+      if (batonMultiplier > 1) {
+        // Do NOT restore the dropped holder's slice — the elevated amount forfeits.
+        // Mark the drop event explicitly so the settlement audit trail is clear.
+        await prisma.circleGameEvent.create({
+          data: {
+            gameId: game.id,
+            userId,
+            eventType: 'baton_stake_drop',
+            payload: {
+              baton_multiplier: batonMultiplier,
+              // GUARDRAIL note: forfeited to userId's OWN destination — not another user
+              forfeit_destination: 'own_stake_destination',
+            },
+            note: `Baton drop: ${userId}'s elevated stake slice (×${batonMultiplier}) forfeits to their own destination.`,
+          },
+        });
+        // Elevate new holder's slice
+        await this.elevateHolderSlice(nextHolder, batonMultiplier);
+      }
+
       state.current_holder_index = nextIndex;
       state.current_holder_id = nextHolder;
       state.baton_held_since = new Date().toISOString();
@@ -286,6 +331,109 @@ class CircleGameService {
     }
 
     return { updatedState: state, note, extraEventType, extraPayload };
+  }
+
+  /**
+   * elevateHolderSlice — baton-stake mechanic (§4b mechanic 3).
+   *
+   * Finds the new holder's most-recent PENDING workout in the current open stake cycle
+   * and multiplies its stakeSliceAmount by the baton multiplier.
+   *
+   * GUARDRAIL: only the holder's OWN workout is touched.  No other user's slice changes.
+   * Money never moves between users — only the holder's own at-risk amount increases.
+   */
+  private async elevateHolderSlice(userId: string, multiplier: number): Promise<void> {
+    if (multiplier <= 1) return; // no-op for multiplier ≤ 1
+
+    // Find the user's most-recent open stake cycle
+    const cycle = await prisma.stakeCycle.findFirst({
+      where: { userId, status: 'AUTHORIZED' },
+      select: { id: true, stakeAmount: true },
+      orderBy: { periodStart: 'desc' },
+    });
+    if (!cycle) {
+      logger.info(`baton-stake: ${userId} has no open stake cycle — slice elevation skipped`);
+      return;
+    }
+
+    // Base daily slice = weekly stake / 7
+    const baseSlice = Math.round((Number(cycle.stakeAmount) / 7) * 100) / 100;
+    const elevatedSlice = Math.round(baseSlice * multiplier * 100) / 100;
+
+    // Find today's PENDING workout in this cycle
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const tomorrow = new Date(today.getTime() + 24 * 60 * 60 * 1000);
+
+    const workout = await (prisma.workout as any).findFirst({
+      where: {
+        userId,
+        stakeCycleId: cycle.id,
+        sliceOutcome: 'PENDING',
+        plannedDate: { gte: today, lt: tomorrow },
+      },
+      select: { id: true, stakeSliceAmount: true },
+    });
+
+    if (!workout) {
+      logger.info(`baton-stake: no PENDING workout today for ${userId} in cycle ${cycle.id} — elevation skipped`);
+      return;
+    }
+
+    await (prisma.workout as any).update({
+      where: { id: workout.id },
+      data: { stakeSliceAmount: elevatedSlice },
+    });
+
+    logger.info(
+      `baton-stake: elevated ${userId}'s slice from ${baseSlice} → ${elevatedSlice} ` +
+      `(×${multiplier}) for workout ${workout.id}`
+    );
+  }
+
+  /**
+   * restoreBaseSlice — baton-stake mechanic.
+   *
+   * After a successful pass, restore the outgoing holder's slice back to the base
+   * rate (weeklyStake / 7) — the elevation was for the hold window only.
+   * On a DROP the slice is NOT restored — the elevated amount forfeits.
+   *
+   * GUARDRAIL: only the holder's OWN workout is touched.
+   */
+  private async restoreBaseSlice(userId: string): Promise<void> {
+    const cycle = await prisma.stakeCycle.findFirst({
+      where: { userId, status: 'AUTHORIZED' },
+      select: { id: true, stakeAmount: true },
+      orderBy: { periodStart: 'desc' },
+    });
+    if (!cycle) return;
+
+    const baseSlice = Math.round((Number(cycle.stakeAmount) / 7) * 100) / 100;
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const tomorrow = new Date(today.getTime() + 24 * 60 * 60 * 1000);
+
+    const workout = await (prisma.workout as any).findFirst({
+      where: {
+        userId,
+        stakeCycleId: cycle.id,
+        sliceOutcome: 'PENDING',
+        plannedDate: { gte: today, lt: tomorrow },
+      },
+      select: { id: true },
+    });
+
+    if (!workout) return;
+
+    await (prisma.workout as any).update({
+      where: { id: workout.id },
+      data: { stakeSliceAmount: baseSlice },
+    });
+
+    logger.info(
+      `baton-stake: restored ${userId}'s slice to base ${baseSlice} after successful pass (workout ${workout.id})`
+    );
   }
 
   private processPointsRaceEvent(
@@ -312,7 +460,18 @@ class CircleGameService {
     return { updatedState: state, note };
   }
 
-  private processCollectiveEvent(
+  /**
+   * processCollectiveEvent — Phase 4b mechanic 2 (collective charity goal).
+   *
+   * When a collective game target is hit, we mark the moment on the linked
+   * CircleSprintGoal (if one exists).
+   *
+   * IMPORTANT: no donation is fired here — the actual group donation rides on
+   * STAKE_SUCCESS which requires Phase 6 corporate funding.
+   * TODO(phase6): wire STAKE_SUCCESS donations to collectiveCharityGoalId once
+   *               the corporate funding layer is live (product-pricing-rework.md §6).
+   */
+  private async processCollectiveEvent(
     game: any, userId: string, isSuccess: boolean, state: Record<string, any>
   ) {
     if (!isSuccess) return { updatedState: state, note: null };
@@ -323,9 +482,64 @@ class CircleGameService {
     state.contributors = contributors;
 
     const rules = game.rules as Record<string, any>;
-    const remaining = Math.max(0, (rules.target ?? 30) - state.total);
-    const note = `${userId} contributed. Group total: ${state.total}/${rules.target ?? 30}. ${remaining} to go.`;
+    const target = rules.target ?? 30;
+    const remaining = Math.max(0, target - state.total);
+    const note = `${userId} contributed. Group total: ${state.total}/${target}. ${remaining} to go.`;
+
+    // Phase 4b mechanic 2: if the game has a linked sprint (and the sprint has a
+    // collective charity goal), mark the moment when target is hit.
+    // Degrade gracefully — if no sprint / no goal, this is a no-op.
+    if (state.total >= target && game.sprintId) {
+      await this.flagCollectiveGoalHit(game).catch((err) =>
+        logger.warn(`collective goal flag failed for game ${game.id}`, err)
+      );
+    }
+
     return { updatedState: state, note };
+  }
+
+  /**
+   * flagCollectiveGoalHit — coordination-only (§4b mechanic 2).
+   *
+   * Sets collectiveGoalHitAt on the CircleSprintGoal for this sprint, marking the
+   * group impact moment.  No donation is created — that is Phase 6 work.
+   *
+   * TODO(phase6): after Phase 6 corporate layer is built, fire STAKE_SUCCESS
+   *               donations here for each member who contributed, pointing at
+   *               CircleSprintGoal.collectiveCharityGoalId.
+   */
+  private async flagCollectiveGoalHit(game: any): Promise<void> {
+    if (!game.sprintId) return;
+
+    // Find the sprint to get the circle's sprint number
+    const sprint = await (prisma.sprint as any).findUnique({
+      where: { id: game.sprintId },
+      select: { id: true, seasonId: true, number: true },
+    });
+    if (!sprint) return;
+
+    // Find the circle's sprint goal for this sprint number
+    const sprintGoal = await (prisma.circleSprintGoal as any).findFirst({
+      where: {
+        circleId: game.circleId,
+        sprintNumber: sprint.number,
+        collectiveGoalHitAt: null, // only mark once
+      },
+      select: { id: true, collectiveCharityGoalId: true },
+    });
+
+    if (!sprintGoal) return;
+
+    await (prisma.circleSprintGoal as any).update({
+      where: { id: sprintGoal.id },
+      data: { collectiveGoalHitAt: new Date() },
+    });
+
+    logger.info(
+      `collective goal hit: sprint ${sprint.id}, circle ${game.circleId}, ` +
+      `charity goal ${sprintGoal.collectiveCharityGoalId ?? 'none set'} — ` +
+      `marked collectiveGoalHitAt. No donation fired (Phase 6 TODO).`
+    );
   }
 
   // ── Context for calls / briefs ─────────────────────────────────────────────
@@ -340,8 +554,12 @@ class CircleGameService {
         const heldSince = state.baton_held_since
           ? new Date(state.baton_held_since).toLocaleDateString('en-GB', { weekday: 'short', hour: '2-digit', minute: '2-digit' })
           : 'unknown';
+        const multiplier: number = Number(rules.baton_stake_multiplier ?? 1);
+        const batonStakeNote = multiplier > 1
+          ? ` Your stake is ×${multiplier} while you hold the baton.`
+          : '';
         return isHolder
-          ? `You hold the baton (since ${heldSince}). Complete your workout to pass it on. ${state.lives_remaining} lives left.`
+          ? `You hold the baton (since ${heldSince}). Complete your workout to pass it on. ${state.lives_remaining} lives left.${batonStakeNote}`
           : `${state.current_holder_id ?? 'Someone'} holds the baton. ${state.lives_remaining} lives remaining.`;
       }
       case 'points_race': {

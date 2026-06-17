@@ -6,19 +6,23 @@ import { useAuthStore } from '@/lib/store/auth.store'
 
 export default function CoachLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter()
-  const user = useAuthStore((s) => s.user)
-  const isLoading = useAuthStore((s) => s.isLoading)
+  const { user, isLoading } = useAuthStore()
 
   useEffect(() => {
-    if (!isLoading && user && user.subscriptionTier !== 'COACH') {
-      router.push('/dashboard')
-    }
-    if (!isLoading && !user) {
+    if (isLoading) return
+    if (!user) {
       router.push('/login')
+      return
+    }
+    if (user.subscriptionTier !== 'COACH') {
+      router.push('/dashboard')
     }
   }, [user, isLoading, router])
 
-  if (isLoading || !user) return null
+  // While auth is loading, or user is being redirected, show nothing
+  if (isLoading || !user || user.subscriptionTier !== 'COACH') {
+    return null
+  }
 
   return <>{children}</>
 }
