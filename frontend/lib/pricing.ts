@@ -6,11 +6,20 @@ export const CURRENCY_SYMBOL: Record<Currency, string> = {
   USD: '$',
 }
 
+// Stake-rework model (§9): ONE B2C plan, "Ivy" = the PRO tier at £35/$44.
+// ELITE/CONCIERGE are retired but kept here so legacy permission/settings
+// helpers still resolve; they are no longer offered or linked anywhere.
 export const TIER_PRICES: Record<string, Record<Currency, number>> = {
-  PRO:       { GBP: 70,  USD: 89  },
+  PRO:       { GBP: 35,  USD: 44  },
   ELITE:     { GBP: 99,  USD: 119 },
   CONCIERGE: { GBP: 149, USD: 179 },
 }
+
+/** The single Ivy plan price — the public-facing source of truth (matches live Stripe). */
+export const IVY_PRICE: Record<Currency, number> = { GBP: 35, USD: 44 }
+
+/** Minimum weekly stake the user puts on the line (§9 decision 2). */
+export const STAKE_MIN_WEEKLY: Record<Currency, number> = { GBP: 7, USD: 10 }
 
 export const IMPACT_WALLET_MONTHLY: Record<string, Record<Currency, number>> = {
   PRO:       { GBP: 30, USD: 37 },
