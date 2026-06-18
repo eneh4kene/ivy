@@ -3,7 +3,7 @@ import authController from '../controllers/auth.controller';
 import { validate } from '../../middleware/validate';
 import { authenticate } from '../../middleware/auth';
 import { authLimiter } from '../../middleware/rateLimiter';
-import { sendMagicLinkSchema, verifyMagicLinkSchema } from '../../types/auth.schema';
+import { sendMagicLinkSchema, verifyMagicLinkSchema, googleAuthSchema } from '../../types/auth.schema';
 
 const router = Router();
 
@@ -40,6 +40,18 @@ router.post(
   authLimiter,
   validate(verifyMagicLinkSchema),
   authController.verifyMagicLink
+);
+
+/**
+ * @route   POST /api/auth/google
+ * @desc    Sign in / sign up with a Google ID token
+ * @access  Public
+ */
+router.post(
+  '/google',
+  authLimiter,
+  validate(googleAuthSchema),
+  authController.googleAuth
 );
 
 /**

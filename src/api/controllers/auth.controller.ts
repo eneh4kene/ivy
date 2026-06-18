@@ -2,7 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import { AuthRequest } from '../../middleware/auth';
 import authService from '../../services/auth.service';
 import { sendSuccess } from '../../utils/response';
-import { SendMagicLinkInput, VerifyMagicLinkInput } from '../../types/auth.schema';
+import { SendMagicLinkInput, VerifyMagicLinkInput, GoogleAuthInput } from '../../types/auth.schema';
 
 class AuthController {
   /**
@@ -192,6 +192,51 @@ class AuthController {
    *             schema:
    *               $ref: '#/components/schemas/Error'
    */
+  /**
+   * @swagger
+   * /api/auth/google:
+   *   post:
+   *     summary: Sign in / sign up with Google
+   *     description: Verifies a Google ID token, finds-or-creates the user by verified email, and returns a JWT access token.
+   *     tags: [Authentication]
+   *     security: []
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             required:
+   *               - idToken
+   *             properties:
+   *               idToken:
+   *                 type: string
+   *                 description: Google ID token from Google Identity Services
+   *               region:
+   *                 type: string
+   *                 enum: [GB, US]
+   *               tcpaConsent:
+   *                 type: boolean
+   *     responses:
+   *       200:
+   *         description: Authenticated successfully
+   *       401:
+   *         description: Invalid Google credential
+   */
+  async googleAuth(
+    req: Request<{}, {}, GoogleAuthInput>,
+    res: Response,
+    next: NextFunction
+  ): Promise<void> {
+    try {
+      const { idToken, region, tcpaConsent } = req.body;
+      const result = await authService.googleSignIn(idToken, { region, tcpaConsent });
+      sendSuccess(res, result);
+    } catch (error) {
+      next(error);
+    }
+  }
+
   async getCurrentUser(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
     try {
       // User is already attached by auth middleware

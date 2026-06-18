@@ -15,6 +15,7 @@ interface AuthState {
   setToken: (token: string) => void
   login: (email: string) => Promise<void>
   verifyMagicLink: (token: string) => Promise<void>
+  loginWithGoogle: (idToken: string, opts?: { region?: 'GB' | 'US'; tcpaConsent?: boolean }) => Promise<{ isNewUser: boolean; user: User }>
   logout: () => void
   fetchUser: () => Promise<void>
 }
@@ -68,6 +69,30 @@ export const useAuthStore = create<AuthState>()(
             isAuthenticated: true,
             isLoading: false
           })
+        } catch (error) {
+          set({ isLoading: false })
+          throw error
+        }
+      },
+
+      loginWithGoogle: async (idToken, opts) => {
+        set({ isLoading: true })
+        try {
+          const { accessToken, user, isNewUser } = await api.auth.googleAuth({ idToken, ...opts })
+
+          if (typeof window !== 'undefined') {
+            localStorage.setItem('ivy_token', accessToken)
+            localStorage.setItem('ivy_user', JSON.stringify(user))
+          }
+
+          useCurrencyStore.getState().setFromUser(user)
+          set({
+            token: accessToken,
+            user,
+            isAuthenticated: true,
+            isLoading: false,
+          })
+          return { isNewUser, user }
         } catch (error) {
           set({ isLoading: false })
           throw error

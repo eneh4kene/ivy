@@ -38,6 +38,11 @@ export const authApi = {
     return response.data.data!
   },
 
+  googleAuth: async (data: { idToken: string; region?: 'GB' | 'US'; tcpaConsent?: boolean }) => {
+    const response = await client.post<ApiResponse<{ accessToken: string; user: User; isNewUser: boolean }>>('/api/auth/google', data)
+    return response.data.data!
+  },
+
   getCurrentUser: async () => {
     const response = await client.get<ApiResponse<User>>('/api/auth/me')
     return response.data.data!

@@ -6,6 +6,7 @@ import { useSearchParams } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { usersApi, authApi } from '@/lib/api'
+import { GoogleSignInButton } from '@/components/auth/GoogleSignInButton'
 import { Leaf, ArrowRight, Mail, AlertCircle, CheckCircle2, Sparkles } from 'lucide-react'
 import type { Currency } from '@/lib/pricing'
 
@@ -229,6 +230,14 @@ function SignupForm() {
                   No credit card required.
                 </p>
               </form>
+
+              <div className="flex items-center gap-3 my-6">
+                <div className="h-px flex-1 bg-border" />
+                <span className="text-xs text-muted-foreground uppercase tracking-wider">or</span>
+                <div className="h-px flex-1 bg-border" />
+              </div>
+
+              <GoogleSignInButton region={region} tcpaConsent={tcpaConsent} onError={setError} />
 
               <p className="text-center text-sm text-muted-foreground mt-6">
                 Already have an account?{' '}

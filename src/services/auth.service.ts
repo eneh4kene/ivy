@@ -1,14 +1,45 @@
 import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
 import nodemailer from 'nodemailer';
+import { OAuth2Client } from 'google-auth-library';
 import { config } from '../config';
 import prisma from '../utils/prisma';
 import logger from '../utils/logger';
 import { BadRequestError, UnauthorizedError } from '../utils/errors';
 import { logUsage } from './usage.service';
 
+// Fields returned on the authenticated user object — kept in sync with
+// verifyMagicLink so magic-link and SSO logins return an identical user shape.
+const AUTH_USER_SELECT = {
+  id: true,
+  email: true,
+  phone: true,
+  firstName: true,
+  lastName: true,
+  timezone: true,
+  region: true,
+  currency: true,
+  subscriptionTier: true,
+  subscriptionStatus: true,
+  isActive: true,
+  isOnboarded: true,
+  track: true,
+  goal: true,
+  minimumMode: true,
+  giftFrame: true,
+  commStyle: true,
+  circleOptIn: true,
+  preferredCharityId: true,
+  morningCallTime: true,
+  eveningCallTime: true,
+  callFrequency: true,
+  telegramChatId: true,
+  pendingCoachId: true,
+} as const;
+
 class AuthService {
   private transporter: nodemailer.Transporter;
+  private googleClient: OAuth2Client;
 
   constructor() {
     // Initialize email transporter
@@ -23,6 +54,104 @@ class AuthService {
           }
         : undefined,
     });
+
+    // Shares the Google OAuth web client with the Calendar integration —
+    // a Google ID token minted for that client verifies here too.
+    this.googleClient = new OAuth2Client(config.calendar.google.clientId);
+  }
+
+  /**
+   * Verify a Google ID token (from Google Identity Services on the frontend),
+   * find-or-create the matching user by verified email, and issue an app JWT.
+   *
+   * Returns the same `{ accessToken, user }` shape as verifyMagicLink, plus an
+   * `isNewUser` flag so the client can route new accounts into onboarding.
+   */
+  async googleSignIn(
+    idToken: string,
+    opts: { region?: 'GB' | 'US'; tcpaConsent?: boolean } = {},
+  ): Promise<{ accessToken: string; user: any; isNewUser: boolean }> {
+    const clientId = config.calendar.google.clientId;
+    if (!clientId) {
+      throw new BadRequestError('Google sign-in is not configured');
+    }
+
+    // ── Verify the ID token signature + audience against our client ──────────
+    let payload;
+    try {
+      const ticket = await this.googleClient.verifyIdToken({
+        idToken,
+        audience: clientId,
+      });
+      payload = ticket.getPayload();
+    } catch (err) {
+      logger.warn('Google ID token verification failed', err);
+      throw new UnauthorizedError('Invalid Google credential');
+    }
+
+    if (!payload || !payload.email) {
+      throw new UnauthorizedError('Google credential missing email');
+    }
+    if (payload.email_verified === false) {
+      throw new UnauthorizedError('Google email is not verified');
+    }
+
+    const email = payload.email.toLowerCase();
+
+    // ── Find-or-create by verified email ─────────────────────────────────────
+    let user = await prisma.user.findUnique({
+      where: { email },
+      select: AUTH_USER_SELECT,
+    });
+    let isNewUser = false;
+
+    if (!user) {
+      const region = opts.region ?? 'GB';
+      const currency = region === 'US' ? 'USD' : 'GBP';
+      try {
+        user = await prisma.user.create({
+          data: {
+            email,
+            firstName: payload.given_name ?? '',
+            lastName: payload.family_name ?? '',
+            region,
+            currency,
+            track: 'fitness',
+            goal: '',
+            subscriptionTier: 'FREE',
+            isActive: true,
+            isOnboarded: false,
+            ...(opts.tcpaConsent !== undefined && {
+              tcpaConsent: opts.tcpaConsent,
+              tcpaConsentAt: opts.tcpaConsent ? new Date() : null,
+            }),
+          },
+          select: AUTH_USER_SELECT,
+        });
+        isNewUser = true;
+        logger.info(`User created via Google SSO: ${user.id} (${email})`);
+      } catch (err: any) {
+        // Concurrent first sign-in (double-click): the email @unique constraint
+        // rejects the second create. Re-fetch the row the winner created rather
+        // than erroring — converges on one account, no duplicate.
+        if (err?.code === 'P2002') {
+          user = await prisma.user.findUnique({
+            where: { email },
+            select: AUTH_USER_SELECT,
+          });
+          if (!user) throw err;
+        } else {
+          throw err;
+        }
+      }
+    }
+
+    if (!user.isActive) {
+      throw new UnauthorizedError('User not found or inactive');
+    }
+
+    const accessToken = this.generateAccessToken(user.id, user.email);
+    return { accessToken, user, isNewUser };
   }
 
   /**
@@ -173,32 +302,7 @@ class AuthService {
     // Get user
     const user = await prisma.user.findUnique({
       where: { email: magicLink.email },
-      select: {
-        id: true,
-        email: true,
-        phone: true,
-        firstName: true,
-        lastName: true,
-        timezone: true,
-        region: true,
-        currency: true,
-        subscriptionTier: true,
-        subscriptionStatus: true,
-        isActive: true,
-        isOnboarded: true,
-        track: true,
-        goal: true,
-        minimumMode: true,
-        giftFrame: true,
-        commStyle: true,
-        circleOptIn: true,
-        preferredCharityId: true,
-        morningCallTime: true,
-        eveningCallTime: true,
-        callFrequency: true,
-        telegramChatId: true,
-        pendingCoachId: true,
-      },
+      select: AUTH_USER_SELECT,
     });
 
     if (!user || !user.isActive) {

@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { useAuthStore } from '@/lib/store/auth.store'
+import { GoogleSignInButton } from '@/components/auth/GoogleSignInButton'
 import { Leaf, ArrowRight, Mail, AlertCircle, CheckCircle2 } from 'lucide-react'
 
 export default function LoginPage() {
@@ -98,6 +99,14 @@ export default function LoginPage() {
                   )}
                 </Button>
               </form>
+
+              <div className="flex items-center gap-3 my-6">
+                <div className="h-px flex-1 bg-border" />
+                <span className="text-xs text-muted-foreground uppercase tracking-wider">or</span>
+                <div className="h-px flex-1 bg-border" />
+              </div>
+
+              <GoogleSignInButton onError={setError} />
 
               <p className="text-center text-sm text-muted-foreground mt-6">
                 Don&apos;t have an account?{' '}
