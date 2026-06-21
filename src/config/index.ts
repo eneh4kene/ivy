@@ -74,6 +74,15 @@ export const config = {
   },
   frontend: {
     url: env.FRONTEND_URL,
+    // Full set of browser origins allowed through CORS: the canonical URL plus
+    // any extras (apex domain, preview URLs). Deduped, trailing slashes stripped.
+    allowedOrigins: Array.from(
+      new Set(
+        [env.FRONTEND_URL, ...(env.CORS_EXTRA_ORIGINS?.split(',') ?? [])]
+          .map((o) => o.trim().replace(/\/$/, ''))
+          .filter(Boolean),
+      ),
+    ),
   },
   rateLimit: {
     windowMs: env.RATE_LIMIT_WINDOW_MS,

@@ -6,6 +6,7 @@ import { errorHandler, notFoundHandler } from './middleware/errorHandler';
 import { apiLimiter } from './middleware/rateLimiter';
 import logger from './utils/logger';
 import swaggerSpec from './config/swagger';
+import { config } from './config';
 
 // Import routes
 import authRoutes from './api/routes/auth.routes';
@@ -32,17 +33,22 @@ const app: Application = express();
 app.use(helmet());
 app.use(cors({
   origin: (origin, callback) => {
-    const allowed = process.env.FRONTEND_URL;
-    // In production, require an explicit FRONTEND_URL — never open to all origins
+    // In production, only allow whitelisted browser origins (canonical URL + any
+    // CORS_EXTRA_ORIGINS, e.g. the apex domain alongside the www host).
     if (process.env.NODE_ENV === 'production') {
-      if (!allowed) {
+      const allowed = config.frontend.allowedOrigins;
+      if (allowed.length === 0) {
         callback(new Error('FRONTEND_URL must be set in production'));
         return;
       }
-      if (!origin || origin === allowed) {
+      // No Origin header → non-browser/server-to-server caller; allow it.
+      if (!origin || allowed.includes(origin)) {
         callback(null, true);
       } else {
-        callback(new Error(`CORS: origin ${origin} not allowed`));
+        // Deny WITHOUT throwing: the request proceeds without CORS headers so the
+        // browser blocks it cleanly. Throwing here turns the preflight into a 500.
+        logger.warn(`CORS: blocked origin ${origin}`);
+        callback(null, false);
       }
     } else {
       // Development: allow all origins for local testing

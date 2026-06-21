@@ -88,6 +88,9 @@ const envSchema = z.object({
 
   // Frontend
   FRONTEND_URL: z.string().url(),
+  // Additional origins allowed through CORS (comma-separated), beyond FRONTEND_URL.
+  // e.g. the apex domain when FRONTEND_URL is the www host, or Vercel preview URLs.
+  CORS_EXTRA_ORIGINS: z.string().optional(),
 
   // Rate Limiting
   RATE_LIMIT_WINDOW_MS: z.string().transform(Number).default('60000'),
