@@ -102,10 +102,11 @@ cron.schedule('0 0 * * *', async () => {
 
 // ── Arming loop — morning VN prompt + escalation ladder (Phase 3) ─────────
 //
-// Design: crons run every 5 minutes; runArmingForStage() checks each user's
-// arming window against the current time with a ±3-minute tolerance window.
+// Design: crons run every 15 minutes; runArmingForStage() checks each user's
+// arming window against the current time with a ±7.5-minute tolerance window.
 // This avoids per-user Bull-queue jobs while still delivering prompts within
-// ~5 minutes of the user's chosen window.
+// ~15 minutes of the user's chosen window. (15-min poll lets Neon scale to
+// zero between cycles — keeps compute under the spending cap.)
 //
 // Stage timing relative to user's armingWindowStart (S) and armingWindowEnd (E):
 //   PROMPT       — fires at S
@@ -117,7 +118,7 @@ cron.schedule('0 0 * * *', async () => {
 // §1e: Push primary; SMS fallback for PROMPT only if no push subscription.
 // §9 d4b: ARMING_CHASE capped at 8/user/month, opt-in only.
 
-cron.schedule('*/5 * * * *', async () => {
+cron.schedule('*/15 * * * *', async () => {
   const now = new Date();
   await runArmingForStage('PROMPT', now).catch((err) =>
     logger.error('Arming PROMPT stage error:', err)

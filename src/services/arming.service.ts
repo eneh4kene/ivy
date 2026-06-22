@@ -513,16 +513,18 @@ async function maybeDispatchChaseCall(
  *   - At armingWindowEnd                   → enforceArmingDeadline
  *
  * Because users have different arming windows and timezones, the crons run
- * frequently (every 5 minutes) and this function checks whether each user's
+ * frequently (every 15 minutes) and this function checks whether each user's
  * relevant moment has arrived. This avoids per-user delayed queuing complexity.
  *
  * The stage parameter drives which action to fire for users whose window
- * matches the current moment within a ±3-minute tolerance.
+ * matches the current moment within a ±7.5-minute tolerance (half the poll
+ * interval — so every integer-minute window matches exactly one poll: no user
+ * is skipped, and no window lands within tolerance of two consecutive polls).
  */
 export type ArmingStage = 'PROMPT' | 'REMINDER' | 'FINAL_NOTICE' | 'DEADLINE'
 
 export async function runArmingForStage(stage: ArmingStage, now: Date): Promise<void> {
-  const TOLERANCE_MS = 3 * 60 * 1000 // ±3 min match window
+  const TOLERANCE_MS = 7.5 * 60 * 1000 // ±7.5 min match window (half the 15-min poll interval)
 
   // Load all active, onboarded, paid users who have arming windows configured
   const users = await prisma.user.findMany({

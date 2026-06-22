@@ -100,8 +100,8 @@ const dailyEveningCalls = inngest.createFunction(
 
 // ── Arming loop — morning VN prompt + escalation ladder (Phase 3) ─────────
 //
-// Runs every 5 minutes; runArmingForStage() checks each user's arming window
-// against the current time with a ±3-minute tolerance window. Each stage is its
+// Runs every 15 minutes; runArmingForStage() checks each user's arming window
+// against the current time with a ±7.5-minute tolerance window. Each stage is its
 // own step so a failure in one doesn't force the others to re-run.
 //
 // Stage timing relative to armingWindowStart (S) and armingWindowEnd (E):
@@ -110,7 +110,7 @@ const dailyEveningCalls = inngest.createFunction(
 //   FINAL_NOTICE — fires at E − 15 min (if still unarmed)
 //   DEADLINE     — fires at E (unarmed → MISSED + FORFEITED)
 const armingLoop = inngest.createFunction(
-  { id: 'arming-loop', name: 'Morning VN arming loop', triggers: { cron: '*/5 * * * *' } },
+  { id: 'arming-loop', name: 'Morning VN arming loop', triggers: { cron: '*/15 * * * *' } },
   async ({ step }) => {
     // Pin `now` in a step so it's memoized once. Inngest replays the handler
     // top-to-bottom after each step checkpoints; computing the time outside a

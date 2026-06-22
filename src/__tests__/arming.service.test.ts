@@ -354,10 +354,10 @@ describe('enforceArmingDeadline', () => {
 })
 
 // ---------------------------------------------------------------------------
-// A13 — runArmingForStage: respects the ±3-min tolerance window
+// A13 — runArmingForStage: respects the ±7.5-min tolerance window
 // ---------------------------------------------------------------------------
 describe('runArmingForStage', () => {
-  it('A13: only fires for users whose window matches within ±3 minutes', async () => {
+  it('A13: only fires for users whose window matches within ±7.5 minutes', async () => {
     const now = new Date('2026-01-05T07:01:00Z') // Monday, 07:01 UTC
 
     // User 1 — window 07:00-09:00 UTC (tolerance matches for PROMPT at 07:00)
