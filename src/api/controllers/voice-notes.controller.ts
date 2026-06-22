@@ -168,6 +168,12 @@ router.post(
           },
         })
 
+        // Link the armed slice to the open StakeCycle (idempotent), then count it.
+        const { linkWorkoutToCycle } = await import('../../services/stake.service')
+        await linkWorkoutToCycle(workoutId, userId).catch((err) =>
+          logger.warn(`Arm: could not link workout ${workoutId} to cycle`, err),
+        )
+
         // Increment daysArmed on the associated StakeCycle (if any)
         const workout = await prisma.workout.findUnique({
           where: { id: workoutId },

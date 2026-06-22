@@ -4,6 +4,8 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { useAuthStore } from '@/lib/store/auth.store'
+import { useStakeGate } from '@/hooks/useStakeGate'
+import { StakeReNudge } from '@/components/stake-setup/StakeReNudge'
 import { formatCurrency } from '@/lib/utils'
 import { getTierName } from '@/lib/permissions'
 import api, { seasonsApi } from '@/lib/api'
@@ -112,6 +114,7 @@ function SeasonWidget({ season }: { season: Season }) {
 
 export default function DashboardPage() {
   const user = useAuthStore((state) => state.user)
+  const { showNudge: showStakeNudge, currency: gateCurrency } = useStakeGate()
   const [stats, setStats] = useState<Stats | null>(null)
   const [streak, setStreak] = useState<Streak | null>(null)
   const [activeSeason, setActiveSeason] = useState<Season | null>(null)
@@ -182,6 +185,13 @@ export default function DashboardPage() {
           </Link>
         )}
       </div>
+
+      {/* Deferred stake re-nudge */}
+      {showStakeNudge && (
+        <div className="mb-6">
+          <StakeReNudge currency={gateCurrency} />
+        </div>
+      )}
 
       {/* Telegram connect banner — shown until user connects */}
       {!user?.telegramChatId && (

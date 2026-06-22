@@ -1,19 +1,26 @@
 'use client'
 
 /**
- * Step 5 — Confirm & arm. Summary before Stripe auth-and-capture is kicked off.
+ * Step 5 — Confirm & arm. Final summary before the stake goes live.
  *
- * MOCK DATA ONLY — the "Arm my stake" button in prod would call:
- *   stakeApi.openStakeCycle({ weeklyAmount, forfeitMode, successCharityId,
- *                              dislikedCharityId, armingWindowStart, armingWindowEnd })
- *   → backend runs payment.service.ts: openStakeCycle() → Stripe PaymentIntent (manual capture)
+ * Tapping "Arm" does two things:
+ *   1. stakeApi.saveConfig(...) — persists the stake config, which makes the user
+ *      eligible for the weekly openStakeCyclesForActiveUsers cron.
+ *   2. paymentsApi.createCheckoutSession('PRO') — subscription checkout, which
+ *      ALSO saves a reusable card to the Stripe customer (already-subscribed users
+ *      skip this).
+ *
+ * The actual auth hold is NOT placed here. At the start of each week the backend
+ * (stake.service.openStakeCycle) places an off-session manual-capture hold for
+ * the weekly amount against that saved card. Only forfeited slices are captured
+ * at settlement; the rest is released. Copy below must reflect that timing.
  */
 
 import { useState } from 'react'
 import { Shield, AlertTriangle, Clock, Heart } from 'lucide-react'
 import { CHARITY_CATALOGUE, FORFEIT_OPTIONS, dailySlice } from '@/lib/mock/stake-setup'
 import type { StakeSetupState } from '@/lib/mock/stake-setup'
-import { paymentsApi, stakeApi } from '@/lib/api'
+import { activateStake } from '@/lib/stake'
 
 interface ConfirmStepProps {
   state: StakeSetupState
@@ -69,38 +76,14 @@ export function ConfirmStep({ state, onConfirm, onEdit }: ConfirmStepProps) {
   const handleConfirm = async () => {
     setConfirming(true)
     try {
-      // ── Step 1: Persist the stake config to the backend ──────────────────
-      // This is what makes the user eligible for the Monday openStakeCyclesForActiveUsers
-      // cron — without saving, the stake mechanic never engages.
-      await stakeApi.saveConfig({
-        stakeWeeklyAmount: state.weeklyAmount,
-        forfeitMode: state.forfeitMode,
-        dislikedCharityId: state.forfeitMode === 'SAVAGE' ? state.dislikedCharityId : null,
-        preferredCharityId: state.successCharityId,
-        armingWindowStart: state.armingWindowStart,
-        armingWindowEnd: state.armingWindowEnd,
-      })
-
-      // ── Step 2: Initiate subscription checkout if not already subscribed ──
-      // The user's plan tier covers access; the weekly stake auth is handled
-      // separately by the StakeCycle system on Mondays.
-      const { url } = await paymentsApi.createCheckoutSession('PRO')
-      if (url && typeof window !== 'undefined') {
-        window.location.href = url
-        return
-      }
-    } catch (err: any) {
-      // Stake config save errors are surfaced; checkout failures (e.g. already
-      // subscribed) are treated as "already paid" and we proceed to confirmation.
-      if (err?.message?.includes('stakeWeeklyAmount') ||
-          err?.message?.includes('forfeitMode') ||
-          err?.message?.includes('arming') ||
-          err?.message?.includes('charity')) {
-        // Validation error from stake endpoint — surface it
-        setConfirming(false)
-        return
-      }
-      // Checkout failure — likely already subscribed; continue to done screen
+      // Persists the stake config (eligibility for the weekly openStakeCycle cron)
+      // and saves a reusable card via subscription checkout. See lib/stake.ts.
+      const { redirected } = await activateStake(state)
+      if (redirected) return  // navigating to Stripe Checkout — let it unload
+    } catch {
+      // saveConfig validation error — let the user fix it before retrying.
+      setConfirming(false)
+      return
     }
     setConfirming(false)
     onConfirm()
@@ -116,8 +99,9 @@ export function ConfirmStep({ state, onConfirm, onEdit }: ConfirmStepProps) {
           <span className="text-gradient-gold">Ready to arm?</span>
         </h2>
         <p className="text-sm text-ink-400 leading-relaxed">
-          Review everything below, then we'll authorise the funds on your card.
-          Nothing is charged unless you miss a day.
+          Review everything below, then we'll save your card and set your stake live.
+          Your weekly hold is placed at the start of each week — nothing is charged
+          unless you miss a day.
         </p>
       </div>
 
@@ -162,22 +146,28 @@ export function ConfirmStep({ state, onConfirm, onEdit }: ConfirmStepProps) {
 
       {/* What happens now */}
       <div className="glass-gold rounded-2xl p-4 space-y-3">
-        <p className="text-2xs font-semibold uppercase tracking-widest text-gold-400">What happens when you tap Arm</p>
+        <p className="text-2xs font-semibold uppercase tracking-widest text-gold-400">How your stake works</p>
         <div className="space-y-2.5">
           <div className="flex items-start gap-3">
             <div className="w-5 h-5 rounded-full bg-gold-400/15 flex items-center justify-center text-2xs font-bold text-gold-400 shrink-0 mt-0.5">1</div>
             <p className="text-xs text-ink-200">
-              Your card is authorised for {sym}{state.weeklyAmount} — earmarked, not charged. You'll see it as a hold.
+              We save your card now — nothing is charged today.
             </p>
           </div>
           <div className="flex items-start gap-3">
-            <div className="w-5 h-5 rounded-full bg-ink-700 flex items-center justify-center text-2xs font-bold text-ink-400 shrink-0 mt-0.5">2</div>
+            <div className="w-5 h-5 rounded-full bg-gold-400/15 flex items-center justify-center text-2xs font-bold text-gold-400 shrink-0 mt-0.5">2</div>
+            <p className="text-xs text-ink-200">
+              At the start of each week we place a hold for {sym}{state.weeklyAmount} — earmarked, not charged. You'll see it as a pending hold.
+            </p>
+          </div>
+          <div className="flex items-start gap-3">
+            <div className="w-5 h-5 rounded-full bg-ink-700 flex items-center justify-center text-2xs font-bold text-ink-400 shrink-0 mt-0.5">3</div>
             <p className="text-xs text-ink-200">
               Each day you arm (voice note before {state.armingWindowEnd}), that day's {sym}{daily.toFixed(0)} is safe.
             </p>
           </div>
           <div className="flex items-start gap-3">
-            <div className="w-5 h-5 rounded-full bg-ember-400/12 flex items-center justify-center text-2xs font-bold text-ember-400 shrink-0 mt-0.5">3</div>
+            <div className="w-5 h-5 rounded-full bg-ember-400/12 flex items-center justify-center text-2xs font-bold text-ember-400 shrink-0 mt-0.5">4</div>
             <p className="text-xs text-ink-200">
               At week's end, only forfeited slices are captured. The rest is released back to you.
             </p>
@@ -203,7 +193,7 @@ export function ConfirmStep({ state, onConfirm, onEdit }: ConfirmStepProps) {
         {confirming ? (
           <span className="flex items-center justify-center gap-2">
             <span className="w-4 h-4 rounded-full border-2 border-ink-900/40 border-t-ink-900 animate-spin" />
-            Authorising…
+            Setting up…
           </span>
         ) : (
           `Arm my stake — ${sym}${state.weeklyAmount}/week`

@@ -78,6 +78,12 @@ class UserService {
         subscriptionStatus: true,
         track: true,
         goal: true,
+        // Stake config — used by the frontend to gate paid users with no stake
+        // set into the stake-setup flow (default-on policy).
+        stakeWeeklyAmount: true,
+        forfeitMode: true,
+        armingWindowStart: true,
+        armingWindowEnd: true,
         minimumMode: true,
         giftFrame: true,
         morningCallTime: true,
@@ -162,6 +168,12 @@ class UserService {
         timezone: true,
         track: true,
         goal: true,
+        // Stake config — used by the frontend to gate paid users with no stake
+        // set into the stake-setup flow (default-on policy).
+        stakeWeeklyAmount: true,
+        forfeitMode: true,
+        armingWindowStart: true,
+        armingWindowEnd: true,
         minimumMode: true,
         giftFrame: true,
         morningCallTime: true,

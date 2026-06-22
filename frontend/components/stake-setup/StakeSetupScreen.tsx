@@ -1,29 +1,36 @@
 'use client'
 
 /**
- * StakeSetupScreen — multi-step stake onboarding wizard.
+ * StakeSetupScreen — stake onboarding ("default-on + one-tap").
  *
- * Steps (§2, §3, §9 of docs/product-pricing-rework.md):
+ * Entry is the ExpressConfirmStep one-tap landing with smart defaults (£14/wk,
+ * Middle, arm by 09:30) plus a £7-minimum valve and a "Not now" defer. Tapping
+ * "Customise" drops into the full multi-step wizard below.
+ *
+ * Wizard steps (§2, §3, §9 of docs/product-pricing-rework.md):
  *   1. Choose weekly stake (≥ £7/wk min, default £14)
  *   2. Pick forfeit mode (MIDDLE / SAVAGE)
  *   3. Success charity (who benefits when you show up)
  *   4. Disliked charity — SAVAGE only (anti-charity)
  *   5. Arming window (HH:MM deadline)
- *   6. Confirm + Stripe auth (MOCK — shows loader, no real API call)
- *
- * MOCK DATA ONLY — all API wiring marked with // TODO(api):
+ *   6. Confirm — saves stake config + saves a card via subscription checkout.
+ *      The weekly auth hold is placed by the backend at the start of each cycle
+ *      (stake.service.openStakeCycle), not on this screen.
  */
 
 import { useState, useCallback } from 'react'
-import { ArrowLeft, Check } from 'lucide-react'
+import { ArrowLeft } from 'lucide-react'
+import { useRouter } from 'next/navigation'
 import { useVisualViewport } from '@/hooks/useVisualViewport'
 import Link from 'next/link'
 
-import { StakeAmountStep }   from './StakeAmountStep'
-import { ForfeitModeStep }   from './ForfeitModeStep'
-import { CharitySelectStep } from './CharitySelectStep'
-import { ArmingWindowStep }  from './ArmingWindowStep'
-import { ConfirmStep }       from './ConfirmStep'
+import { StakeAmountStep }    from './StakeAmountStep'
+import { ForfeitModeStep }    from './ForfeitModeStep'
+import { CharitySelectStep }  from './CharitySelectStep'
+import { ArmingWindowStep }   from './ArmingWindowStep'
+import { ConfirmStep }        from './ConfirmStep'
+import { ExpressConfirmStep } from './ExpressConfirmStep'
+import { deferStakeGate }     from '@/lib/stake'
 
 import {
   DEFAULT_STAKE_SETUP,
@@ -110,11 +117,22 @@ function DoneScreen({ state }: { state: StakeSetupState }) {
 // ─── Main wizard ──────────────────────────────────────────────────────────────
 
 export function StakeSetupScreen() {
+  const router = useRouter()
+  // 'express' is the default-on one-tap landing; 'wizard' is the full step flow,
+  // opened only when the user taps "Customise".
+  const [mode, setMode] = useState<'express' | 'wizard'>('express')
   const [formState, setFormState] = useState<StakeSetupState>(DEFAULT_STAKE_SETUP)
   const [stepHistory, setStepHistory] = useState<StakeSetupStep[]>(['stake-amount'])
   const [done, setDone] = useState(false)
 
   const { height: viewportH } = useVisualViewport()
+
+  const handleDefer = useCallback(() => {
+    // "Not now" — don't trap the user in a redirect loop; remember the defer for
+    // this session (home shows a re-nudge instead) and return to the dashboard.
+    deferStakeGate()
+    router.push('/dashboard')
+  }, [router])
 
   const steps = getStepsForMode(formState.forfeitMode)
   const currentStep = stepHistory[stepHistory.length - 1]
@@ -148,6 +166,30 @@ export function StakeSetupScreen() {
 
   if (done) return <DoneScreen state={formState} />
 
+  // ── Default-on one-tap landing ──
+  if (mode === 'express') {
+    return (
+      <div
+        className="flex flex-col mesh-bg-subtle overflow-hidden"
+        style={{ height: viewportH > 0 ? `${viewportH}px` : '100dvh' }}
+      >
+        <div
+          className="pointer-events-none absolute -top-24 -left-16 w-72 h-72 rounded-full opacity-35"
+          style={{ background: 'radial-gradient(circle, rgba(204,163,72,0.1) 0%, transparent 70%)' }}
+        />
+        <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain safe-top">
+          <div className="px-4 pb-10">
+            <ExpressConfirmStep
+              onActivated={() => setDone(true)}
+              onCustomise={() => setMode('wizard')}
+              onDefer={handleDefer}
+            />
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div
       className="flex flex-col mesh-bg-subtle overflow-hidden"
@@ -170,11 +212,12 @@ export function StakeSetupScreen() {
               <ArrowLeft className="w-4 h-4 text-ink-200" />
             </button>
           ) : (
-            <Link href="/dashboard">
-              <button className="w-9 h-9 rounded-xl bg-ink-700/80 border border-ink-600 flex items-center justify-center hover:bg-ink-700 transition-colors">
-                <ArrowLeft className="w-4 h-4 text-ink-200" />
-              </button>
-            </Link>
+            <button
+              onClick={() => setMode('express')}
+              className="w-9 h-9 rounded-xl bg-ink-700/80 border border-ink-600 flex items-center justify-center hover:bg-ink-700 transition-colors"
+            >
+              <ArrowLeft className="w-4 h-4 text-ink-200" />
+            </button>
           )}
           <div className="flex-1 flex items-center justify-center">
             <ProgressDots steps={steps} currentIndex={currentIndex} />

@@ -21,6 +21,7 @@
  */
 
 import Stripe from 'stripe'
+import { startOfDay } from 'date-fns'
 import { Decimal } from '@prisma/client/runtime/library'
 import prisma from '../utils/prisma'
 import logger from '../utils/logger'
@@ -46,6 +47,84 @@ function getStripe(): Stripe {
  */
 function toMinorUnits(amount: number | Decimal, _currency: Currency): number {
   return Math.round(Number(amount) * 100)
+}
+
+/**
+ * Resolve the customer's saved default card so we can place the stake hold
+ * off-session (no checkout redirect). Subscription checkout already saves a
+ * reusable card to the Stripe customer, so subscribers have one.
+ *
+ * Order: invoice_settings.default_payment_method → first listed card PM.
+ * Returns null if the customer has no saved card at all.
+ */
+async function resolveDefaultPaymentMethod(
+  stripe: Stripe,
+  customerId: string,
+): Promise<string | null> {
+  const customer = await stripe.customers.retrieve(customerId)
+  if (customer && !(customer as Stripe.DeletedCustomer).deleted) {
+    const dpm = (customer as Stripe.Customer).invoice_settings?.default_payment_method
+    if (dpm) return typeof dpm === 'string' ? dpm : dpm.id
+  }
+  const pms = await stripe.paymentMethods.list({
+    customer: customerId,
+    type: 'card',
+    limit: 1,
+  })
+  return pms.data[0]?.id ?? null
+}
+
+/**
+ * Record a FAILED stake cycle and nudge the user to re-authorise when the
+ * off-session auth hold can't be placed (declined card, or SCA / 3DS required
+ * which off_session confirm cannot complete unattended).
+ *
+ * There is no PENDING_ACTION StakeCycleStatus, so we use FAILED — the
+ * duplicate-open-cycle guard only blocks AUTHORIZED cycles, so a FAILED record
+ * never blocks next week's retry and is never settled. Always throws.
+ */
+async function recordFailedHoldAndNotify(
+  userId: string,
+  stakeAmount: number,
+  paymentIntentId: string | null,
+  reason: string,
+): Promise<never> {
+  const now = new Date()
+  const periodEnd = new Date(now.getTime() + STAKE_CONFIG.cycleDays * 24 * 60 * 60 * 1000)
+  try {
+    await prisma.stakeCycle.create({
+      data: {
+        userId,
+        periodStart: now,
+        periodEnd,
+        stakeAmount,
+        stripePaymentIntentId: paymentIntentId,
+        capturedAmount: 0,
+        status: 'FAILED',
+        daysArmed: 0,
+        daysCompleted: 0,
+        daysForfeited: 0,
+        graceUsed: 0,
+      },
+    })
+  } catch (e) {
+    logger.error(`Could not record FAILED stake cycle for user ${userId}`, e)
+  }
+
+  // Re-auth nudge — non-blocking; failure to notify must not mask the real error.
+  try {
+    const { default: messagingService } = await import('./messaging.service')
+    await messagingService.sendMessage(
+      userId,
+      "We couldn't set up your weekly stake hold — your card needs re-authorising. " +
+      'Open Ivy to confirm it so your commitment is active this week.',
+      'nudge',
+    )
+  } catch (e) {
+    logger.warn(`Could not notify user ${userId} of stake hold failure`, e)
+  }
+
+  throw new BadRequestError(`Stake auth hold failed for user ${userId}: ${reason}`)
 }
 
 /**
@@ -180,24 +259,63 @@ export async function openStakeCycle(userId: string): Promise<OpenStakeCycleResu
     })
   }
 
-  // ── Stripe: create manual-capture PaymentIntent ───────────────────────────
-  // capture_method: 'manual' → funds are EARMARKED but NOT moved (G2, G6).
-  // The intent stays in 'requires_capture' state until we explicitly call capture().
+  // ── Resolve the saved card to place the hold against ──────────────────────
+  // The stake hold is placed off-session (no checkout redirect) against the
+  // card the user saved at subscription checkout. Without one we cannot hold.
+  const paymentMethodId = await resolveDefaultPaymentMethod(stripe, customerId)
+  if (!paymentMethodId) {
+    throw new BadRequestError(
+      `User ${userId} has no saved payment method — cannot place a stake hold. ` +
+      'They must add a card (subscription checkout saves one) before staking.'
+    )
+  }
+
+  // ── Stripe: create + confirm a manual-capture PaymentIntent off-session ────
+  // capture_method: 'manual' + confirm + off_session → the full weekly stake is
+  // EARMARKED as a real auth hold but NOT moved (G2, G6). On success the intent
+  // sits in 'requires_capture' until settleStakeCycle() captures forfeits.
   // We pass the stakeAmount in minor units (pence/cents).
-  const paymentIntent = await stripe.paymentIntents.create({
-    amount: toMinorUnits(stakeAmount, currency),
-    currency: currency.toLowerCase(),
-    customer: customerId,
-    capture_method: 'manual',
-    confirm: false, // caller (PWA/onboarding) will confirm with a payment method
-    metadata: {
+  let paymentIntent: Stripe.PaymentIntent
+  try {
+    paymentIntent = await stripe.paymentIntents.create({
+      amount: toMinorUnits(stakeAmount, currency),
+      currency: currency.toLowerCase(),
+      customer: customerId,
+      payment_method: paymentMethodId,
+      capture_method: 'manual',
+      confirm: true,
+      off_session: true, // unattended — fails fast if the card needs SCA/3DS
+      metadata: {
+        userId,
+        purpose: 'stake_cycle',
+        // Guardrail audit trail — recorded so Stripe dashboard shows this is pass-through
+        guardrail: 'PASS_THROUGH_NOT_IVY_REVENUE',
+      },
+      description: `Ivy weekly stake — ${user.firstName} — ${currency} ${stakeAmount.toFixed(2)}`,
+    })
+  } catch (err) {
+    // Off-session confirm failed — typically authentication_required (SCA) or a
+    // declined card. Stripe attaches the PI to the error; record it + nudge.
+    const piFromErr =
+      (err as any)?.payment_intent?.id ?? (err as any)?.raw?.payment_intent?.id ?? null
+    return await recordFailedHoldAndNotify(
       userId,
-      purpose: 'stake_cycle',
-      // Guardrail audit trail — recorded so Stripe dashboard shows this is pass-through
-      guardrail: 'PASS_THROUGH_NOT_IVY_REVENUE',
-    },
-    description: `Ivy weekly stake — ${user.firstName} — ${currency} ${stakeAmount.toFixed(2)}`,
-  })
+      stakeAmount,
+      piFromErr,
+      (err as any)?.message ?? 'unknown Stripe error',
+    )
+  }
+
+  // A successful manual-capture off-session confirm lands in 'requires_capture'.
+  // Anything else (e.g. requires_action) means the hold is NOT actually placed.
+  if (paymentIntent.status !== 'requires_capture') {
+    return await recordFailedHoldAndNotify(
+      userId,
+      stakeAmount,
+      paymentIntent.id,
+      `unexpected PaymentIntent status '${paymentIntent.status}' (expected requires_capture)`,
+    )
+  }
 
   // ── DB: persist StakeCycle ────────────────────────────────────────────────
   const now = new Date()
@@ -232,6 +350,45 @@ export async function openStakeCycle(userId: string): Promise<OpenStakeCycleResu
     periodStart: cycle.periodStart,
     periodEnd: cycle.periodEnd,
   }
+}
+
+// ---------------------------------------------------------------------------
+
+/**
+ * linkWorkoutToCycle — attach a solo workout to the user's currently-open
+ * StakeCycle so its slice is counted at settlement.
+ *
+ * Solo (non-circle) workouts are created without a stakeCycleId; without this
+ * link settleStakeCycle() sees an empty workouts relation and releases the
+ * entire hold regardless of misses. Idempotent: no-op if already linked, if
+ * there is no open cycle, or if the workout falls outside the cycle period.
+ *
+ * Called at arm time, at deadline enforcement, and on completion — wherever a
+ * day's outcome is first resolved.
+ */
+export async function linkWorkoutToCycle(workoutId: string, userId: string): Promise<void> {
+  const workout = await prisma.workout.findUnique({
+    where: { id: workoutId },
+    select: { id: true, plannedDate: true, stakeCycleId: true },
+  })
+  if (!workout || workout.stakeCycleId) return // already linked or gone
+
+  // Exactly one AUTHORIZED cycle exists per user at a time (guarded in openStakeCycle).
+  const cycle = await prisma.stakeCycle.findFirst({
+    where: { userId, status: 'AUTHORIZED' },
+    select: { id: true, stakeAmount: true, periodEnd: true },
+  })
+  if (!cycle) return
+
+  // Don't link a workout planned beyond this cycle's window (e.g. next week).
+  if (workout.plannedDate > cycle.periodEnd) return
+
+  const slice = Math.round((Number(cycle.stakeAmount) / STAKE_CONFIG.cycleDays) * 100) / 100
+  await prisma.workout.update({
+    where: { id: workout.id },
+    data: { stakeCycleId: cycle.id, stakeSliceAmount: slice },
+  })
+  logger.info(`Linked workout ${workout.id} → stakeCycle ${cycle.id} (slice ${slice})`)
 }
 
 // ---------------------------------------------------------------------------
@@ -308,11 +465,36 @@ export async function settleStakeCycle(cycleId: string): Promise<SettleStakeCycl
 
   const currency = (cycle.user.currency ?? 'GBP') as Currency
 
+  // ── Belt-and-suspenders: sweep up any unlinked same-period workouts ─────────
+  // The arm/deadline/complete paths link each day's workout to the cycle, but if
+  // any slipped through (created before linking shipped, or a race), catch them
+  // here by date range so settlement reflects every day of the week — otherwise
+  // an unlinked miss would be silently released. Use startOfDay(periodStart) so
+  // the cycle's own opening day (cycle opens minutes after midnight) is included.
+  const sliceForSweep =
+    Math.round((Number(cycle.stakeAmount) / STAKE_CONFIG.cycleDays) * 100) / 100
+  const unlinked = await prisma.workout.findMany({
+    where: {
+      userId: cycle.userId,
+      stakeCycleId: null,
+      plannedDate: { gte: startOfDay(cycle.periodStart), lte: cycle.periodEnd },
+    },
+    select: { id: true, sliceOutcome: true, stakeSliceAmount: true, stakeCycleId: true },
+  })
+  if (unlinked.length > 0) {
+    await prisma.workout.updateMany({
+      where: { id: { in: unlinked.map((w) => w.id) } },
+      data: { stakeCycleId: cycleId, stakeSliceAmount: sliceForSweep },
+    })
+    logger.info(`StakeCycle ${cycleId}: swept ${unlinked.length} unlinked workout(s) into settlement`)
+  }
+  const allWorkouts = [...cycle.workouts, ...unlinked]
+
   // ── Apply grace (G5) ───────────────────────────────────────────────────────
   // Identify workouts that were forfeited (FORFEITED or still PENDING = unarmed miss).
   // We treat PENDING as a forfeit at settlement time — any slice not explicitly RELEASED
   // or granted grace is captured.
-  const forfeitable = cycle.workouts.filter(
+  const forfeitable = allWorkouts.filter(
     (w) => w.sliceOutcome === 'FORFEITED' || w.sliceOutcome === 'PENDING'
   )
   const alreadyGraceUsed = cycle.graceUsed

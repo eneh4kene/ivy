@@ -59,6 +59,7 @@ jest.mock('../services/call.service', () => ({
 jest.mock('../services/stake.service', () => ({
   openStakeCycle: jest.fn().mockResolvedValue({ cycleId: 'cycle-1' }),
   settleStakeCycle: jest.fn().mockResolvedValue({ status: 'SETTLED' }),
+  linkWorkoutToCycle: jest.fn().mockResolvedValue(undefined),
 }))
 
 // Mock nodemailer for buddy nudge

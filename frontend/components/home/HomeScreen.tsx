@@ -13,6 +13,8 @@
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { Flame, Users, Target, Heart, ArrowRight, Shield, ChevronRight, Mic } from 'lucide-react'
+import { useStakeGate } from '@/hooks/useStakeGate'
+import { StakeReNudge } from '@/components/stake-setup/StakeReNudge'
 import {
   MOCK_DASHBOARD_STAKE,
   MOCK_WEEK_DAYS,
@@ -364,6 +366,7 @@ function QuickActions() {
 
 export function HomeScreen() {
   const { user: authUser } = useAuthStore()
+  const { showNudge: showStakeNudge, currency: gateCurrency } = useStakeGate()
   const [streak, setStreak] = useState(MOCK_STREAK)
 
   useEffect(() => {
@@ -405,6 +408,9 @@ export function HomeScreen() {
 
       {/* Scroll content */}
       <div className="px-4 py-4 space-y-4 max-w-lg mx-auto">
+        {/* Deferred stake re-nudge */}
+        {showStakeNudge && <StakeReNudge currency={gateCurrency} />}
+
         {/* Today's primary CTA */}
         <TodayStakeCard />
 

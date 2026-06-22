@@ -161,6 +161,12 @@ class WorkoutService {
       },
     });
 
+    // Link this slice to the open StakeCycle so its outcome is settled correctly.
+    const { linkWorkoutToCycle } = await import('./stake.service');
+    await linkWorkoutToCycle(workoutId, userId).catch((err) =>
+      logger.warn(`completeWorkout: could not link workout ${workoutId} to cycle`, err),
+    );
+
     // Update streak if completed or partial
     if (data.status === 'COMPLETED' || data.status === 'PARTIAL') {
       await this.updateStreak(userId, new Date(workout.plannedDate));

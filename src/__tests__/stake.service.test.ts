@@ -47,6 +47,9 @@ jest.mock('../utils/prisma', () => ({
     },
     workout: {
       updateMany: jest.fn(),
+      findMany: jest.fn(),
+      findUnique: jest.fn(),
+      update: jest.fn(),
     },
     charity: {
       findFirst: jest.fn(),
@@ -70,6 +73,10 @@ const mockStripeInstance = {
   },
   customers: {
     create: jest.fn(),
+    retrieve: jest.fn(),
+  },
+  paymentMethods: {
+    list: jest.fn(),
   },
 }
 
@@ -78,6 +85,8 @@ const mockStripeCreate = mockStripeInstance.paymentIntents.create
 const mockStripeCapture = mockStripeInstance.paymentIntents.capture
 const mockStripeCancel = mockStripeInstance.paymentIntents.cancel
 const mockStripeCustomerCreate = mockStripeInstance.customers.create
+const mockStripeCustomerRetrieve = mockStripeInstance.customers.retrieve
+const mockStripePMList = mockStripeInstance.paymentMethods.list
 
 jest.mock('stripe', () => {
   // Return a constructor that always returns our stable mockStripeInstance
@@ -89,6 +98,12 @@ jest.mock('../services/every-org.service', () => ({
   dispatchPendingDonationsForUser: jest.fn().mockResolvedValue(undefined),
 }))
 
+// Mock messaging — the auth-hold failure path nudges the user via this service
+jest.mock('../services/messaging.service', () => ({
+  __esModule: true,
+  default: { sendMessage: jest.fn().mockResolvedValue(undefined) },
+}))
+
 // ---------------------------------------------------------------------------
 // Imports (after mocks)
 // ---------------------------------------------------------------------------
@@ -98,8 +113,10 @@ import Stripe from 'stripe'
 import {
   openStakeCycle,
   settleStakeCycle,
+  linkWorkoutToCycle,
 } from '../services/stake.service'
 import { dispatchPendingDonationsForUser } from '../services/every-org.service'
+import messagingService from '../services/messaging.service'
 
 // Convenience typed mock accessors
 const mockPrisma = prisma as jest.Mocked<typeof prisma>
@@ -112,17 +129,25 @@ const MockStripe = Stripe as jest.MockedClass<typeof Stripe>
 // ---------------------------------------------------------------------------
 beforeEach(() => {
   MockStripe.mockReturnValue(mockStripeInstance as any)
-  // Default resolutions for Stripe calls (individual tests override as needed)
-  mockStripeCreate.mockResolvedValue({ id: 'pi_test_001', status: 'requires_confirmation' })
+  // Default resolutions for Stripe calls (individual tests override as needed).
+  // Off-session manual-capture confirm lands in 'requires_capture' on success.
+  mockStripeCreate.mockResolvedValue({ id: 'pi_test_001', status: 'requires_capture' })
   mockStripeCapture.mockResolvedValue({ id: 'pi_test_001', status: 'succeeded' })
   mockStripeCancel.mockResolvedValue({ id: 'pi_test_001', status: 'canceled' })
   mockStripeCustomerCreate.mockResolvedValue({ id: 'cus_test_001' })
+  // Saved card resolution: customer has a default payment method on file.
+  mockStripeCustomerRetrieve.mockResolvedValue({
+    id: 'cus_existing',
+    invoice_settings: { default_payment_method: 'pm_default_001' },
+  })
+  mockStripePMList.mockResolvedValue({ data: [{ id: 'pm_default_001' }] })
   // Default donation create return
   ;(mockPrisma.donation.create as jest.Mock).mockResolvedValue({ id: 'don-001' })
   // Default stakeCycle update
   ;(mockPrisma.stakeCycle.update as jest.Mock).mockResolvedValue({})
-  // Default workout updateMany
+  // Default workout sweeps
   ;(mockPrisma.workout.updateMany as jest.Mock).mockResolvedValue({ count: 0 })
+  ;(mockPrisma.workout.findMany as jest.Mock).mockResolvedValue([])
 })
 
 // ---------------------------------------------------------------------------
@@ -149,7 +174,7 @@ const SAVAGE_CHARITY = { id: 'charity-savage-001', isActive: true }
 
 const FAKE_PI = {
   id: 'pi_test_001',
-  status: 'requires_confirmation',
+  status: 'requires_capture',
 }
 
 const FAKE_CYCLE_AUTHORIZED = {
@@ -796,5 +821,185 @@ describe('PENDING workouts treated as forfeit at settlement', () => {
 
     expect(mockPrisma.donation.create).toHaveBeenCalledTimes(1)
     expect(mockStripeCapture).toHaveBeenCalledWith('pi_test_001', { amount_to_capture: 200 })
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Break 1+3: off-session auth hold against the saved card
+// ---------------------------------------------------------------------------
+
+describe('openStakeCycle — off-session auth hold (Break 1+3)', () => {
+  beforeEach(() => {
+    process.env.STRIPE_SECRET_KEY = 'sk_test_dummy'
+  })
+
+  it('confirms the PaymentIntent off-session against the saved card', async () => {
+    setupOpenStakeMocks()
+    await openStakeCycle('user-001')
+
+    expect(mockStripeCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        payment_method: 'pm_default_001',
+        confirm: true,
+        off_session: true,
+        capture_method: 'manual',
+      })
+    )
+  })
+
+  it('falls back to listing card payment methods when no default is set', async () => {
+    setupOpenStakeMocks()
+    mockStripeCustomerRetrieve.mockResolvedValue({ id: 'cus_existing', invoice_settings: {} })
+    mockStripePMList.mockResolvedValue({ data: [{ id: 'pm_listed_002' }] })
+
+    await openStakeCycle('user-001')
+
+    expect(mockStripeCreate).toHaveBeenCalledWith(
+      expect.objectContaining({ payment_method: 'pm_listed_002' })
+    )
+  })
+
+  it('throws (no hold) when the customer has no saved card', async () => {
+    setupOpenStakeMocks()
+    mockStripeCustomerRetrieve.mockResolvedValue({ id: 'cus_existing', invoice_settings: {} })
+    mockStripePMList.mockResolvedValue({ data: [] })
+
+    await expect(openStakeCycle('user-001')).rejects.toThrow(/no saved payment method/i)
+    expect(mockStripeCreate).not.toHaveBeenCalled()
+  })
+
+  it('records a FAILED cycle and nudges the user when SCA is required (authentication_required)', async () => {
+    setupOpenStakeMocks()
+    const scaErr: any = new Error('Your card requires authentication.')
+    scaErr.code = 'authentication_required'
+    scaErr.payment_intent = { id: 'pi_sca_999' }
+    mockStripeCreate.mockRejectedValue(scaErr)
+
+    await expect(openStakeCycle('user-001')).rejects.toThrow(/auth hold failed/i)
+
+    // FAILED cycle persisted with the PI from the error
+    expect(mockPrisma.stakeCycle.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ status: 'FAILED', stripePaymentIntentId: 'pi_sca_999' }),
+      })
+    )
+    // Re-auth nudge sent
+    expect((messagingService.sendMessage as jest.Mock)).toHaveBeenCalledWith(
+      'user-001',
+      expect.stringMatching(/re-authoris/i),
+      'nudge',
+    )
+  })
+
+  it('records a FAILED cycle when the confirmed PI does not reach requires_capture', async () => {
+    setupOpenStakeMocks()
+    mockStripeCreate.mockResolvedValue({ id: 'pi_action_888', status: 'requires_action' })
+
+    await expect(openStakeCycle('user-001')).rejects.toThrow(/auth hold failed/i)
+
+    expect(mockPrisma.stakeCycle.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ status: 'FAILED', stripePaymentIntentId: 'pi_action_888' }),
+      })
+    )
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Break 2: workout → cycle linking
+// ---------------------------------------------------------------------------
+
+describe('linkWorkoutToCycle (Break 2)', () => {
+  it('links an unlinked workout to the open AUTHORIZED cycle with the daily slice', async () => {
+    ;(mockPrisma.workout.findUnique as jest.Mock).mockResolvedValue({
+      id: 'w-1', plannedDate: new Date('2026-06-23'), stakeCycleId: null,
+    })
+    ;(mockPrisma.stakeCycle.findFirst as jest.Mock).mockResolvedValue({
+      id: 'cycle-001', stakeAmount: 14, periodEnd: new Date('2026-06-29'),
+    })
+    ;(mockPrisma.workout.update as jest.Mock).mockResolvedValue({})
+
+    await linkWorkoutToCycle('w-1', 'user-001')
+
+    expect(mockPrisma.workout.update).toHaveBeenCalledWith({
+      where: { id: 'w-1' },
+      data: { stakeCycleId: 'cycle-001', stakeSliceAmount: 2 }, // 14 / 7
+    })
+  })
+
+  it('is a no-op when the workout is already linked', async () => {
+    ;(mockPrisma.workout.findUnique as jest.Mock).mockResolvedValue({
+      id: 'w-1', plannedDate: new Date('2026-06-23'), stakeCycleId: 'cycle-existing',
+    })
+
+    await linkWorkoutToCycle('w-1', 'user-001')
+
+    expect(mockPrisma.stakeCycle.findFirst).not.toHaveBeenCalled()
+    expect(mockPrisma.workout.update).not.toHaveBeenCalled()
+  })
+
+  it('is a no-op when there is no open cycle', async () => {
+    ;(mockPrisma.workout.findUnique as jest.Mock).mockResolvedValue({
+      id: 'w-1', plannedDate: new Date('2026-06-23'), stakeCycleId: null,
+    })
+    ;(mockPrisma.stakeCycle.findFirst as jest.Mock).mockResolvedValue(null)
+
+    await linkWorkoutToCycle('w-1', 'user-001')
+
+    expect(mockPrisma.workout.update).not.toHaveBeenCalled()
+  })
+
+  it('does not link a workout planned beyond the cycle period', async () => {
+    ;(mockPrisma.workout.findUnique as jest.Mock).mockResolvedValue({
+      id: 'w-future', plannedDate: new Date('2026-07-15'), stakeCycleId: null,
+    })
+    ;(mockPrisma.stakeCycle.findFirst as jest.Mock).mockResolvedValue({
+      id: 'cycle-001', stakeAmount: 14, periodEnd: new Date('2026-06-29'),
+    })
+
+    await linkWorkoutToCycle('w-future', 'user-001')
+
+    expect(mockPrisma.workout.update).not.toHaveBeenCalled()
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Break 2: settle sweeps up same-period workouts that were never linked
+// ---------------------------------------------------------------------------
+
+describe('settleStakeCycle — sweeps unlinked same-period workouts (Break 2)', () => {
+  beforeEach(() => {
+    process.env.STRIPE_SECRET_KEY = 'sk_test_dummy'
+  })
+
+  it('captures a forfeited workout that was never linked to the cycle', async () => {
+    // The relation include returns NO workouts (link never happened)...
+    const cycle = {
+      ...FAKE_CYCLE_AUTHORIZED,
+      graceUsed: 1, // grace spent — the swept miss must be captured
+      workouts: [],
+    }
+    ;(mockPrisma.stakeCycle.findUnique as jest.Mock).mockResolvedValue(cycle)
+    ;(mockPrisma.charity.findFirst as jest.Mock).mockResolvedValue(HOUSE_CHARITY)
+    // ...but the date-range sweep finds the orphaned miss.
+    ;(mockPrisma.workout.findMany as jest.Mock).mockResolvedValue([
+      { id: 'w-orphan', sliceOutcome: 'FORFEITED', stakeSliceAmount: 2, stakeCycleId: null },
+    ])
+    ;(mockPrisma.workout.updateMany as jest.Mock).mockResolvedValue({ count: 1 })
+    ;(mockPrisma.donation.create as jest.Mock).mockResolvedValue({ id: 'don-001' })
+    ;(mockPrisma.stakeCycle.update as jest.Mock).mockResolvedValue({ ...cycle, status: 'SETTLED', capturedAmount: 2 })
+    mockStripeCapture.mockResolvedValue({ status: 'succeeded' })
+
+    const result = await settleStakeCycle('cycle-001')
+
+    // The sweep linked the orphan, then it was captured (not silently released)
+    expect(mockPrisma.workout.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: { in: ['w-orphan'] } },
+        data: expect.objectContaining({ stakeCycleId: 'cycle-001' }),
+      })
+    )
+    expect(mockStripeCapture).toHaveBeenCalledWith('pi_test_001', { amount_to_capture: 200 })
+    expect(result.capturedAmount).toBe(2)
   })
 })

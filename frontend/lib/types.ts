@@ -19,6 +19,12 @@ export interface User {
   goal: string
   minimumMode?: string
   giftFrame?: string
+  // Stake config — null/undefined means the user has not set a stake yet.
+  // Prisma serialises the Decimal as a string; treat presence, not exact value.
+  stakeWeeklyAmount?: string | number | null
+  forfeitMode?: 'MIDDLE' | 'SAVAGE' | null
+  armingWindowStart?: string | null
+  armingWindowEnd?: string | null
   commStyle: CommStyle
   circleOptIn: boolean
   morningCallTime?: string

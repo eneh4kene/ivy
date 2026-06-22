@@ -368,6 +368,12 @@ export async function enforceArmingDeadline(userId: string, date: Date): Promise
     },
   })
 
+  // Link the missed slice to the open StakeCycle so it's captured at settlement.
+  const { linkWorkoutToCycle } = await import('./stake.service')
+  await linkWorkoutToCycle(workout.id, userId).catch((err) =>
+    logger.warn(`Deadline: could not link workout ${workout.id} to cycle`, err),
+  )
+
   logger.info(
     `Deadline enforced for user ${userId}: workout ${workout.id} → MISSED / FORFEITED`,
   )
