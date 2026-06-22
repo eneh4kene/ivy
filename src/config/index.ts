@@ -91,6 +91,12 @@ export const config = {
   logging: {
     level: env.LOG_LEVEL,
   },
+  inngest: {
+    enabled: env.INNGEST_ENABLED,
+    appId: env.INNGEST_APP_ID,
+    eventKey: env.INNGEST_EVENT_KEY,
+    signingKey: env.INNGEST_SIGNING_KEY,
+  },
 } as const;
 
 export default config;

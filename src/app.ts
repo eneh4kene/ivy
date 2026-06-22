@@ -27,6 +27,11 @@ import inviteRoutes from './api/routes/invite.routes';
 import voiceNotesRoutes from './api/controllers/voice-notes.controller';
 import stakeRoutes from './api/routes/stake.routes';
 
+// Inngest — durable cron/event backbone
+import { serve as inngestServe } from 'inngest/express';
+import { inngest } from './inngest/client';
+import { functions as inngestFunctions } from './inngest/functions';
+
 const app: Application = express();
 
 // Security middleware
@@ -61,6 +66,14 @@ app.use(cors({
 // Body parsing middleware
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+// Inngest endpoint — mounted BEFORE the /api rate limiter so Inngest Cloud's
+// scheduler/registration calls (which can burst) aren't throttled. The signing
+// key is read from INNGEST_SIGNING_KEY in the environment for request verification.
+app.use(
+  '/api/inngest',
+  inngestServe({ client: inngest, functions: inngestFunctions })
+);
 
 // Rate limiting
 app.use('/api', apiLimiter);

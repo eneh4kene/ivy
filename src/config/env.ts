@@ -98,6 +98,15 @@ const envSchema = z.object({
 
   // Logging
   LOG_LEVEL: z.enum(['error', 'warn', 'info', 'debug']).default('info'),
+
+  // Inngest — durable cron/event backbone (replaces the always-on node-cron worker).
+  // INNGEST_ENABLED=true is the exclusive cutover switch: when set, the legacy
+  // node-cron jobs in worker.ts stand down and Inngest Cloud drives the schedule.
+  // Keys come from the Inngest Cloud dashboard (set as Fly secrets in production).
+  INNGEST_ENABLED: z.string().transform((val) => val === 'true').default('false'),
+  INNGEST_APP_ID: z.string().default('ivy'),
+  INNGEST_EVENT_KEY: z.string().optional(),
+  INNGEST_SIGNING_KEY: z.string().optional(),
 });
 
 export type Env = z.infer<typeof envSchema>;

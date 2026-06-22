@@ -24,8 +24,19 @@ import './workers/message.processor';
 
 logger.info(`Worker process started — env: ${config.server.env}`);
 
-// Alert admin on startup so we know the worker is alive
-sendTelegramAdmin('✅ Ivy worker started').catch(() => {});
+// Exclusive cutover: when Inngest drives the schedule, the legacy node-cron jobs
+// stand down so exactly one scheduler runs. Bull processors (call/message) stay
+// active here regardless — they're Phase 2 (not yet migrated to Inngest events).
+if (config.inngest.enabled) {
+  logger.info('INNGEST_ENABLED=true — legacy node-cron jobs are disabled; Inngest Cloud owns the schedule. Bull processors remain active.');
+  sendTelegramAdmin('✅ Ivy worker started (Inngest mode — cron via Inngest, Bull processors local)').catch(() => {});
+} else {
+  // Alert admin on startup so we know the worker is alive
+  sendTelegramAdmin('✅ Ivy worker started').catch(() => {});
+  registerCronJobs();
+}
+
+function registerCronJobs(): void {
 
 process.on('uncaughtException', (error: Error) => {
   process.stdout.write(`[FATAL] Uncaught Exception: ${error.message}\n${error.stack}\n`);
@@ -187,10 +198,11 @@ cron.schedule('0 9 * * *', async () => {
         `⚠️ Ivy daily spend alert\n\nTotal (last 24h): £${total.toFixed(2)}\nThreshold: £${threshold}\n\nBreakdown:\n${lines}`
       );
     }
-  } catch (err) {
-    logger.error('Cost alert job error:', err);
-  }
-});
+    } catch (err) {
+      logger.error('Cost alert job error:', err);
+    }
+  });
+}
 
 // Graceful shutdown
 const gracefulShutdown = async (signal: string) => {
