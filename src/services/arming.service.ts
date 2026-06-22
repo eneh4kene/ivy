@@ -57,7 +57,7 @@ export const armingPushTemplates = {
     title: 'Morning! Drop your voice note',
     body: `What's the one thing you're taking on today? Your ${CURRENCY_SYMBOL[currency]}${stakeAmount} stake is counting on it.`,
     tag: 'arming-prompt',
-    url: '/arm',
+    url: '/daily?action=record',
     actions: [{ action: 'open', title: 'Record now' }],
   }),
 
@@ -66,7 +66,7 @@ export const armingPushTemplates = {
     title: "You haven't armed today",
     body: `Your ${CURRENCY_SYMBOL[currency]}${stakeAmount} is on the line until you record your voice note.`,
     tag: 'arming-reminder',
-    url: '/arm',
+    url: '/daily?action=record',
     actions: [{ action: 'open', title: 'Arm now' }],
   }),
 
@@ -75,7 +75,7 @@ export const armingPushTemplates = {
     title: 'Last chance to arm',
     body: `Drop your VN by ${deadlineStr} or today won't count and your ${CURRENCY_SYMBOL[currency]}${stakeAmount} goes to your forfeit destination.`,
     tag: 'arming-final-notice',
-    url: '/arm',
+    url: '/daily?action=record',
     actions: [{ action: 'open', title: 'Arm now — it takes 30 seconds' }],
   }),
 }
@@ -250,8 +250,8 @@ export async function sendArmingPrompt(userId: string): Promise<void> {
     const name = user.firstName ? ` ${user.firstName}` : ''
     const symbol = CURRENCY_SYMBOL[currency]
     const smsText = stakeAmt > 0
-      ? `Morning${name}! Drop your voice note — what's the one thing you're taking on today? Your ${symbol}${stakeAmt} stake is counting on it. Open the app to record: ${process.env.FRONTEND_URL ?? 'ivykeeps.life'}/arm`
-      : `Morning${name}! Drop your voice note — what's the one thing you're taking on today? Open the app to record: ${process.env.FRONTEND_URL ?? 'ivykeeps.life'}/arm`
+      ? `Morning${name}! Drop your voice note — what's the one thing you're taking on today? Your ${symbol}${stakeAmt} stake is counting on it. Open the app to record: ${process.env.FRONTEND_URL ?? 'https://www.ivykeeps.life'}/daily?action=record`
+      : `Morning${name}! Drop your voice note — what's the one thing you're taking on today? Open the app to record: ${process.env.FRONTEND_URL ?? 'https://www.ivykeeps.life'}/daily?action=record`
 
     await messagingService.sendSMSMessage(userId, smsText, 'reminder')
     logger.info(`Arming prompt (SMS fallback) sent to user ${userId}`)
