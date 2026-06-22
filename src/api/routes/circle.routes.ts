@@ -5,7 +5,7 @@ import { AuthRequest } from '../../middleware/auth'
 import prisma from '../../utils/prisma'
 import logger from '../../utils/logger'
 import {
-  listTemplates, createGame, listGames, getGame, getActiveGame, pauseGame, endGame
+  listTemplates, createGame, createSpecGame, listGames, getGame, getActiveGame, pauseGame, endGame
 } from '../controllers/circle-game.controller'
 import gameSuggestionService from '../../services/game-suggestion.service'
 import circleCatchupService from '../../services/circle-catchup.service'
@@ -164,6 +164,9 @@ router.get('/:circleId/games', listGames)
 
 // POST /api/circles/:circleId/games
 router.post('/:circleId/games', createGame)
+
+// POST /api/circles/:circleId/games/spec — author a spec-backed game (LLM prompt or validated spec)
+router.post('/:circleId/games/spec', createSpecGame)
 
 // GET /api/circles/games/:gameId
 router.get('/games/:gameId', getGame)

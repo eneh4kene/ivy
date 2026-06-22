@@ -1094,6 +1094,12 @@ model CircleGame {
   // Template-specific parameters (e.g. turn_order, window_hours, scoring, win_condition)
   rules Json @default("{}")
 
+  // Declarative GameSpec (src/services/games/gamespec.ts). When present, the
+  // generic interpreter runs the game from this spec and `templateType`/`rules`
+  // are legacy/ignored. Null ⇒ legacy hard-coded processor path. Additive,
+  // non-breaking: existing games keep working until backfilled.
+  spec Json?
+
   // Plain English for Ivy — the *only* thing Ivy reads to understand how to run the game
   ivyInstruction String @db.Text
 

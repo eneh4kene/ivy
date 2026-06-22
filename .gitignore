@@ -56,3 +56,4 @@ ngrok.yml
 !README.md
 !docs/*.md
 !tests/*.md
+.vercel

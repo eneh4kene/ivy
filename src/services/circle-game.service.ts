@@ -1,6 +1,8 @@
 import prisma from '../utils/prisma';
 import logger from '../utils/logger';
 import { sendPushToUser, pushTemplates } from './push.service';
+import { createSpecGame as persistSpecGame, runSpecEvent, workoutTrigger } from './games/runtime';
+import { compileGame, validateSpec } from './games/compiler';
 
 // ─── Template definitions ─────────────────────────────────────────────────────
 // Each template describes the mechanical rules Ivy's backend enforces.
@@ -117,6 +119,39 @@ class CircleGameService {
     return game;
   }
 
+  /** Active member ids for a circle, in join order (the spec interpreter's seed order). */
+  private async activeMemberIds(circleId: string): Promise<string[]> {
+    const members = await prisma.ivyCircleMember.findMany({
+      where: { circleId, isActive: true },
+      select: { userId: true },
+      orderBy: { joinedAt: 'asc' },
+    });
+    return members.map((m) => m.userId);
+  }
+
+  /**
+   * Author a spec-backed game from a plain-language prompt — runs the LLM
+   * compiler (with its validate+repair loop) and persists the validated spec.
+   * Throws SpecValidationError if no valid spec can be produced.
+   */
+  async createSpecGameFromPrompt(circleId: string, opts: { prompt: string; sprintId?: string }) {
+    const { spec, attempts } = await compileGame(opts.prompt);
+    const memberIds = await this.activeMemberIds(circleId);
+    const game = await persistSpecGame({ circleId, sprintId: opts.sprintId ?? null, spec, memberIds });
+    logger.info(`createSpecGameFromPrompt: game ${game.id} compiled in ${attempts} attempt(s) for circle ${circleId}`);
+    return game;
+  }
+
+  /**
+   * Create a spec-backed game from a pre-built spec (e.g. an Ivy template
+   * factory's output). Re-runs the full validation gate before persisting.
+   */
+  async createSpecGameFromSpec(circleId: string, opts: { spec: unknown; sprintId?: string }) {
+    const spec = validateSpec(opts.spec);
+    const memberIds = await this.activeMemberIds(circleId);
+    return persistSpecGame({ circleId, sprintId: opts.sprintId ?? null, spec, memberIds });
+  }
+
   async getGame(gameId: string) {
     return prisma.circleGame.findUnique({
       where: { id: gameId },
@@ -175,6 +210,18 @@ class CircleGameService {
     if (!result) return;
 
     const { game } = result;
+
+    // Spec-backed games run on the generic interpreter (src/services/games).
+    // Legacy games (spec == null) fall through to the hard-coded processors below.
+    if ((game as { spec?: unknown }).spec) {
+      await runSpecEvent(game as any, {
+        type: workoutTrigger(workoutStatus),
+        userId,
+        at: new Date().toISOString(),
+      });
+      return;
+    }
+
     const isSuccess = workoutStatus === 'COMPLETED' || workoutStatus === 'PARTIAL';
     const eventType = isSuccess ? 'workout_completed' : 'workout_missed';
 
@@ -545,6 +592,12 @@ class CircleGameService {
   // ── Context for calls / briefs ─────────────────────────────────────────────
 
   async buildStateSummary(game: any, userId: string): Promise<string> {
+    // Spec-backed games describe their own state — summarise it generically.
+    if (game.spec) {
+      const summary = specStateSummary(game.spec, (game.state ?? {}) as Record<string, any>, userId);
+      return summary || `Active game: ${game.name}. ${game.description ?? ''}`.trim();
+    }
+
     const state = game.state as Record<string, any>;
     const rules = game.rules as Record<string, any>;
 
@@ -595,6 +648,37 @@ class CircleGameService {
     };
   }
 }
+
+/**
+ * specStateSummary — one-line state summary for a spec-backed game, surfaced to
+ * Ivy on calls/briefs. Walks the spec's declared state and renders scalars plus
+ * the caller's own per-member values; internal bookkeeping vars (lists,
+ * timestamps, non-per-member maps) are omitted as noise for a spoken summary.
+ * Pure + side-effect free so it's unit-testable without a DB.
+ */
+export function specStateSummary(
+  spec: { state?: Record<string, { type: string; perMember?: boolean }> },
+  state: Record<string, any>,
+  userId: string,
+): string {
+  const decls = spec.state ?? {};
+  const parts: string[] = [];
+  for (const [name, decl] of Object.entries(decls)) {
+    const val = state[name];
+    if (val == null) continue;
+    if (decl.perMember && typeof val === 'object') {
+      parts.push(`your ${labelize(name)}: ${(val as Record<string, unknown>)[userId] ?? 0}`);
+    } else if (decl.type === 'userRef') {
+      parts.push(`${labelize(name)}: ${val === userId ? 'you' : String(val)}`);
+    } else if (decl.type === 'int' || decl.type === 'number' || decl.type === 'string' || decl.type === 'bool') {
+      parts.push(`${labelize(name)}: ${val}`);
+    }
+    // list / timestamp / non-per-member map → omitted
+  }
+  return parts.join(' · ');
+}
+
+const labelize = (s: string): string => s.replace(/_/g, ' ');
 
 export const circleGameService = new CircleGameService();
 export default circleGameService;

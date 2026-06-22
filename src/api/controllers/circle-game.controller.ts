@@ -2,6 +2,7 @@ import { Response, NextFunction } from 'express';
 import { AuthRequest } from '../../middleware/auth';
 import circleGameService, { GAME_TEMPLATES, TemplateType } from '../../services/circle-game.service'
 import gameSuggestionService from '../../services/game-suggestion.service';
+import { SpecValidationError } from '../../services/games/compiler';
 
 export async function listTemplates(_req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
   try {
@@ -44,6 +45,36 @@ export async function createGame(req: AuthRequest, res: Response, next: NextFunc
 
     res.status(201).json({ success: true, data: game });
   } catch (err) { next(err) }
+}
+
+/**
+ * Create a spec-backed game: either from a plain-language `prompt` (LLM-compiled)
+ * or from a pre-built `spec` (e.g. an Ivy template). Runs on the generic
+ * interpreter rather than the legacy hard-coded processors.
+ */
+export async function createSpecGame(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const { circleId } = req.params;
+    const { prompt, spec, sprintId } = req.body;
+
+    if (!prompt && !spec) {
+      res.status(400).json({ success: false, error: 'Provide either a `prompt` (LLM-authored) or a `spec` (pre-validated)' });
+      return;
+    }
+
+    const game = prompt
+      ? await circleGameService.createSpecGameFromPrompt(circleId, { prompt, sprintId })
+      : await circleGameService.createSpecGameFromSpec(circleId, { spec, sprintId });
+
+    res.status(201).json({ success: true, data: game });
+  } catch (err) {
+    // A spec that can't be authored/validated is a client problem, not a 500.
+    if (err instanceof SpecValidationError) {
+      res.status(422).json({ success: false, error: err.message, issues: err.issues });
+      return;
+    }
+    next(err);
+  }
 }
 
 export async function listGames(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
