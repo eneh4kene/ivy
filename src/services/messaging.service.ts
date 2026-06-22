@@ -1,5 +1,5 @@
 import prisma from '../utils/prisma';
-import { messageQueue } from '../config/queues';
+import { inngest } from '../inngest/client';
 import logger from '../utils/logger';
 import { NotFoundError } from '../utils/errors';
 import { config } from '../config';
@@ -38,11 +38,9 @@ class MessagingService {
       data: { userId, channel: 'TELEGRAM', direction: 'OUTBOUND', content, messageType, status: 'SENT' },
     });
 
-    await messageQueue.add('send-telegram', {
-      messageId: message.id,
-      userId,
-      chatId: user.telegramChatId,
-      content,
+    await inngest.send({
+      name: 'message/telegram.requested',
+      data: { messageId: message.id, userId, chatId: user.telegramChatId, content },
     });
 
     logger.info(`Telegram message queued for user ${userId}`);
@@ -58,7 +56,10 @@ class MessagingService {
       data: { userId, channel: 'SMS', direction: 'OUTBOUND', content, messageType, status: 'SENT' },
     });
 
-    await messageQueue.add('send-sms', { messageId: message.id, userId, phone: user.phone, content });
+    await inngest.send({
+      name: 'message/sms.requested',
+      data: { messageId: message.id, userId, phone: user.phone, content },
+    });
     logger.info(`SMS message queued for user ${userId}`);
     return message;
   }

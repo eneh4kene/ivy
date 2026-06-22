@@ -1,5 +1,5 @@
 import prisma from '../utils/prisma';
-import { callScheduleQueue } from '../config/queues';
+import { inngest } from '../inngest/client';
 import logger from '../utils/logger';
 import { NotFoundError } from '../utils/errors';
 import { addMinutes, isBefore, differenceInDays, startOfMonth, startOfDay, endOfDay, subDays } from 'date-fns';
@@ -70,38 +70,22 @@ class CallService {
       },
     });
 
-    // Schedule the call job in Bull queue
-    const delay = scheduledAt.getTime() - Date.now();
-
-    if (delay > 0) {
-      await callScheduleQueue.add(
-        'initiate-call',
-        {
-          callId: call.id,
-          userId,
-          callType,
-          phone: user.phone,
-          userName: user.firstName,
-          contextData,
-        },
-        {
-          delay,
-          jobId: call.id, // Use call ID as job ID for easy tracking
-        }
-      );
-
-      logger.info(`Call scheduled: ${call.id} for user ${userId} at ${scheduledAt}`);
-    } else {
-      logger.warn(`Call ${call.id} scheduled in the past, adding to queue immediately`);
-      await callScheduleQueue.add('initiate-call', {
+    // Hand off to Inngest — `initiateCall` holds the call until scheduledAt via
+    // step.sleepUntil (past-dated times fire immediately). Idempotent on callId.
+    await inngest.send({
+      name: 'call/scheduled',
+      data: {
         callId: call.id,
         userId,
         callType,
         phone: user.phone,
         userName: user.firstName,
         contextData,
-      });
-    }
+        scheduledAt: scheduledAt.toISOString(),
+      },
+    });
+
+    logger.info(`Call scheduled: ${call.id} for user ${userId} at ${scheduledAt.toISOString()}`);
 
     return call;
   }
@@ -628,14 +612,11 @@ class CallService {
       throw new NotFoundError('Call not found');
     }
 
-    // Remove from queue
-    const job = await callScheduleQueue.getJob(callId);
-    if (job) {
-      await job.remove();
-    }
-
-    // Update call status
+    // Update status first, then interrupt the Inngest run if it's still sleeping
+    // until its scheduled time. The status flip also guards the immediate path:
+    // initiateCall re-checks status === 'SCHEDULED' before dialing.
     await this.updateCallStatus(callId, 'CANCELLED');
+    await inngest.send({ name: 'call/cancelled', data: { callId } });
 
     logger.info(`Call ${callId} cancelled`);
 

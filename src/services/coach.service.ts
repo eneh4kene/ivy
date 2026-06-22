@@ -2,7 +2,7 @@ import prisma from '../utils/prisma';
 import logger from '../utils/logger';
 import { NotFoundError, BadRequestError } from '../utils/errors';
 import authService from './auth.service';
-import { callScheduleQueue } from '../config/queues';
+import { inngest } from '../inngest/client';
 import crypto from 'crypto';
 
 export interface CoachProfileInput {
@@ -619,12 +619,16 @@ class CoachService {
       },
     });
 
-    await callScheduleQueue.add('initiate-call', {
-      callId: call.id,
-      userId: coach.id,
-      callType: 'COACH_PONDER',
-      phone: coach.phone,
-      userName: coach.firstName,
+    await inngest.send({
+      name: 'call/scheduled',
+      data: {
+        callId: call.id,
+        userId: coach.id,
+        callType: 'COACH_PONDER',
+        phone: coach.phone,
+        userName: coach.firstName,
+        scheduledAt: new Date().toISOString(),
+      },
     });
 
     logger.info(`Coach ponder call initiated for coach ${coach.id} — call ${call.id}`);

@@ -18,18 +18,16 @@ import {
   settleExpiredStakeCycles,
 } from './services/arming.service';
 
-// Start Bull processors
-import './workers/call.processor';
-import './workers/message.processor';
-
 logger.info(`Worker process started — env: ${config.server.env}`);
 
 // Exclusive cutover: when Inngest drives the schedule, the legacy node-cron jobs
-// stand down so exactly one scheduler runs. Bull processors (call/message) stay
-// active here regardless — they're Phase 2 (not yet migrated to Inngest events).
+// stand down so exactly one scheduler runs. Call/message delivery is no longer
+// here at all — Phase 2 moved it to Inngest events (call/scheduled,
+// message/*.requested), so the only thing this process still owns is the
+// node-cron fallback for when Inngest is disabled (rollback path).
 if (config.inngest.enabled) {
-  logger.info('INNGEST_ENABLED=true — legacy node-cron jobs are disabled; Inngest Cloud owns the schedule. Bull processors remain active.');
-  sendTelegramAdmin('✅ Ivy worker started (Inngest mode — cron via Inngest, Bull processors local)').catch(() => {});
+  logger.info('INNGEST_ENABLED=true — legacy node-cron jobs are disabled; Inngest Cloud owns the schedule and all call/message delivery.');
+  sendTelegramAdmin('✅ Ivy worker started (Inngest mode — cron + call/message via Inngest)').catch(() => {});
 } else {
   // Alert admin on startup so we know the worker is alive
   sendTelegramAdmin('✅ Ivy worker started').catch(() => {});

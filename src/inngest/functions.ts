@@ -29,6 +29,8 @@ import {
   openStakeCyclesForActiveUsers,
   settleExpiredStakeCycles,
 } from '../services/arming.service';
+import { callFunctions } from './calls';
+import { messagingFunctions } from './messaging';
 
 // Every Sunday at 9am UTC — weekly accountability buddy digests
 const weeklyBuddyDigest = inngest.createFunction(
@@ -207,6 +209,7 @@ const dailyCostAlert = inngest.createFunction(
 
 /** All Inngest functions, served at /api/inngest. */
 export const functions = [
+  // Cron backbone (Phase 1)
   weeklyBuddyDigest,
   weeklyCoachDigest,
   ponderScheduler,
@@ -218,4 +221,7 @@ export const functions = [
   seasonAdvance,
   stuckCallRecovery,
   dailyCostAlert,
+  // Event-driven workers (Phase 2 — replaced Bull call/message queues)
+  ...callFunctions,
+  ...messagingFunctions,
 ];
