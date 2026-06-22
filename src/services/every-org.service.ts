@@ -34,6 +34,16 @@ function getHeaders() {
   }
 }
 
+/**
+ * Beta guard: while Stripe runs in TEST mode no real money is collected from
+ * users (holds/captures are simulated with the 4242 card), so we must NOT push
+ * real donations to Every.org. Gating on the Stripe key means dispatch resumes
+ * automatically the moment we flip to live keys at conversion — no code change.
+ */
+function isStripeTestMode(): boolean {
+  return (process.env.STRIPE_SECRET_KEY || '').startsWith('sk_test')
+}
+
 export async function searchNonprofit(query: string): Promise<EveryOrgNonprofit[]> {
   if (!process.env.EVERY_ORG_API_KEY || !process.env.EVERY_ORG_API_SECRET) return []
   try {
@@ -76,6 +86,17 @@ export async function dispatchDonation(params: {
   if (!process.env.EVERY_ORG_API_KEY || !process.env.EVERY_ORG_API_SECRET) {
     logger.warn('Every.org not configured — donation dispatch skipped')
     return { success: false, error: 'Every.org not configured' }
+  }
+
+  // Beta: Stripe in test mode → no real money was collected → never dispatch.
+  // The donation row becomes terminal (FAILED with this reason) so it is not
+  // re-attempted after we convert to live keys; only post-conversion (live)
+  // forfeits will dispatch for real.
+  if (isStripeTestMode()) {
+    logger.info(
+      `Beta (Stripe test mode): skipping real Every.org dispatch to ${params.everyOrgSlug} for ${params.amountUsd} USD`
+    )
+    return { success: false, error: 'Skipped: Stripe in test mode (beta) — no real money moved' }
   }
 
   try {

@@ -254,8 +254,14 @@ export function StakeSetupScreen() {
               <CharitySelectStep
                 mode="success"
                 value={formState.successCharityId}
-                onChange={(id) => setFormState((s) => ({ ...s, successCharityId: id }))}
+                onChange={(id, name) =>
+                  setFormState((s) => ({ ...s, successCharityId: id, successCharityName: name }))
+                }
                 onNext={goNext}
+                onSkip={() => {
+                  setFormState((s) => ({ ...s, successCharityId: null, successCharityName: null }))
+                  goNext()
+                }}
               />
             )}
 
@@ -263,7 +269,9 @@ export function StakeSetupScreen() {
               <CharitySelectStep
                 mode="savage"
                 value={formState.dislikedCharityId}
-                onChange={(id) => setFormState((s) => ({ ...s, dislikedCharityId: id }))}
+                onChange={(id, name) =>
+                  setFormState((s) => ({ ...s, dislikedCharityId: id, dislikedCharityName: name }))
+                }
                 onNext={goNext}
               />
             )}

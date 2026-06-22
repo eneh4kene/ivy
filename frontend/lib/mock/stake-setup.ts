@@ -134,6 +134,10 @@ export interface StakeSetupState {
   forfeitMode: ForfeitMode
   successCharityId: string | null
   dislikedCharityId: string | null
+  // Display names captured at selection time so the Confirm summary can show the
+  // chosen charity without re-fetching (the ids are real DB ids from the API).
+  successCharityName?: string | null
+  dislikedCharityName?: string | null
   armingWindowStart: string   // HH:MM
   armingWindowEnd: string     // HH:MM
 }
@@ -143,6 +147,8 @@ export const DEFAULT_STAKE_SETUP: StakeSetupState = {
   forfeitMode: 'MIDDLE',
   successCharityId: null,
   dislikedCharityId: null,
+  successCharityName: null,
+  dislikedCharityName: null,
   armingWindowStart: '07:00',
   armingWindowEnd: '09:30',
 }

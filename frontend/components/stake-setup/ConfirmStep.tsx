@@ -18,7 +18,7 @@
 
 import { useState } from 'react'
 import { Shield, AlertTriangle, Clock, Heart } from 'lucide-react'
-import { CHARITY_CATALOGUE, FORFEIT_OPTIONS, dailySlice } from '@/lib/mock/stake-setup'
+import { FORFEIT_OPTIONS, dailySlice } from '@/lib/mock/stake-setup'
 import type { StakeSetupState } from '@/lib/mock/stake-setup'
 import { activateStake } from '@/lib/stake'
 
@@ -67,10 +67,9 @@ export function ConfirmStep({ state, onConfirm, onEdit }: ConfirmStepProps) {
 
   const sym = '£'
   const daily = dailySlice(state.weeklyAmount)
-  const successCharity = CHARITY_CATALOGUE.find((c) => c.id === state.successCharityId)
-  const dislikedCharity = state.dislikedCharityId
-    ? CHARITY_CATALOGUE.find((c) => c.id === state.dislikedCharityId)
-    : null
+  // Names are captured at selection time (ids are real DB ids saved to the config).
+  const successCharityName = state.successCharityId ? state.successCharityName : null
+  const dislikedCharityName = state.dislikedCharityId ? state.dislikedCharityName : null
   const forfeitOpt = FORFEIT_OPTIONS.find((o) => o.mode === state.forfeitMode)!
 
   const handleConfirm = async () => {
@@ -120,19 +119,19 @@ export function ConfirmStep({ state, onConfirm, onEdit }: ConfirmStepProps) {
           value={`${forfeitOpt.label} — ${forfeitOpt.sublabel}`}
           onEdit={() => onEdit('forfeit-mode')}
         />
-        {dislikedCharity && (
+        {dislikedCharityName && (
           <ConfirmRow
             icon={<span className="text-sm">😬</span>}
             label="Anti-charity (Savage)"
-            value={dislikedCharity.name}
+            value={dislikedCharityName}
             onEdit={() => onEdit('disliked-charity')}
           />
         )}
-        {successCharity && (
+        {successCharityName && (
           <ConfirmRow
             icon={<Heart className="w-4 h-4 text-sage-400" />}
             label="Success charity"
-            value={successCharity.name}
+            value={successCharityName}
             onEdit={() => onEdit('success-charity')}
           />
         )}
