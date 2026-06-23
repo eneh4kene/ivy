@@ -8,6 +8,7 @@ import { useAuthStore } from '@/lib/store/auth.store'
 import { getTierName, getTierPrice } from '@/lib/permissions'
 import { useCurrencyStore } from '@/lib/store/currency.store'
 import api, { buddyApi, donationsApi } from '@/lib/api'
+import { checkPhone } from '@/lib/phone'
 import type { UpdateProfileInput, AccountabilityBuddy } from '@/lib/types'
 import { User, Phone, Clock, Target, CreditCard, Trash2, Download, CheckCircle2, AlertCircle, ChevronRight, Users, Bell, BellOff, Heart, Loader2, ShieldCheck, MessageCircle } from 'lucide-react'
 import { usePushNotifications } from '@/hooks/usePushNotifications'
@@ -158,6 +159,11 @@ export default function SettingsPage() {
   }
 
   const handleRequestOtp = async () => {
+    const check = checkPhone(newPhone)
+    if (!check.valid) {
+      setPhoneError(check.error || 'Enter a valid phone number with country code')
+      return
+    }
     setPhoneError('')
     setPhoneSending(true)
     try {
@@ -322,7 +328,7 @@ export default function SettingsPage() {
                     <Button
                       type="button"
                       size="sm"
-                      disabled={phoneSending || !newPhone.trim()}
+                      disabled={phoneSending || !checkPhone(newPhone).valid}
                       onClick={handleRequestOtp}
                     >
                       {phoneSending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : 'Send code'}
@@ -335,7 +341,9 @@ export default function SettingsPage() {
                       Cancel
                     </button>
                   </div>
-                  <p className="text-xs text-muted-foreground">Include your country code, e.g. +447911123456</p>
+                  {checkPhone(newPhone).error
+                    ? <p className="text-xs text-destructive">{checkPhone(newPhone).error}</p>
+                    : <p className="text-xs text-muted-foreground">Include your country code, e.g. +447911123456</p>}
                   {phoneError && <p className="text-xs text-destructive">{phoneError}</p>}
                 </div>
               )}

@@ -21,6 +21,7 @@ import { useVisualViewport } from '@/hooks/useVisualViewport'
 import { usersApi } from '@/lib/api'
 import { useAuthStore } from '@/lib/store/auth.store'
 import { Logo } from '@/components/brand/Logo'
+import { checkPhone, normalizePhone } from '@/lib/phone'
 import {
   TRACK_OPTIONS,
   CHANNEL_OPTIONS,
@@ -30,12 +31,6 @@ import {
   type ConsumerOnboardingStep,
   type OnboardingState,
 } from '@/lib/mock/onboarding'
-
-// Lenient E.164-ish check — backend requires a phone to complete onboarding.
-function isValidPhone(p: string): boolean {
-  const cleaned = p.replace(/[\s()-]/g, '')
-  return /^\+?\d{8,15}$/.test(cleaned)
-}
 
 // ─── Progress bar ─────────────────────────────────────────────────────────────
 
@@ -275,8 +270,8 @@ function ChannelStep({
   submitting: boolean
   error: string | null
 }) {
-  const phoneValid = isValidPhone(phone)
-  const canContinue = !!value && phoneValid && !submitting
+  const phoneCheck = checkPhone(phone)
+  const canContinue = !!value && phoneCheck.valid && !submitting
 
   return (
     <div className="flex flex-col flex-1 px-4 pt-2 pb-6 animate-fade-in">
@@ -300,9 +295,14 @@ function ChannelStep({
             value={phone}
             onChange={(e) => onPhoneChange(e.target.value)}
             placeholder="+44 7700 900000"
-            className="w-full pl-10 pr-4 py-3.5 rounded-2xl bg-ink-800/60 border border-ink-600 text-ink-50 text-sm placeholder:text-ink-600 focus:outline-none focus:border-gold-400/60 transition-colors"
+            className={`w-full pl-10 pr-4 py-3.5 rounded-2xl bg-ink-800/60 border text-ink-50 text-sm placeholder:text-ink-600 focus:outline-none transition-colors ${
+              phoneCheck.error ? 'border-ember-400/60 focus:border-ember-400/60' : 'border-ink-600 focus:border-gold-400/60'
+            }`}
           />
         </div>
+        {phoneCheck.error && (
+          <p className="text-2xs text-ember-400 mt-1.5 leading-snug">{phoneCheck.error}</p>
+        )}
       </div>
 
       {/* The morning VN note */}
@@ -401,7 +401,7 @@ export function ConsumerOnboardingScreen() {
     try {
       await usersApi.updateProfile({
         track: state.track ?? undefined,
-        phone: phone.trim().replace(/\s/g, ''),
+        phone: normalizePhone(phone),
         commStyle: (state.channelPreference ?? 'ADAPTIVE') as ChannelPreference,
       })
       await usersApi.markAsOnboarded()
