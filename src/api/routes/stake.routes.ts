@@ -23,6 +23,7 @@ import { BadRequestError, NotFoundError } from '../../utils/errors'
 import prisma from '../../utils/prisma'
 import logger from '../../utils/logger'
 import { STAKE_CONFIG, type Currency } from '../../config/pricing'
+import { getStakeState } from '../../services/stake.service'
 
 const router = Router()
 router.use(authenticate)
@@ -246,6 +247,23 @@ router.get(
           defaultWeeklyStake: STAKE_CONFIG.defaultWeeklyStake[currency],
         },
       })
+    } catch (err) {
+      next(err)
+    }
+  },
+)
+
+// ─── GET /api/stake/state ────────────────────────────────────────────────────
+// Composed daily/home read model: active cycle progress, config (charity names
+// resolved), today's arming state (+ morning VoiceNote), and a Mon→Sun week grid.
+// Safe for brand-new users (no cycle / no config / no workouts).
+
+router.get(
+  '/state',
+  async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const state = await getStakeState(req.user!.id)
+      res.status(200).json({ success: true, data: state })
     } catch (err) {
       next(err)
     }

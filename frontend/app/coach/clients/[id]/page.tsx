@@ -3,22 +3,9 @@
 /**
  * /coach/clients/[id] — Coach-side client detail view.
  *
- * REPLACED the old API-calling version with a mock-data, design-system-consistent version.
- *
- * Changes from old page:
- *   - Removed all coachApi.* calls (getClient, removeClient, updateClientNotes, updateProgrammeAreas)
- *   - Replaced with MOCK_COACH_CLIENTS lookup from lib/mock/coach.ts
- *   - Redesigned to match Ivy "warm ceremony" design system
- *   - Tab bar now: calls / notes / programme / insights (same tabs, new visual treatment)
- *   - Notes and programme area editing preserved as local state (no save action in mock)
- *   - Remove-client action replaced with a mock confirmation (no real API)
- *   - useVisualViewport used on notes textarea to prevent keyboard overlap on iOS
- *
- * MOCK: MOCK_COACH_CLIENTS
- * TODO(api): GET /api/coach/clients/:id → MockCoachClient
- * TODO(api): PATCH /api/coach/clients/:id/notes { notes: string }
- * TODO(api): PATCH /api/coach/clients/:id/programme-areas { areas: MockProgrammeArea[] }
- * TODO(api): DELETE /api/coach/clients/:id → remove from roster
+ * Wired to real coachApi: getClient, updateClientNotes, updateProgrammeAreas,
+ * removeClient. Tabs: calls / notes / programme / insights.
+ * useVisualViewport keeps the notes textarea above the iOS keyboard.
  */
 
 import { useState, use, useEffect } from 'react'

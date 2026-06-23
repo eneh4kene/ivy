@@ -1,309 +1,215 @@
 'use client'
 
 /**
- * SeasonCloseScreen — the ceremonial end-of-arc review.
+ * SeasonCloseScreen — the end-of-arc review, wired to real data.
  *
- * Shows: arc summary, charity impact, stake stats, sprint breakdown,
- * AI reflection, next season suggestion.
+ * Data sources:
+ *   - seasonsApi.getAll()          → most recent closed (or closing) season:
+ *                                    number, title, goal, dates, sprints,
+ *                                    arcSummary + nextGoalSuggestions (set on close)
+ *   - donationsApi.getImpactWallet → lifetime donated + donation count
+ *   - statsApi.getStreak()         → longest streak
  *
- * MOCK DATA ONLY — all API wiring points marked // TODO(api):
- * §8 of docs/product-pricing-rework.md (Season Close, Impact Stories).
+ * Per-season stake kept/forfeited, per-sprint completion %, charity-specific
+ * attribution and circle collective totals are NOT aggregated server-side, so
+ * they are NOT shown (no fabricated figures). When the backend exposes a
+ * season-close summary endpoint, this screen can be enriched.
  */
 
 import { useState, useRef, useEffect } from 'react'
 import Link from 'next/link'
-import {
-  Sparkles, Heart, Shield, Flame, Target, Users, ArrowRight,
-  ChevronDown, Check,
-} from 'lucide-react'
-import { MOCK_SEASON_CLOSE, type SprintSummary, type SeasonCloseData } from '@/lib/mock/season-close'
-import { seasonsApi } from '@/lib/api'
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function sym(currency: string) {
-  return currency === 'GBP' ? '£' : '$'
-}
-
-function pct(a: number, b: number) {
-  return b === 0 ? 0 : Math.round((a / b) * 100)
-}
-
-// ─── Animated counter (mounts once, counts up) ────────────────────────────────
+import { Sparkles, Heart, Target, ArrowRight, ChevronDown, Check } from 'lucide-react'
+import { seasonsApi, donationsApi, statsApi } from '@/lib/api'
+import type { Season } from '@/lib/types'
 
 function CountUp({ target, prefix = '', suffix = '', duration = 1200 }: {
-  target: number
-  prefix?: string
-  suffix?: string
-  duration?: number
+  target: number; prefix?: string; suffix?: string; duration?: number
 }) {
   const [value, setValue] = useState(0)
   const started = useRef(false)
-
   useEffect(() => {
     if (started.current) return
     started.current = true
     const start = performance.now()
     const tick = (now: number) => {
-      const elapsed = now - start
-      const t = Math.min(elapsed / duration, 1)
-      // ease-out cubic
+      const t = Math.min((now - start) / duration, 1)
       const eased = 1 - Math.pow(1 - t, 3)
       setValue(Math.round(eased * target))
       if (t < 1) requestAnimationFrame(tick)
     }
     requestAnimationFrame(tick)
   }, [target, duration])
-
-  return (
-    <span className="tabular-nums">
-      {prefix}{value}{suffix}
-    </span>
-  )
+  return <span className="tabular-nums">{prefix}{value}{suffix}</span>
 }
 
-// ─── Sprint row ───────────────────────────────────────────────────────────────
+function fmtDate(iso: string) {
+  return new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: '2-digit' })
+}
 
-function SprintRow({ sprint, index }: { sprint: SprintSummary; index: number }) {
-  const completionPct = pct(sprint.completedDays, sprint.totalDays)
-  const s = sym('GBP')
-
+function SprintRow({ sprint, index }: { sprint: Season['sprints'][number]; index: number }) {
+  const done = sprint.status === 'COMPLETED'
   return (
-    <div
-      className="py-3 border-b border-ink-700/60 last:border-0"
-      style={{ animationDelay: `${index * 80}ms` }}
-    >
-      <div className="flex items-center justify-between mb-1.5">
+    <div className="py-3 border-b border-ink-700/60 last:border-0" style={{ animationDelay: `${index * 80}ms` }}>
+      <div className="flex items-center justify-between mb-1">
         <p className="text-xs font-semibold text-ink-200">Sprint {sprint.number}</p>
         <div className="flex items-center gap-1.5">
-          <span className="text-2xs font-mono text-ink-400">{completionPct}%</span>
-          {completionPct >= 85 && <Check className="w-3 h-3 text-sage-400" />}
+          <span className={`text-2xs font-medium ${done ? 'text-sage-400' : 'text-ink-400'}`}>
+            {done ? 'Completed' : 'Active'}
+          </span>
+          {done && <Check className="w-3 h-3 text-sage-400" />}
         </div>
       </div>
-      <p className="text-xs text-ink-600 italic mb-2">"{sprint.pledge}"</p>
-      <div className="flex items-center gap-2">
-        <div className="flex-1 h-1.5 rounded-full bg-ink-700 overflow-hidden">
-          <div
-            className={`h-full rounded-full transition-all duration-700 ${
-              completionPct >= 85 ? 'bg-sage-400' : completionPct >= 60 ? 'bg-gold-400' : 'bg-ember-400'
-            }`}
-            style={{ width: `${completionPct}%` }}
-          />
-        </div>
-        <span className="text-2xs text-ink-600 font-mono shrink-0">
-          {sprint.completedDays}/{sprint.totalDays}d
-        </span>
-      </div>
-      {sprint.forfeited > 0 && (
-        <p className="text-2xs text-ember-400/70 mt-1 font-mono">
-          {sprint.forfeited} day{sprint.forfeited !== 1 ? 's' : ''} forfeited · {s}{sprint.stakeAmount} stake
-        </p>
-      )}
-    </div>
-  )
-}
-
-// ─── Stat tile ────────────────────────────────────────────────────────────────
-
-function StatTile({
-  value,
-  prefix = '',
-  suffix = '',
-  label,
-  color = 'text-ink-50',
-  sub,
-}: {
-  value: number
-  prefix?: string
-  suffix?: string
-  label: string
-  color?: string
-  sub?: string
-}) {
-  return (
-    <div className="surface rounded-2xl p-4 flex flex-col gap-1">
-      <p className="text-2xs font-bold uppercase tracking-widest text-ink-400">{label}</p>
-      <p className={`font-display text-2xl font-semibold ${color} tabular-nums leading-none`}>
-        <CountUp target={value} prefix={prefix} suffix={suffix} />
+      <p className="text-2xs text-ink-500 font-mono">
+        {fmtDate(sprint.startDate)} – {fmtDate(sprint.endDate)}
       </p>
-      {sub && <p className="text-2xs text-ink-600">{sub}</p>}
     </div>
   )
 }
-
-// ─── Main screen ──────────────────────────────────────────────────────────────
 
 export function SeasonCloseScreen({ seasonId }: { seasonId?: string } = {}) {
-  const [data, setData] = useState<SeasonCloseData>(MOCK_SEASON_CLOSE)
+  const [season, setSeason] = useState<Season | null>(null)
+  const [lifetimeDonated, setLifetimeDonated] = useState(0)
+  const [donationCount, setDonationCount] = useState(0)
+  const [longestStreak, setLongestStreak] = useState(0)
+  const [loading, setLoading] = useState(true)
   const [showSprints, setShowSprints] = useState(false)
 
   useEffect(() => {
-    // Attempt to fetch real season close data.
-    // The /api/seasons/:id/close endpoint is a POST (not GET), and there's no
-    // dedicated GET for the close summary yet — leave on MOCK_SEASON_CLOSE for now.
-    // When the season-close summary endpoint lands, wire it here.
-    // TODO: wire to real season close summary endpoint when available
+    let alive = true
+    seasonsApi.getAll()
+      .then((seasons) => {
+        if (!alive) return
+        let target: Season | null = null
+        if (seasonId) {
+          target = seasons.find((s) => s.id === seasonId) ?? null
+        } else {
+          // Most recently closed (or closing) season.
+          const closed = seasons
+            .filter((s) => s.status === 'CLOSED' || s.status === 'CLOSING')
+            .sort((a, b) => new Date(b.closedAt ?? b.endDate).getTime() - new Date(a.closedAt ?? a.endDate).getTime())
+          target = closed[0] ?? null
+        }
+        setSeason(target)
+      })
+      .catch(() => {})
+      .finally(() => { if (alive) setLoading(false) })
+
+    donationsApi.getImpactWallet()
+      .then((w) => {
+        if (!alive) return
+        setLifetimeDonated(Math.round(w.wallet?.lifetimeDonated ?? 0))
+        setDonationCount(w.currentMonth?.donationCount ?? 0)
+      })
+      .catch(() => {})
+    statsApi.getStreak()
+      .then((s) => { if (alive) setLongestStreak(s.longestStreak ?? 0) })
+      .catch(() => {})
+
+    return () => { alive = false }
   }, [seasonId])
 
-  const s = sym(data.currency)
+  if (loading) {
+    return (
+      <div className="min-h-dvh mesh-bg flex items-center justify-center">
+        <span className="w-6 h-6 rounded-full border-2 border-ink-600 border-t-gold-400 animate-spin" />
+      </div>
+    )
+  }
+
+  // No closed season yet — honest locked state.
+  if (!season) {
+    return (
+      <div className="min-h-dvh mesh-bg flex flex-col items-center justify-center text-center px-6 gap-4">
+        <div className="w-14 h-14 rounded-2xl bg-gold-400/12 flex items-center justify-center">
+          <Sparkles className="w-7 h-7 text-gold-400" />
+        </div>
+        <h1 className="font-display text-xl text-ink-50">No season to close yet</h1>
+        <p className="text-sm text-ink-400 max-w-xs">
+          When you finish a season, this is where you&rsquo;ll see how the whole arc went — your
+          follow-through, your impact, and Ivy&rsquo;s read on the chapter.
+        </p>
+        <Link href="/home">
+          <button className="mt-2 px-5 py-3 rounded-2xl surface text-sm text-ink-200 hover:bg-ink-700 transition-colors">
+            Back to home
+          </button>
+        </Link>
+      </div>
+    )
+  }
+
+  const completedSprints = season.sprints.filter((s) => s.status === 'COMPLETED').length
 
   return (
     <div className="min-h-dvh mesh-bg pb-12">
-      {/* Hero / ceremony header */}
       <div className="relative overflow-hidden pt-safe-t">
-        {/* Glow orbs */}
         <div
           className="pointer-events-none absolute -top-12 left-1/2 -translate-x-1/2 w-96 h-96 rounded-full opacity-30"
           style={{ background: 'radial-gradient(circle, rgba(204,163,72,0.22) 0%, transparent 60%)' }}
         />
-        <div
-          className="pointer-events-none absolute top-32 -right-16 w-64 h-64 rounded-full opacity-20"
-          style={{ background: 'radial-gradient(circle, rgba(85,163,120,0.18) 0%, transparent 70%)' }}
-        />
-
         <div className="relative px-4 pt-12 pb-8 text-center">
-          {/* Season close badge */}
           <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-gold-400/10 border border-gold-400/25 mb-6 animate-fade-in">
             <Sparkles className="w-3.5 h-3.5 text-gold-400" />
             <span className="text-xs font-semibold text-gold-400 uppercase tracking-widest">Season close</span>
           </div>
-
-          {/* Season title */}
           <div className="animate-fade-in" style={{ animationDelay: '100ms' }}>
-            <p className="text-2xs font-bold uppercase tracking-widest text-ink-400 mb-2">
-              Season {data.seasonNumber}
-            </p>
+            <p className="text-2xs font-bold uppercase tracking-widest text-ink-400 mb-2">Season {season.number}</p>
             <h1 className="font-display text-3xl sm:text-4xl text-ink-50 tracking-tight leading-snug mb-2">
-              {data.seasonTitle}
+              {season.title || `Season ${season.number}`}
             </h1>
-            <p className="text-sm text-ink-400 italic">
-              "{data.seasonGoal}"
-            </p>
+            <p className="text-sm text-ink-400 italic">&ldquo;{season.goal}&rdquo;</p>
           </div>
-
-          {/* Date range */}
           <p className="mt-3 text-2xs text-ink-600 font-mono animate-fade-in" style={{ animationDelay: '200ms' }}>
-            {data.startDate.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: '2-digit' })}
-            {' – '}
-            {data.endDate.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: '2-digit' })}
+            {fmtDate(season.startDate)} – {fmtDate(season.endDate)}
           </p>
         </div>
       </div>
 
       <div className="px-4 max-w-lg mx-auto space-y-6">
-        {/* ── Follow-through score ─────────────────────────────────────────────── */}
-        <div
-          className="relative rounded-3xl border border-gold-400/25 bg-ink-800 overflow-hidden glow-gold animate-fade-in"
-          style={{ animationDelay: '300ms' }}
-        >
-          <div className="h-0.5 bg-gradient-to-r from-transparent via-gold-400 to-transparent" />
-          <div className="p-6 text-center">
-            <p className="text-2xs font-bold uppercase tracking-widest text-ink-400 mb-3">Follow-through</p>
-            <div className="relative w-28 h-28 mx-auto mb-4">
-              {/* Circular progress */}
-              <svg className="w-full h-full -rotate-90" viewBox="0 0 100 100">
-                <circle cx="50" cy="50" r="42" fill="none" stroke="hsl(var(--ink-700))" strokeWidth="8" />
-                <circle
-                  cx="50" cy="50" r="42" fill="none"
-                  stroke="hsl(var(--gold-400))" strokeWidth="8"
-                  strokeLinecap="round"
-                  strokeDasharray={`${2 * Math.PI * 42}`}
-                  strokeDashoffset={`${2 * Math.PI * 42 * (1 - data.followThroughPct / 100)}`}
-                  className="transition-all duration-1000"
-                />
-              </svg>
-              <div className="absolute inset-0 flex flex-col items-center justify-center">
-                <span className="font-display text-2xl font-semibold text-gold-400 tabular-nums">
-                  {data.followThroughPct}%
-                </span>
-              </div>
-            </div>
-            <p className="text-sm text-ink-200">
-              {data.totalDaysCompleted} of {data.totalDaysArmed} days completed
-            </p>
-            <p className="text-xs text-ink-400 mt-1">
-              Longest streak: <span className="text-ink-200 font-mono">{data.longestStreak} days</span>
-            </p>
-          </div>
-        </div>
-
-        {/* ── Stake financials ─────────────────────────────────────────────────── */}
-        <div className="animate-fade-in" style={{ animationDelay: '400ms' }}>
-          <p className="text-2xs font-bold uppercase tracking-widest text-ink-400 mb-3">Your stake</p>
-          <div className="grid grid-cols-2 gap-3">
-            <StatTile
-              value={data.totalStakeKept}
-              prefix={s}
-              label="Kept"
-              color="text-sage-400"
-              sub="returned to you"
-            />
-            <StatTile
-              value={data.totalStakeForfeited}
-              prefix={s}
-              label="Forfeited"
-              color="text-ember-400"
-              sub={`to ${data.totalStakeForfeited > 0 ? 'house charity' : 'nobody — clean run'}`}
-            />
-          </div>
-        </div>
-
-        {/* ── Charity impact ────────────────────────────────────────────────────── */}
-        <div
-          className="glass-sage rounded-2xl p-5 animate-fade-in"
-          style={{ animationDelay: '500ms' }}
-        >
-          <div className="flex items-center gap-3 mb-4">
-            <div
-              className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 text-xs font-bold text-ink-900"
-              style={{ background: `hsl(${data.charityLogoHue}, 38%, 42%)` }}
-            >
-              {data.charityLogoInitials}
-            </div>
-            <div>
-              <p className="text-xs font-bold uppercase tracking-widest text-sage-400">Charity impact</p>
-              <p className="text-sm font-semibold text-ink-100">{data.charityName}</p>
-            </div>
-          </div>
-
-          <div className="flex items-baseline gap-1.5 mb-1">
-            <span className="font-display text-3xl font-semibold text-ink-50">
-              <CountUp target={data.totalDonated} prefix={s} />
-            </span>
-            <span className="text-sm text-ink-400">donated this season</span>
-          </div>
-          <p className="text-xs text-ink-400">
-            {data.donationCount} successful days · each one funded a donation
+        {/* ── Sprints completed ── */}
+        <div className="surface rounded-2xl p-6 text-center animate-fade-in" style={{ animationDelay: '300ms' }}>
+          <p className="text-2xs font-bold uppercase tracking-widest text-ink-400 mb-2">Sprints completed</p>
+          <p className="font-display text-3xl font-semibold text-gold-400">
+            {completedSprints}<span className="text-ink-500 text-2xl"> / {season.sprints.length}</span>
           </p>
-
-          {/* Circle collective */}
-          <div className="mt-4 pt-4 border-t border-sage-400/20 flex items-center gap-2">
-            <Users className="w-3.5 h-3.5 text-periwinkle-400" />
-            <p className="text-xs text-ink-400">
-              <span className="text-periwinkle-400 font-semibold">{data.circleName}</span>
-              {' '}collectively donated{' '}
-              <span className="text-ink-200 font-semibold font-mono">{s}{data.circleCollectiveTotal}</span>
-              {' '}this season
+          {longestStreak > 0 && (
+            <p className="text-xs text-ink-400 mt-2">
+              Longest streak: <span className="text-ink-200 font-mono">{longestStreak} days</span>
             </p>
-          </div>
+          )}
         </div>
 
-        {/* ── Arc summary (AI-generated) ────────────────────────────────────────── */}
-        <div
-          className="glass-gold rounded-2xl p-5 animate-fade-in"
-          style={{ animationDelay: '600ms' }}
-        >
-          <div className="flex items-center gap-2 mb-3">
-            <Sparkles className="w-4 h-4 text-gold-400" />
-            <p className="text-xs font-bold uppercase tracking-widest text-gold-400">Ivy's read</p>
+        {/* ── Impact (lifetime) ── */}
+        {lifetimeDonated > 0 && (
+          <div className="glass-sage rounded-2xl p-5 animate-fade-in" style={{ animationDelay: '400ms' }}>
+            <div className="flex items-center gap-2 mb-3">
+              <Heart className="w-4 h-4 text-sage-400" />
+              <p className="text-xs font-bold uppercase tracking-widest text-sage-400">Your impact</p>
+            </div>
+            <div className="flex items-baseline gap-1.5 mb-1">
+              <span className="font-display text-3xl font-semibold text-ink-50">
+                <CountUp target={lifetimeDonated} prefix="£" />
+              </span>
+              <span className="text-sm text-ink-400">donated to date</span>
+            </div>
+            {donationCount > 0 && (
+              <p className="text-xs text-ink-400">{donationCount} donation{donationCount !== 1 ? 's' : ''} this month</p>
+            )}
           </div>
-          <p className="text-sm text-ink-100 leading-relaxed font-display italic">
-            "{data.arcSummary}"
-          </p>
-        </div>
+        )}
 
-        {/* ── Sprint breakdown ──────────────────────────────────────────────────── */}
-        <div className="animate-fade-in" style={{ animationDelay: '700ms' }}>
+        {/* ── Ivy's read (only if generated on close) ── */}
+        {season.arcSummary && (
+          <div className="glass-gold rounded-2xl p-5 animate-fade-in" style={{ animationDelay: '500ms' }}>
+            <div className="flex items-center gap-2 mb-3">
+              <Sparkles className="w-4 h-4 text-gold-400" />
+              <p className="text-xs font-bold uppercase tracking-widest text-gold-400">Ivy&rsquo;s read</p>
+            </div>
+            <p className="text-sm text-ink-100 leading-relaxed font-display italic">&ldquo;{season.arcSummary}&rdquo;</p>
+          </div>
+        )}
+
+        {/* ── Sprint breakdown ── */}
+        <div className="animate-fade-in" style={{ animationDelay: '600ms' }}>
           <button
             onClick={() => setShowSprints(!showSprints)}
             className="w-full flex items-center justify-between py-3 surface rounded-2xl px-4 hover:bg-ink-700/60 transition-colors"
@@ -312,38 +218,32 @@ export function SeasonCloseScreen({ seasonId }: { seasonId?: string } = {}) {
               <Target className="w-4 h-4 text-sage-400" />
               <p className="text-sm font-semibold text-ink-100">Sprint breakdown</p>
             </div>
-            <ChevronDown
-              className={`w-4 h-4 text-ink-400 transition-transform duration-200 ${showSprints ? 'rotate-180' : ''}`}
-            />
+            <ChevronDown className={`w-4 h-4 text-ink-400 transition-transform duration-200 ${showSprints ? 'rotate-180' : ''}`} />
           </button>
-
           {showSprints && (
             <div className="surface rounded-2xl mt-2 px-4 py-2 animate-slide-in-bottom">
-              {data.sprints.map((sprint, i) => (
-                <SprintRow key={sprint.number} sprint={sprint} index={i} />
+              {season.sprints.map((sprint, i) => (
+                <SprintRow key={sprint.id} sprint={sprint} index={i} />
               ))}
             </div>
           )}
         </div>
 
-        {/* ── Next season suggestion ────────────────────────────────────────────── */}
-        <div
-          className="surface rounded-2xl p-5 border border-sage-400/20 animate-fade-in"
-          style={{ animationDelay: '800ms' }}
-        >
-          <p className="text-2xs font-bold uppercase tracking-widest text-ink-400 mb-3">
-            Ivy's suggestion for Season {data.seasonNumber + 1}
-          </p>
-          <p className="text-sm text-ink-200 leading-relaxed font-display italic">
-            "{data.nextSeasonSuggestion}"
-          </p>
-        </div>
+        {/* ── Next season suggestion (only if generated on close) ── */}
+        {season.nextGoalSuggestions && (
+          <div className="surface rounded-2xl p-5 border border-sage-400/20 animate-fade-in" style={{ animationDelay: '700ms' }}>
+            <p className="text-2xs font-bold uppercase tracking-widest text-ink-400 mb-3">
+              Ivy&rsquo;s suggestion for Season {season.number + 1}
+            </p>
+            <p className="text-sm text-ink-200 leading-relaxed font-display italic">&ldquo;{season.nextGoalSuggestions}&rdquo;</p>
+          </div>
+        )}
 
-        {/* ── CTA row ────────────────────────────────────────────────────────────── */}
-        <div className="space-y-3 animate-fade-in" style={{ animationDelay: '900ms' }}>
+        {/* ── CTA row ── */}
+        <div className="space-y-3 animate-fade-in" style={{ animationDelay: '800ms' }}>
           <Link href="/seasons">
             <button className="w-full py-4 rounded-2xl font-semibold text-base text-ink-900 bg-gold-400 hover:bg-gold-300 transition-all glow-gold active:scale-[0.98]">
-              Start Season {data.seasonNumber + 1}
+              Start Season {season.number + 1}
               <ArrowRight className="inline-block ml-2 w-4 h-4" />
             </button>
           </Link>
@@ -354,9 +254,8 @@ export function SeasonCloseScreen({ seasonId }: { seasonId?: string } = {}) {
           </Link>
         </div>
 
-        {/* Ceremonial bottom note */}
         <p className="text-center text-2xs text-ink-700 pb-2 font-display italic">
-          Season {data.seasonNumber} is closed. The arc is complete.
+          Season {season.number} is closed. The arc is complete.
         </p>
       </div>
     </div>

@@ -671,7 +671,56 @@ export interface StakeConfig {
   defaultWeeklyStake: number
 }
 
+// Composed daily/home read model — GET /api/stake/state
+export type StakeDayStatus = 'armed' | 'complete' | 'forfeited' | 'grace' | 'upcoming'
+export interface StakeState {
+  cycle: {
+    id: string
+    status: 'AUTHORIZED' | 'SETTLED' | 'VOIDED' | 'FAILED'
+    weeklyAmount: number
+    dailySlice: number
+    currency: 'GBP' | 'USD'
+    periodStart: string
+    periodEnd: string
+    daysArmed: number
+    daysCompleted: number
+    daysForfeited: number
+    graceUsed: number
+    graceTotal: number
+    amountSafe: number
+    amountAtRisk: number
+  } | null
+  config: {
+    hasConfig: boolean
+    weeklyAmount: number | null
+    currency: 'GBP' | 'USD'
+    forfeitMode: 'MIDDLE' | 'SAVAGE'
+    armingWindowStart: string | null
+    armingWindowEnd: string | null
+    forfeitDestination: string | null
+    successDestination: string | null
+  }
+  today: {
+    date: string
+    isArmed: boolean
+    armedAt: string | null
+    sliceOutcome: 'RELEASED' | 'FORFEITED' | 'PENDING' | null
+    workoutId: string | null
+    voiceNote: { id: string; transcript: string | null; recordedAt: string; durationSec: number | null } | null
+    armingWindowStart: string | null
+    armingWindowEnd: string | null
+    withinArmingWindow: boolean
+  }
+  week: { label: string; date: string; status: StakeDayStatus; isToday: boolean }[]
+}
+
 export const stakeApi = {
+  /** Composed daily/home state: active cycle, config (charity names), today, week grid. */
+  getState: async (): Promise<StakeState> => {
+    const response = await client.get<ApiResponse<StakeState>>('/api/stake/state')
+    return response.data.data!
+  },
+
   /**
    * Persist the user's stake configuration.
    * weeklyAmount must be >= STAKE_CONFIG.minWeeklyStake for the user's currency.

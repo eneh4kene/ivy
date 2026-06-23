@@ -55,37 +55,9 @@ export const FORFEIT_OPTIONS: ForfeitOption[] = [
   },
 ]
 
-// ─── House charities (Middle default pool) — §9 decision 5 ──────────────────
-// ⚑ Founder to confirm the specific 1–3 vetted orgs.
-
-export interface CharityOption {
-  id: string
-  name: string
-  cause: string
-  logoInitials: string
-  logoHue: number
-}
-
-export const HOUSE_CHARITIES: CharityOption[] = [
-  { id: 'c1', name: 'British Red Cross',       cause: 'Humanitarian aid',     logoInitials: 'RC', logoHue: 14 },
-  { id: 'c2', name: 'Shelter',                  cause: 'Homelessness',         logoInitials: 'SH', logoHue: 238 },
-  { id: 'c3', name: 'Age UK',                   cause: 'Elderly care',         logoInitials: 'AU', logoHue: 44 },
-]
-
-// ─── Charity catalogue (user success charity + Savage anti-charity) ───────────
-
-export const CHARITY_CATALOGUE: CharityOption[] = [
-  { id: 'ch1', name: 'Médecins Sans Frontières', cause: 'Emergency medicine',   logoInitials: 'MSF', logoHue: 152 },
-  { id: 'ch2', name: 'Rainforest Alliance',       cause: 'Environment',          logoInitials: 'RA',  logoHue: 152 },
-  { id: 'ch3', name: 'Crisis UK',                 cause: 'Homelessness',         logoInitials: 'CR',  logoHue: 238 },
-  { id: 'ch4', name: 'Cancer Research UK',        cause: 'Medical research',     logoInitials: 'CR',  logoHue: 44 },
-  { id: 'ch5', name: 'Oxfam',                     cause: 'Global poverty',       logoInitials: 'OX',  logoHue: 280 },
-  { id: 'ch6', name: 'RSPCA',                     cause: 'Animal welfare',       logoInitials: 'RS',  logoHue: 152 },
-  { id: 'ch7', name: 'WWF',                       cause: 'Wildlife / climate',   logoInitials: 'WW',  logoHue: 152 },
-  { id: 'ch8', name: 'Save the Children',         cause: 'Child welfare',        logoInitials: 'SC',  logoHue: 14 },
-  { id: 'ch9', name: 'Amnesty International',     cause: 'Human rights',         logoInitials: 'AI',  logoHue: 238 },
-  { id: 'ch10', name: 'Refuge',                    cause: 'Domestic abuse',       logoInitials: 'RF',  logoHue: 280 },
-]
+// Charity data (house pool, success charity, anti-charity) is fetched live from
+// the real catalogue via donationsApi.getCharities() — see CharitySelectStep and
+// ForfeitModeStep. No hardcoded charity fixtures live here.
 
 // ─── Arming window presets ────────────────────────────────────────────────────
 

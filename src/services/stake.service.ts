@@ -21,7 +21,7 @@
  */
 
 import Stripe from 'stripe'
-import { startOfDay } from 'date-fns'
+import { startOfDay, endOfDay, startOfWeek, addDays, isSameDay } from 'date-fns'
 import { Decimal } from '@prisma/client/runtime/library'
 import prisma from '../utils/prisma'
 import logger from '../utils/logger'
@@ -849,4 +849,236 @@ export async function voidStakeCycle(cycleId: string): Promise<void> {
   })
 
   logger.info(`StakeCycle ${cycleId}: voided — PI ${cycle.stripePaymentIntentId ?? 'none'} cancelled`)
+}
+
+// ---------------------------------------------------------------------------
+// Read model — composed daily/home state for the consumer PWA
+// ---------------------------------------------------------------------------
+
+export type DayStatus = 'armed' | 'complete' | 'forfeited' | 'grace' | 'upcoming'
+
+export interface StakeStateResult {
+  /** The user's active (AUTHORIZED) stake cycle, or null if none is open. */
+  cycle: {
+    id: string
+    status: StakeCycleStatus
+    weeklyAmount: number
+    dailySlice: number
+    currency: Currency
+    periodStart: string
+    periodEnd: string
+    daysArmed: number
+    daysCompleted: number
+    daysForfeited: number
+    graceUsed: number
+    graceTotal: number
+    amountSafe: number
+    amountAtRisk: number
+  } | null
+  /** The user's persisted stake configuration (set at stake-setup). */
+  config: {
+    hasConfig: boolean
+    weeklyAmount: number | null
+    currency: Currency
+    forfeitMode: ForfeitMode
+    armingWindowStart: string | null
+    armingWindowEnd: string | null
+    /** Charity NAME the forfeit is routed to (house default for MIDDLE, anti-charity for SAVAGE). */
+    forfeitDestination: string | null
+    /** Charity NAME corporate success donations are routed to (the user's preferred charity). */
+    successDestination: string | null
+  }
+  /** Today's arming state. */
+  today: {
+    date: string
+    isArmed: boolean
+    armedAt: string | null
+    sliceOutcome: SliceOutcome | null
+    workoutId: string | null
+    voiceNote: { id: string; transcript: string | null; recordedAt: string; durationSec: number | null } | null
+    armingWindowStart: string | null
+    armingWindowEnd: string | null
+    withinArmingWindow: boolean
+  }
+  /** Mon→Sun grid for the current week. */
+  week: { label: string; date: string; status: DayStatus; isToday: boolean }[]
+}
+
+const WEEKDAY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+
+function round2(n: number): number {
+  return Math.round(n * 100) / 100
+}
+
+/**
+ * getStakeState — compose the consumer PWA's daily/home state in one read.
+ *
+ * Pure read (no Stripe). Returns the active cycle's progress, the user's
+ * stake config with charity NAMES resolved, today's arming state (+ the
+ * canonical morning VoiceNote if armed), and a Mon→Sun week grid derived
+ * from the user's workouts. Designed to be safe for brand-new users with no
+ * cycle, no config, and no workouts (everything returns null / 'upcoming').
+ */
+export async function getStakeState(userId: string): Promise<StakeStateResult> {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: {
+      currency: true,
+      stakeWeeklyAmount: true,
+      forfeitMode: true,
+      dislikedCharityId: true,
+      preferredCharityId: true,
+      armingWindowStart: true,
+      armingWindowEnd: true,
+    },
+  })
+  if (!user) throw new NotFoundError('User not found')
+
+  const currency = (user.currency ?? 'GBP') as Currency
+  const forfeitMode = user.forfeitMode
+  const weeklyAmount = user.stakeWeeklyAmount ? Number(user.stakeWeeklyAmount) : null
+
+  // ── Resolve charity names (forfeit + success destinations) ────────────────
+  // SAVAGE forfeits route to the anti-charity; MIDDLE to the house default.
+  const [houseCharity, namedCharities] = await Promise.all([
+    forfeitMode === 'MIDDLE'
+      ? prisma.charity.findFirst({ where: { isHouseDefault: true, isActive: true }, select: { name: true } })
+      : Promise.resolve(null),
+    prisma.charity.findMany({
+      where: { id: { in: [user.dislikedCharityId, user.preferredCharityId].filter((x): x is string => !!x) } },
+      select: { id: true, name: true },
+    }),
+  ])
+  const nameById = new Map(namedCharities.map((c) => [c.id, c.name]))
+  const forfeitDestination =
+    forfeitMode === 'SAVAGE'
+      ? (user.dislikedCharityId ? nameById.get(user.dislikedCharityId) ?? null : null)
+      : (houseCharity?.name ?? null)
+  const successDestination = user.preferredCharityId ? nameById.get(user.preferredCharityId) ?? null : null
+
+  // ── Active cycle ──────────────────────────────────────────────────────────
+  const cycleRow = await prisma.stakeCycle.findFirst({
+    where: { userId, status: 'AUTHORIZED' },
+    orderBy: { periodStart: 'desc' },
+  })
+
+  let cycle: StakeStateResult['cycle'] = null
+  if (cycleRow) {
+    const cycleWeekly = Number(cycleRow.stakeAmount)
+    const dailySlice = round2(cycleWeekly / STAKE_CONFIG.cycleDays)
+    const amountSafe = round2(dailySlice * cycleRow.daysCompleted)
+    const undecidedDays = Math.max(0, STAKE_CONFIG.cycleDays - cycleRow.daysCompleted - cycleRow.daysForfeited)
+    const amountAtRisk = round2(dailySlice * undecidedDays)
+    cycle = {
+      id: cycleRow.id,
+      status: cycleRow.status,
+      weeklyAmount: cycleWeekly,
+      dailySlice,
+      currency,
+      periodStart: cycleRow.periodStart.toISOString(),
+      periodEnd: cycleRow.periodEnd.toISOString(),
+      daysArmed: cycleRow.daysArmed,
+      daysCompleted: cycleRow.daysCompleted,
+      daysForfeited: cycleRow.daysForfeited,
+      graceUsed: cycleRow.graceUsed,
+      graceTotal: STAKE_CONFIG.graceSkipsPerCycle,
+      amountSafe,
+      amountAtRisk,
+    }
+  }
+
+  // ── Today's workout / arming state ────────────────────────────────────────
+  const now = new Date()
+  const todayStart = startOfDay(now)
+  const todayEnd = endOfDay(now)
+  const todaysWorkout = await prisma.workout.findFirst({
+    where: { userId, plannedDate: { gte: todayStart, lte: todayEnd } },
+    orderBy: { plannedDate: 'asc' },
+    select: {
+      id: true,
+      armedAt: true,
+      sliceOutcome: true,
+      voiceNote: { select: { id: true, transcript: true, recordedAt: true, durationSec: true } },
+    },
+  })
+
+  const withinArmingWindow = isWithinWindow(now, user.armingWindowStart, user.armingWindowEnd)
+  const today: StakeStateResult['today'] = {
+    date: todayStart.toISOString(),
+    isArmed: !!todaysWorkout?.armedAt,
+    armedAt: todaysWorkout?.armedAt ? todaysWorkout.armedAt.toISOString() : null,
+    sliceOutcome: todaysWorkout?.sliceOutcome ?? null,
+    workoutId: todaysWorkout?.id ?? null,
+    voiceNote: todaysWorkout?.voiceNote
+      ? {
+          id: todaysWorkout.voiceNote.id,
+          transcript: todaysWorkout.voiceNote.transcript,
+          recordedAt: todaysWorkout.voiceNote.recordedAt.toISOString(),
+          durationSec: todaysWorkout.voiceNote.durationSec,
+        }
+      : null,
+    armingWindowStart: user.armingWindowStart,
+    armingWindowEnd: user.armingWindowEnd,
+    withinArmingWindow,
+  }
+
+  // ── Mon→Sun week grid ─────────────────────────────────────────────────────
+  const weekStart = startOfWeek(now, { weekStartsOn: 1 })
+  const weekEnd = endOfDay(addDays(weekStart, 6))
+  const weekWorkouts = await prisma.workout.findMany({
+    where: { userId, plannedDate: { gte: weekStart, lte: weekEnd } },
+    select: { plannedDate: true, status: true, armedAt: true, sliceOutcome: true },
+  })
+
+  const cycleStartDay = cycleRow ? startOfDay(cycleRow.periodStart) : null
+  const week = WEEKDAY_LABELS.map((label, i) => {
+    const day = addDays(weekStart, i)
+    const isToday = isSameDay(day, now)
+    const isFuture = startOfDay(day) > todayStart
+    const w = weekWorkouts.find((x) => isSameDay(x.plannedDate, day))
+
+    let status: DayStatus = 'upcoming'
+    if (w) {
+      if (w.status === 'COMPLETED' || w.status === 'PARTIAL') status = 'complete'
+      else if (w.sliceOutcome === 'FORFEITED') status = 'forfeited'
+      else if (w.sliceOutcome === 'RELEASED') status = 'grace'
+      else if (w.armedAt) status = 'armed'
+      else if (!isFuture && !isToday) status = 'forfeited' // past, planned, never armed
+    } else if (!isFuture && !isToday && cycleStartDay && startOfDay(day) >= cycleStartDay) {
+      // Past day inside an active cycle with no workout at all = a missed day.
+      status = 'forfeited'
+    }
+
+    return { label, date: startOfDay(day).toISOString(), status, isToday }
+  })
+
+  return {
+    cycle,
+    config: {
+      hasConfig: weeklyAmount !== null,
+      weeklyAmount,
+      currency,
+      forfeitMode,
+      armingWindowStart: user.armingWindowStart,
+      armingWindowEnd: user.armingWindowEnd,
+      forfeitDestination,
+      successDestination,
+    },
+    today,
+    week,
+  }
+}
+
+/**
+ * isWithinWindow — best-effort check whether `now` (server time) falls inside the
+ * user's HH:MM arming window. Timezone-naive; good enough for the UI hint, not for
+ * settlement (settlement is driven by the deadline cron, not this).
+ */
+function isWithinWindow(now: Date, start: string | null, end: string | null): boolean {
+  if (!start || !end) return false
+  const mins = now.getHours() * 60 + now.getMinutes()
+  const [sh, sm] = start.split(':').map(Number)
+  const [eh, em] = end.split(':').map(Number)
+  if ([sh, sm, eh, em].some((n) => Number.isNaN(n))) return false
+  return mins >= sh * 60 + sm && mins <= eh * 60 + em
 }

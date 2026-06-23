@@ -63,6 +63,7 @@ export interface Charity {
   website?: string
   isActive: boolean
   featured: boolean
+  isHouseDefault?: boolean
   everyOrgSlug?: string
   regions?: string[]
   tracks?: string[]

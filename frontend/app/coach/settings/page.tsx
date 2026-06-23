@@ -3,17 +3,9 @@
 /**
  * /coach/settings — Coach profile & preferences.
  *
- * REPLACED the old API-calling version with a mock-data, design-system-consistent version.
- *
- * Changes from old page:
- *   - Removed coachApi.getProfile / coachApi.updateProfile calls
- *   - Pre-seeded from MOCK_COACH_PROFILE, saves locally only
- *   - Redesigned to match Ivy "warm ceremony" design system
- *   - Kept all feature toggles (weekly digest, ponder sessions, white-label)
- *
- * MOCK: MOCK_COACH_PROFILE
- * TODO(api): GET /api/coach/profile → MockCoachProfile
- * TODO(api): PATCH /api/coach/profile → updated MockCoachProfile
+ * Wired to real coachApi: getProfile (load) + updateProfile (save).
+ * DEFAULT_PROFILE is empty-field defaults for an unset profile, not seed data.
+ * Feature toggles: weekly digest, ponder sessions, white-label.
  */
 
 import { useState, useEffect } from 'react'

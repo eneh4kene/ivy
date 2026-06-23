@@ -6,8 +6,8 @@
  * Shows: today's arming/stake status, streak, week dots, Circle snapshot,
  * charity impact-to-date, current Season/Sprint progress.
  *
- * MOCK DATA ONLY — all API wiring points marked // TODO(api):
- * §2, §4a, §5b of docs/product-pricing-rework.md.
+ * Fully wired to real APIs. New users (no stake config, no cycle, no circle,
+ * no season, zero impact) get honest empty/pre-cycle states — never mock data.
  */
 
 import { useState, useEffect } from 'react'
@@ -17,17 +17,15 @@ import { useStakeGate } from '@/hooks/useStakeGate'
 import { StakeReNudge } from '@/components/stake-setup/StakeReNudge'
 import { InstallPrompt } from '@/components/pwa/InstallPrompt'
 import {
-  MOCK_DASHBOARD_STAKE,
-  MOCK_WEEK_DAYS,
-  MOCK_STREAK,
-  MOCK_SEASON,
-  MOCK_DASHBOARD_CIRCLE,
-  MOCK_IMPACT,
-  MOCK_DASHBOARD_USER,
-  type DayStatus,
-  type WeekDay,
-} from '@/lib/mock/dashboard'
-import { statsApi, seasonsApi, circlesApi, donationsApi, authApi } from '@/lib/api'
+  stakeApi,
+  statsApi,
+  seasonsApi,
+  circlesApi,
+  donationsApi,
+  type StakeState,
+  type StakeDayStatus,
+} from '@/lib/api'
+import type { Season, Sprint, ImpactWallet } from '@/lib/types'
 import { useAuthStore } from '@/lib/store/auth.store'
 
 // ─── Tokens / helpers ─────────────────────────────────────────────────────────
@@ -36,17 +34,24 @@ function sym(currency: string) {
   return currency === 'GBP' ? '£' : '$'
 }
 
-// ─── Day dot ──────────────────────────────────────────────────────────────────
-
-const DAY_META: Record<DayStatus, { bg: string; ring: string; label: string }> = {
-  armed:    { bg: 'bg-gold-400',       ring: 'ring-gold-400/30 pulse-gold',    label: 'Armed' },
-  complete: { bg: 'bg-sage-400',       ring: '',                                label: 'Done' },
-  forfeited:{ bg: 'bg-ember-500',      ring: '',                                label: 'Forfeited' },
-  grace:    { bg: 'bg-ink-600',        ring: 'ring-gold-400/20',               label: 'Grace' },
-  upcoming: { bg: 'bg-ink-700',        ring: '',                                label: '—' },
+function greeting(): string {
+  const h = new Date().getHours()
+  if (h < 12) return 'Morning'
+  if (h < 18) return 'Afternoon'
+  return 'Evening'
 }
 
-function WeekDot({ day }: { day: WeekDay }) {
+// ─── Day dot ──────────────────────────────────────────────────────────────────
+
+const DAY_META: Record<StakeDayStatus, { bg: string; ring: string }> = {
+  armed:    { bg: 'bg-gold-400',  ring: 'ring-gold-400/30 pulse-gold' },
+  complete: { bg: 'bg-sage-400',  ring: '' },
+  forfeited:{ bg: 'bg-ember-500', ring: '' },
+  grace:    { bg: 'bg-ink-600',   ring: 'ring-gold-400/20' },
+  upcoming: { bg: 'bg-ink-700',   ring: '' },
+}
+
+function WeekDot({ day }: { day: StakeState['week'][number] }) {
   const meta = DAY_META[day.status]
   return (
     <div className="flex flex-col items-center gap-1.5">
@@ -77,10 +82,58 @@ function SectionHead({ label, href }: { label: string; href?: string }) {
 
 // ─── Today's stake status card ────────────────────────────────────────────────
 
-function TodayStakeCard() {
-  const stake = MOCK_DASHBOARD_STAKE
-  const s = sym(stake.currency)
-  const isArmed = MOCK_DASHBOARD_USER.isArmedToday
+function TodayStakeCard({ state }: { state: StakeState }) {
+  const { config, cycle, today } = state
+  const s = sym(cycle?.currency ?? config.currency)
+
+  // No stake configured yet → drive the user to set it up.
+  if (!config.hasConfig) {
+    return (
+      <Link href="/stake-setup">
+        <div className="relative rounded-2xl p-4 overflow-hidden border border-gold-400/30 bg-gold-400/05 glow-sm-gold active:scale-[0.99] transition-all">
+          <div className="relative flex items-start gap-3">
+            <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 bg-gold-400/12">
+              <Shield className="w-5 h-5 text-gold-400" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold text-gold-300">Set up your stake</p>
+              <p className="text-xs text-ink-400 mt-0.5">
+                Put money on the line so your commitment has teeth. Takes a minute.
+              </p>
+            </div>
+            <ArrowRight className="w-4 h-4 shrink-0 mt-0.5 text-gold-400" />
+          </div>
+        </div>
+      </Link>
+    )
+  }
+
+  // Stake configured but no active weekly cycle yet (cycles open Monday).
+  if (!cycle) {
+    return (
+      <Link href="/stake-setup">
+        <div className="relative rounded-2xl p-4 overflow-hidden border border-ink-700/60 surface active:scale-[0.99] transition-all">
+          <div className="relative flex items-start gap-3">
+            <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 bg-ink-700/60">
+              <Shield className="w-5 h-5 text-ink-300" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold text-ink-100">Stake ready · cycle starts Monday</p>
+              <p className="text-xs text-ink-400 mt-0.5">
+                {config.weeklyAmount != null
+                  ? `${s}${config.weeklyAmount}/week on the line once your cycle opens.`
+                  : 'Your weekly cycle opens Monday morning.'}
+              </p>
+            </div>
+            <ChevronRight className="w-4 h-4 shrink-0 mt-0.5 text-ink-500" />
+          </div>
+        </div>
+      </Link>
+    )
+  }
+
+  const isArmed = today.isArmed
+  const daysDecided = cycle.daysCompleted + cycle.daysForfeited
 
   return (
     <Link href="/daily">
@@ -91,7 +144,6 @@ function TodayStakeCard() {
             : 'border-ember-400/30 bg-ember-400/04 glow-ember'
         }`}
       >
-        {/* Subtle glow blob */}
         <div
           className="pointer-events-none absolute -top-8 -right-8 w-32 h-32 rounded-full opacity-30"
           style={{
@@ -102,17 +154,12 @@ function TodayStakeCard() {
         />
 
         <div className="relative flex items-start gap-3">
-          {/* Status icon */}
           <div
             className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
               isArmed ? 'bg-gold-400/12' : 'bg-ember-400/12'
             }`}
           >
-            {isArmed ? (
-              <Shield className={`w-5 h-5 text-gold-400`} />
-            ) : (
-              <Mic className="w-5 h-5 text-ember-400" />
-            )}
+            {isArmed ? <Shield className="w-5 h-5 text-gold-400" /> : <Mic className="w-5 h-5 text-ember-400" />}
           </div>
 
           <div className="flex-1 min-w-0">
@@ -121,8 +168,8 @@ function TodayStakeCard() {
             </p>
             <p className="text-xs text-ink-400 mt-0.5">
               {isArmed
-                ? `${s}${stake.dailySlice} protected · evening review at 6 pm`
-                : `Arm by 9:30 am or today's ${s}${stake.dailySlice} goes to ${stake.forfeitDestination}`}
+                ? `${s}${cycle.dailySlice} protected today`
+                : `Record your voice note${today.armingWindowEnd ? ` by ${today.armingWindowEnd}` : ''} or today's ${s}${cycle.dailySlice} goes${config.forfeitDestination ? ` to ${config.forfeitDestination}` : ' to charity'}`}
             </p>
           </div>
 
@@ -133,31 +180,26 @@ function TodayStakeCard() {
         <div className="relative mt-3.5 pt-3.5 border-t border-ink-700/60">
           <div className="flex items-center justify-between text-xs mb-1.5">
             <span className="text-ink-400">Week cycle</span>
-            <span className="text-ink-400 font-mono tabular-nums">
-              {stake.daysCompleted}/{stake.daysArmed + stake.daysCompleted + (7 - stake.daysCompleted - stake.daysArmed - stake.daysForfeited)} days done
-            </span>
+            <span className="text-ink-400 font-mono tabular-nums">{cycle.daysCompleted}/7 days done</span>
           </div>
           <div className="h-1.5 rounded-full bg-ink-700 overflow-hidden flex gap-0.5">
             {[...Array(7)].map((_, i) => {
-              const done = i < stake.daysCompleted
-              const armed = i === stake.daysCompleted && isArmed
-              const forfeited = i < stake.daysForfeited
+              const forfeited = i < cycle.daysForfeited
+              const done = !forfeited && i < daysDecided
+              const armed = i === daysDecided && isArmed
               return (
                 <div
                   key={i}
                   className={`flex-1 rounded-full transition-all ${
-                    forfeited ? 'bg-ember-500' :
-                    done ? 'bg-sage-400' :
-                    armed ? 'bg-gold-400 pulse-gold' :
-                    'bg-ink-700'
+                    forfeited ? 'bg-ember-500' : done ? 'bg-sage-400' : armed ? 'bg-gold-400 pulse-gold' : 'bg-ink-700'
                   }`}
                 />
               )
             })}
           </div>
           <div className="flex items-center justify-between mt-1.5">
-            <span className="text-2xs text-ink-600 font-mono">{s}{stake.amountSafe} safe</span>
-            <span className="text-2xs text-ink-600 font-mono">{s}{stake.amountAtRisk} at risk</span>
+            <span className="text-2xs text-ink-600 font-mono">{s}{cycle.amountSafe} safe</span>
+            <span className="text-2xs text-ink-600 font-mono">{s}{cycle.amountAtRisk} at risk</span>
           </div>
         </div>
       </div>
@@ -167,10 +209,11 @@ function TodayStakeCard() {
 
 // ─── Streak + week dots ───────────────────────────────────────────────────────
 
-function StreakWeekCard({ streak }: { streak: typeof MOCK_STREAK }) {
+interface StreakView { current: number; longest: number; graceRemaining: number }
+
+function StreakWeekCard({ streak, week }: { streak: StreakView; week: StakeState['week'] }) {
   return (
     <div className="surface rounded-2xl p-4">
-      {/* Streak */}
       <div className="flex items-center gap-2 mb-4">
         <Flame className="w-4 h-4 text-ember-400" />
         <p className="text-sm font-semibold text-ink-50 tabular-nums">
@@ -179,14 +222,12 @@ function StreakWeekCard({ streak }: { streak: typeof MOCK_STREAK }) {
         <span className="ml-auto text-2xs text-ink-600 font-mono">best: {streak.longest}d</span>
       </div>
 
-      {/* Week dots */}
       <div className="flex items-center justify-between">
-        {MOCK_WEEK_DAYS.map((day) => (
+        {week.map((day) => (
           <WeekDot key={day.label} day={day} />
         ))}
       </div>
 
-      {/* Grace */}
       {streak.graceRemaining > 0 && (
         <div className="mt-3 flex items-center gap-1.5 pt-3 border-t border-ink-700">
           <Shield className="w-3 h-3 text-ink-400" />
@@ -201,9 +242,11 @@ function StreakWeekCard({ streak }: { streak: typeof MOCK_STREAK }) {
 
 // ─── Circle snapshot ──────────────────────────────────────────────────────────
 
-function CircleCard() {
-  const circle = MOCK_DASHBOARD_CIRCLE
-  const armedPct = Math.round((circle.membersActive / circle.membersTotal) * 100)
+type MyCircle = Awaited<ReturnType<typeof circlesApi.getMy>>[number]
+
+function CircleCard({ circle }: { circle: MyCircle }) {
+  const total = circle.maxSize || circle.size || circle.members.length
+  const activePct = total > 0 ? Math.round((circle.size / total) * 100) : 0
 
   return (
     <Link href="/circles">
@@ -211,34 +254,38 @@ function CircleCard() {
         <div className="flex items-center gap-2 mb-3">
           <Users className="w-4 h-4 text-periwinkle-400" />
           <p className="text-sm font-semibold text-ink-50">{circle.name}</p>
-          <span className="w-1.5 h-1.5 rounded-full bg-sage-400 pulse-sage ml-auto" />
+          {circle.isActive && <span className="w-1.5 h-1.5 rounded-full bg-sage-400 pulse-sage ml-auto" />}
         </div>
 
-        <p className="text-xs text-ink-400 mb-3">{circle.gameLabel}</p>
+        {circle.seasonTheme && <p className="text-xs text-ink-400 mb-3">{circle.seasonTheme}</p>}
 
-        {/* Members armed progress */}
         <div className="flex items-center gap-2 mb-1">
           <div className="flex-1 h-1.5 rounded-full bg-ink-700 overflow-hidden">
             <div
               className="h-full rounded-full bg-periwinkle-400 transition-all duration-700"
-              style={{ width: `${armedPct}%` }}
+              style={{ width: `${activePct}%` }}
             />
           </div>
           <span className="text-2xs text-ink-400 font-mono">
-            {circle.membersActive}/{circle.membersTotal} armed
+            {circle.size}/{total} members
           </span>
         </div>
+      </div>
+    </Link>
+  )
+}
 
-        <p className="text-2xs text-ink-600">
-          {circle.circleDaysArmedThisWeek} collective days armed this week
+function JoinCircleCard() {
+  return (
+    <Link href="/circles">
+      <div className="surface rounded-2xl p-4 hover:border-periwinkle-400/25 transition-colors active:scale-[0.99]">
+        <div className="flex items-center gap-2 mb-1">
+          <Users className="w-4 h-4 text-periwinkle-400" />
+          <p className="text-sm font-semibold text-ink-50">Join a circle</p>
+        </div>
+        <p className="text-xs text-ink-400">
+          Stake alongside a small group. Accountability hits harder together.
         </p>
-
-        {circle.userHoldsBaton && (
-          <div className="mt-2.5 flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-periwinkle-400/10 border border-periwinkle-400/20">
-            <span className="text-xs">🏃</span>
-            <p className="text-xs font-semibold text-periwinkle-400">You hold the baton</p>
-          </div>
-        )}
       </div>
     </Link>
   )
@@ -246,8 +293,21 @@ function CircleCard() {
 
 // ─── Season / sprint progress ─────────────────────────────────────────────────
 
-function SeasonCard() {
-  const season = MOCK_SEASON
+function pct(start: string, end: string): number {
+  const s = new Date(start).getTime()
+  const e = new Date(end).getTime()
+  const now = Date.now()
+  if (e <= s) return 0
+  return Math.max(0, Math.min(100, Math.round(((now - s) / (e - s)) * 100)))
+}
+
+function daysLeft(end: string): number {
+  return Math.max(0, Math.ceil((new Date(end).getTime() - Date.now()) / (24 * 60 * 60 * 1000)))
+}
+
+function SeasonCard({ season, sprint }: { season: Season; sprint: Sprint | null }) {
+  const seasonProgressPct = pct(season.startDate, season.endDate)
+  const sprintProgressPct = sprint ? pct(sprint.startDate, sprint.endDate) : 0
 
   return (
     <Link href="/seasons">
@@ -255,7 +315,7 @@ function SeasonCard() {
         <div className="flex items-center gap-2 mb-1">
           <Target className="w-4 h-4 text-sage-400" />
           <p className="text-2xs font-bold uppercase tracking-widest text-ink-400">
-            Season {season.seasonNumber} · {season.sprintLabel}
+            Season {season.number}{sprint ? ` · Sprint ${sprint.number}` : ''}
           </p>
         </div>
 
@@ -263,34 +323,34 @@ function SeasonCard() {
           "{season.goal}"
         </p>
 
-        {/* Sprint progress */}
-        <div className="mb-2">
-          <div className="flex items-center justify-between text-2xs text-ink-600 mb-1.5">
-            <span className="font-mono">Sprint {season.sprintNumber}</span>
-            <span className="font-mono">{season.sprintProgressPct}%</span>
+        {sprint && (
+          <div className="mb-2">
+            <div className="flex items-center justify-between text-2xs text-ink-600 mb-1.5">
+              <span className="font-mono">Sprint {sprint.number}</span>
+              <span className="font-mono">{sprintProgressPct}%</span>
+            </div>
+            <div className="h-1.5 rounded-full bg-ink-700 overflow-hidden">
+              <div
+                className="h-full rounded-full bg-sage-400 transition-all duration-700"
+                style={{ width: `${sprintProgressPct}%` }}
+              />
+            </div>
           </div>
-          <div className="h-1.5 rounded-full bg-ink-700 overflow-hidden">
-            <div
-              className="h-full rounded-full bg-sage-400 transition-all duration-700"
-              style={{ width: `${season.sprintProgressPct}%` }}
-            />
-          </div>
-        </div>
+        )}
 
-        {/* Season arc */}
         <div className="flex items-center justify-between text-2xs text-ink-600 mb-1.5">
           <span className="font-mono">Season arc</span>
-          <span className="font-mono">{season.seasonProgressPct}%</span>
+          <span className="font-mono">{seasonProgressPct}%</span>
         </div>
         <div className="h-1 rounded-full bg-ink-700 overflow-hidden">
           <div
             className="h-full rounded-full bg-sage-300/50 transition-all duration-700"
-            style={{ width: `${season.seasonProgressPct}%` }}
+            style={{ width: `${seasonProgressPct}%` }}
           />
         </div>
 
         <p className="text-2xs text-ink-600 mt-2">
-          {season.daysLeftInSprint} days left in this sprint
+          {daysLeft(sprint ? sprint.endDate : season.endDate)} days left in this {sprint ? 'sprint' : 'season'}
         </p>
       </div>
     </Link>
@@ -299,20 +359,17 @@ function SeasonCard() {
 
 // ─── Charity impact card ──────────────────────────────────────────────────────
 
-function ImpactCard() {
-  const impact = MOCK_IMPACT
-  const s = sym(impact.currency)
+function ImpactCard({ impact, currency }: { impact: ImpactWallet; currency: string }) {
+  const s = sym(currency)
+  const lifetime = impact.wallet?.lifetimeDonated ?? 0
+  const count = impact.currentMonth?.donationCount ?? 0
 
   return (
     <Link href="/donations">
       <div className="surface rounded-2xl p-4 hover:border-gold-400/20 transition-colors active:scale-[0.99]">
         <div className="flex items-start gap-3">
-          {/* Charity avatar */}
-          <div
-            className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 text-xs font-bold text-ink-900"
-            style={{ background: `hsl(${152}, 38%, 42%)` }}
-          >
-            {impact.charityLogoInitials}
+          <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 bg-gold-400/12">
+            <Heart className="w-5 h-5 text-gold-400" />
           </div>
 
           <div className="flex-1 min-w-0">
@@ -321,16 +378,16 @@ function ImpactCard() {
             </p>
             <div className="flex items-baseline gap-1.5">
               <span className="font-display text-2xl font-semibold text-ink-50 tabular-nums">
-                {s}{impact.lifetimeDonated}
+                {s}{lifetime}
               </span>
               <span className="text-xs text-ink-400">donated</span>
             </div>
-            <p className="text-xs text-ink-400 mt-0.5 truncate">
-              {impact.charityName} · {impact.donationCount} donations
+            <p className="text-xs text-ink-400 mt-0.5">
+              {count > 0 ? `${count} donation${count === 1 ? '' : 's'} this month` : 'Your giving shows up here'}
             </p>
           </div>
 
-          <Heart className="w-4 h-4 text-gold-400 shrink-0 mt-1" />
+          <ChevronRight className="w-4 h-4 text-ink-500 shrink-0 mt-1" />
         </div>
       </div>
     </Link>
@@ -368,21 +425,54 @@ function QuickActions() {
 export function HomeScreen() {
   const { user: authUser } = useAuthStore()
   const { showNudge: showStakeNudge, currency: gateCurrency } = useStakeGate()
-  const [streak, setStreak] = useState(MOCK_STREAK)
+
+  const [state, setState] = useState<StakeState | null>(null)
+  const [streak, setStreak] = useState<StreakView>({ current: 0, longest: 0, graceRemaining: 0 })
+  const [season, setSeason] = useState<Season | null>(null)
+  const [sprint, setSprint] = useState<Sprint | null>(null)
+  const [circle, setCircle] = useState<MyCircle | null>(null)
+  const [impact, setImpact] = useState<ImpactWallet | null>(null)
+  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    statsApi.getStreak().then((s) => {
-      setStreak({
-        current:        s.currentStreak ?? 0,
-        longest:        s.longestStreak ?? 0,
-        graceRemaining: s.graceDays?.balance ?? 0,
+    let alive = true
+    // Primary state drives the page; secondary cards each fail soft to an empty state.
+    stakeApi.getState()
+      .then((s) => { if (alive) setState(s) })
+      .catch(() => {})
+      .finally(() => { if (alive) setLoading(false) })
+
+    statsApi.getStreak()
+      .then((s) => {
+        if (!alive) return
+        setStreak({
+          current: s.currentStreak ?? 0,
+          longest: s.longestStreak ?? 0,
+          graceRemaining: s.graceDays?.balance ?? 0,
+        })
       })
-    }).catch(() => {})
+      .catch(() => {})
+
+    seasonsApi.getActive()
+      .then((s) => { if (alive) setSeason(s ?? null) })
+      .catch(() => {})
+    seasonsApi.getCurrentSprint()
+      .then((sp) => { if (alive) setSprint(sp ?? null) })
+      .catch(() => {})
+
+    circlesApi.getMy()
+      .then((cs) => { if (alive) setCircle(cs?.[0] ?? null) })
+      .catch(() => {})
+
+    donationsApi.getImpactWallet()
+      .then((w) => { if (alive) setImpact(w ?? null) })
+      .catch(() => {})
+
+    return () => { alive = false }
   }, [])
 
-  const user = authUser
-    ? { firstName: authUser.firstName, isArmedToday: false }
-    : MOCK_DASHBOARD_USER
+  const firstName = authUser?.firstName ?? 'there'
+  const currency = state?.cycle?.currency ?? state?.config.currency ?? 'GBP'
 
   return (
     <div className="min-h-dvh mesh-bg-subtle pb-28">
@@ -394,7 +484,7 @@ export function HomeScreen() {
               {new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' })}
             </p>
             <h1 className="font-display text-xl text-ink-50 tracking-tight leading-snug">
-              Morning, {user.firstName}
+              {greeting()}, {firstName}
             </h1>
           </div>
           <div className="flex items-center gap-1.5">
@@ -409,30 +499,46 @@ export function HomeScreen() {
 
       {/* Scroll content */}
       <div className="px-4 py-4 space-y-4 max-w-lg mx-auto">
-        {/* Deferred stake re-nudge */}
         {showStakeNudge && <StakeReNudge currency={gateCurrency} />}
 
-        {/* Today's primary CTA */}
-        <TodayStakeCard />
+        {loading && !state ? (
+          <div className="space-y-4">
+            <div className="h-28 rounded-2xl surface animate-pulse" />
+            <div className="h-32 rounded-2xl surface animate-pulse" />
+          </div>
+        ) : (
+          <>
+            {/* Today's primary CTA */}
+            {state && <TodayStakeCard state={state} />}
 
-        {/* Streak / week dots */}
-        <StreakWeekCard streak={streak} />
+            {/* Streak / week dots */}
+            <StreakWeekCard streak={streak} week={state?.week ?? []} />
 
-        {/* Quick actions */}
-        <SectionHead label="Go to" />
-        <QuickActions />
+            {/* Quick actions */}
+            <SectionHead label="Go to" />
+            <QuickActions />
 
-        {/* Circle */}
-        <SectionHead label="Your circle" href="/circles" />
-        <CircleCard />
+            {/* Circle */}
+            <SectionHead label="Your circle" href="/circles" />
+            {circle ? <CircleCard circle={circle} /> : <JoinCircleCard />}
 
-        {/* Season */}
-        <SectionHead label="Season arc" href="/seasons" />
-        <SeasonCard />
+            {/* Season */}
+            {season && (
+              <>
+                <SectionHead label="Season arc" href="/seasons" />
+                <SeasonCard season={season} sprint={sprint} />
+              </>
+            )}
 
-        {/* Impact */}
-        <SectionHead label="Your impact" href="/donations" />
-        <ImpactCard />
+            {/* Impact */}
+            {impact && (
+              <>
+                <SectionHead label="Your impact" href="/donations" />
+                <ImpactCard impact={impact} currency={currency} />
+              </>
+            )}
+          </>
+        )}
 
         {/* Bottom whisper */}
         <p className="text-center text-2xs text-ink-700 pb-2">

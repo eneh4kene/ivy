@@ -1,7 +1,7 @@
 'use client'
 
 import { Shield, AlertTriangle } from 'lucide-react'
-import type { StakeStatus } from '@/lib/mock/daily-loop'
+import type { StakeStatus } from './types'
 
 interface StakeBarProps {
   stake: StakeStatus

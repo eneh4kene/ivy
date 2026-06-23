@@ -3,9 +3,7 @@
 /**
  * /circles — Cohort view + active game UI.
  *
- * Uses CirclesScreen (mock data only).
- * TODO(api): replace MOCK_CIRCLE with real API fetch in CirclesScreen when
- *            backend Phase 1 + circlesApi are wired.
+ * Uses CirclesScreen, wired to real circlesApi + circleGamesApi.
  */
 
 import { CirclesScreen } from '@/components/circles/CirclesScreen'

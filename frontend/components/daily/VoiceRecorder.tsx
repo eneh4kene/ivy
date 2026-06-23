@@ -2,7 +2,7 @@
 
 import { useState, useRef, useCallback, useEffect } from 'react'
 import { Mic, Square, Play, Pause, RotateCcw, Check } from 'lucide-react'
-import type { VoiceNote } from '@/lib/mock/daily-loop'
+import type { VoiceNote } from './types'
 import { voiceNotesApi } from '@/lib/api'
 
 /* ── Waveform display ─────────────────────────────────────────────────────── */

@@ -3,32 +3,19 @@
 /**
  * /coach — Coach dashboard: client roster overview.
  *
- * REPLACED the old API-calling version with a mock-data, design-system-consistent version.
- * Old version used coachApi.* real calls. New version is pure mock.
- *
- * Changes from old page:
- *   - Removed all coachApi.* calls (getProfile, getClients, getInviteLink, etc.)
- *   - Replaced with MOCK_COACH_PROFILE + MOCK_COACH_CLIENTS from lib/mock/coach.ts
- *   - Redesigned to match Ivy "warm ceremony" design system (ink/gold/sage/ember tokens,
- *     Lora display font, glass-gold panels, mesh-bg, proper animations)
- *   - At-a-glance arm/follow-through status on each client row
- *   - Invite link section preserved (mock URL, no real API)
- *
- * MOCK: MOCK_COACH_PROFILE, MOCK_COACH_CLIENTS
- * TODO(api): GET /api/coach/profile → MockCoachProfile
- * TODO(api): GET /api/coach/clients → MockCoachClient[]
- * TODO(api): GET /api/coach/invite-link → { url: string }
- * TODO(api): POST /api/coach/invite-link/reset → { url: string }
+ * Wired to real coachApi: getProfile, getClients, getInviteLink.
+ * Clients are segmented into needs-attention / on-track / inactive / pending
+ * from real CoachClient flags (needsAttention, isActive, subscriptionStatus,
+ * isOnboarded). Invite link is the real shareable URL.
  */
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import {
-  Settings, Flame, AlertTriangle, Users, Copy, Check, RefreshCw,
-  MessageCircle, ChevronRight, Link2, TrendingUp, UserX, UserPlus, Shield,
+  Settings, Flame, AlertTriangle, Users, Copy, Check,
+  MessageCircle, ChevronRight, Link2, UserX, Shield,
 } from 'lucide-react'
 import { coachApi, type CoachProfile, type CoachClient } from '@/lib/api'
-import type { MockCoachClient } from '@/lib/mock/coach'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 

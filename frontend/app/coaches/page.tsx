@@ -3,137 +3,54 @@
 /**
  * /coaches — Consumer-facing coach marketplace.
  *
- * Browse Ivy-vetted coaches, filter by specialty, see cards with photo/rating/rate.
+ * Data source: GET /api/coach/marketplace (real API → MarketplaceCoachSummary[]).
  *
- * Data source: GET /api/coach/marketplace (real API).
- * Fields not yet in the schema (hourlyRate, rating, reviewCount, specialties,
- * credentials, yearsCoaching, activeClients, responseHours, testimonials) fall
- * back to the MOCK_MARKETPLACE_COACHES lookup by id, or sensible defaults.
- * When those fields are added to CoachProfile the fallback paths can be removed.
+ * Only fields that actually exist on the backend are shown: displayName, photo,
+ * programmeName/coachingStyle, ivyVetted. Fields that are not yet in the schema
+ * (hourlyRate, rating, reviewCount, specialties, credentials) are intentionally
+ * NOT displayed — no fabricated ratings/rates. When those land in CoachProfile,
+ * surface them here.
  *
- * Key product facts (§5f of docs/product-pricing-rework.md):
- *   - Coach is an optional add-on, available at any time on any plan
+ * Product facts (§5f of docs/product-pricing-rework.md):
+ *   - Coach is an optional add-on, available on any plan
  *   - Ivy takes 0% — coaches bill clients directly
- *   - "Ivy-delivered features are free; humans are paid to the humans."
  */
 
 import { useState, useMemo, useEffect } from 'react'
 import Link from 'next/link'
-import {
-  ArrowLeft, Star, Shield, Clock, ChevronRight, Search, SlidersHorizontal, X,
-} from 'lucide-react'
+import { ArrowLeft, Shield, ChevronRight, Search, X } from 'lucide-react'
 import { coachMarketplaceApi, type MarketplaceCoachSummary } from '@/lib/api'
-import {
-  MOCK_MARKETPLACE_COACHES,
-  type MarketplaceCoach,
-  type Specialty,
-} from '@/lib/mock/coach'
 
-/**
- * Merge real API data with mock fallback for fields not yet in the schema.
- * Once hourlyRate / rating etc. are added to CoachProfile, remove the fallback.
- */
-function mergeWithMock(real: MarketplaceCoachSummary): MarketplaceCoach {
-  const mock = MOCK_MARKETPLACE_COACHES.find((m) => m.id === real.id)
-  return {
-    id: real.id,
-    firstName: real.firstName,
-    lastName: real.lastName,
-    displayName: real.displayName,
-    photoUrl: real.photoUrl ?? mock?.photoUrl ?? `https://api.dicebear.com/7.x/initials/svg?seed=${real.displayName}`,
-    tagline: mock?.tagline ?? real.coachingStyle ?? real.programmeName ?? '',
-    bio: mock?.bio ?? '',
-    specialties: mock?.specialties ?? [],
-    // MOCKED — hourlyRate not in schema; show 0 when unavailable
-    hourlyRate: real.hourlyRate ?? mock?.hourlyRate ?? 0,
-    currency: mock?.currency ?? 'GBP',
-    // MOCKED — rating/reviewCount not in schema
-    rating: real.rating ?? mock?.rating ?? 0,
-    reviewCount: real.reviewCount ?? mock?.reviewCount ?? 0,
-    activeClients: mock?.activeClients ?? 0,
-    yearsCoaching: mock?.yearsCoaching ?? 0,
-    credentials: mock?.credentials ?? [],
-    ivyVetted: real.ivyVetted,
-    available: mock?.available ?? true,
-    responseHours: mock?.responseHours ?? 24,
-    testimonials: mock?.testimonials ?? [],
-    programmes: mock?.programmes ?? (real.programmeName ? [real.programmeName] : []),
-    billingNote: mock?.billingNote ?? `${real.firstName} bills you directly. Ivy takes 0% — you pay exactly what they charge.`,
-  } as MarketplaceCoach
+const AVATAR_HUES = [14, 44, 152, 238, 280, 320]
+function hueFor(seed: string): number {
+  let h = 0
+  for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) >>> 0
+  return AVATAR_HUES[h % AVATAR_HUES.length]
 }
 
-// ─── Specialty labels ─────────────────────────────────────────────────────────
-
-const SPECIALTY_LABELS: Record<Specialty, string> = {
-  'strength':  'Strength',
-  'fat-loss':  'Fat loss',
-  'endurance': 'Endurance',
-  'mindset':   'Mindset',
-  'nutrition': 'Nutrition',
-  'business':  'Business',
-  'career':    'Career',
-  'wellbeing': 'Wellbeing',
-  'sleep':     'Sleep',
-}
-
-const ALL_SPECIALTIES = Object.keys(SPECIALTY_LABELS) as Specialty[]
-
-// ─── Star rating display ──────────────────────────────────────────────────────
-
-function StarRating({ rating, reviewCount }: { rating: number; reviewCount: number }) {
-  return (
-    <div className="flex items-center gap-1">
-      <Star className="w-3 h-3 fill-gold-400 text-gold-400" />
-      <span className="text-xs font-semibold text-gold-400 tabular-nums">{rating.toFixed(1)}</span>
-      <span className="text-2xs text-ink-400">({reviewCount})</span>
-    </div>
-  )
-}
-
-// ─── Coach card ───────────────────────────────────────────────────────────────
-
-function CoachCard({ coach }: { coach: MarketplaceCoach }) {
+function CoachCard({ coach }: { coach: MarketplaceCoachSummary }) {
+  const name = coach.displayName || `${coach.firstName} ${coach.lastName}`.trim()
+  const tagline = coach.coachingStyle || coach.programmeName || ''
   return (
     <Link href={`/coaches/${coach.id}`} className="block">
-      <div
-        className="
-          relative rounded-2xl surface overflow-hidden
-          hover:border-gold-400/20 active:scale-[0.99]
-          transition-all duration-200 cursor-pointer group
-          animate-fade-in
-        "
-        style={{ animationDelay: '0ms' }}
-      >
-        {/* Availability ribbon */}
-        {!coach.available && (
-          <div className="absolute top-3 right-3 z-10 px-2 py-0.5 rounded-full bg-ink-700 border border-ink-600 text-2xs text-ink-400 font-medium">
-            Waitlist
-          </div>
-        )}
-        {coach.available && (
-          <div className="absolute top-3 right-3 z-10 flex items-center gap-1 px-2 py-0.5 rounded-full bg-sage-400/10 border border-sage-400/20">
-            <span className="w-1.5 h-1.5 rounded-full bg-sage-400" />
-            <span className="text-2xs text-sage-400 font-medium">Available</span>
-          </div>
-        )}
-
-        <div className="p-4 flex gap-4">
-          {/* Photo */}
+      <div className="relative rounded-2xl surface overflow-hidden hover:border-gold-400/20 active:scale-[0.99] transition-all duration-200 cursor-pointer group animate-fade-in">
+        <div className="p-4 flex gap-4 items-center">
+          {/* Photo / initials */}
           <div className="relative shrink-0">
-            <div className="w-16 h-16 rounded-xl overflow-hidden bg-ink-700">
-              {/* MOCK: photo placeholder from unsplash */}
-              <img
-                src={coach.photoUrl}
-                alt={coach.displayName}
-                className="w-full h-full object-cover"
-                loading="lazy"
-              />
+            <div className="w-16 h-16 rounded-xl overflow-hidden bg-ink-700 flex items-center justify-center">
+              {coach.photoUrl ? (
+                <img src={coach.photoUrl} alt={name} className="w-full h-full object-cover" loading="lazy" />
+              ) : (
+                <span
+                  className="w-full h-full flex items-center justify-center text-lg font-semibold text-ink-900"
+                  style={{ background: `hsl(${hueFor(name)}, 52%, 56%)` }}
+                >
+                  {name.slice(0, 1).toUpperCase()}
+                </span>
+              )}
             </div>
             {coach.ivyVetted && (
-              <div
-                className="absolute -bottom-1.5 -right-1.5 w-5 h-5 rounded-full bg-ink-900 border border-ink-600 flex items-center justify-center"
-                title="Ivy-vetted coach"
-              >
+              <div className="absolute -bottom-1.5 -right-1.5 w-5 h-5 rounded-full bg-ink-900 border border-ink-600 flex items-center justify-center" title="Ivy-vetted coach">
                 <Shield className="w-2.5 h-2.5 text-gold-400" />
               </div>
             )}
@@ -142,111 +59,49 @@ function CoachCard({ coach }: { coach: MarketplaceCoach }) {
           {/* Info */}
           <div className="flex-1 min-w-0">
             <div className="flex items-start justify-between gap-2 mb-0.5">
-              <h3 className="font-display text-base font-semibold text-ink-50 leading-tight">
-                {coach.displayName}
-              </h3>
+              <h3 className="font-display text-base font-semibold text-ink-50 leading-tight">{name}</h3>
               <ChevronRight className="w-4 h-4 text-ink-400 shrink-0 mt-0.5 group-hover:text-gold-400 transition-colors" />
             </div>
-
-            <p className="text-xs text-ink-400 italic mb-2 leading-snug">
-              "{coach.tagline}"
-            </p>
-
-            <div className="flex items-center gap-3 mb-2.5">
-              <StarRating rating={coach.rating} reviewCount={coach.reviewCount} />
-              <span className="text-2xs text-ink-400">·</span>
-              <span className="text-2xs text-ink-400">{coach.yearsCoaching}yr exp</span>
-              <span className="text-2xs text-ink-400">·</span>
-              <span className="text-2xs text-ink-400">{coach.activeClients} clients</span>
-            </div>
-
-            {/* Specialties */}
-            <div className="flex flex-wrap gap-1 mb-3">
-              {coach.specialties.slice(0, 3).map((s) => (
-                <span
-                  key={s}
-                  className="px-2 py-0.5 rounded-full bg-ink-700 border border-ink-600 text-2xs text-ink-200 font-medium capitalize"
-                >
-                  {SPECIALTY_LABELS[s]}
-                </span>
-              ))}
-            </div>
+            {tagline && <p className="text-xs text-ink-400 italic leading-snug">&ldquo;{tagline}&rdquo;</p>}
+            {coach.programmeName && coach.coachingStyle && (
+              <p className="text-2xs text-ink-500 mt-1.5">{coach.programmeName}</p>
+            )}
+            {coach.ivyVetted && (
+              <span className="inline-flex items-center gap-1 mt-2 px-2 py-0.5 rounded-full bg-gold-400/10 border border-gold-400/20 text-2xs text-gold-400 font-medium">
+                <Shield className="w-2.5 h-2.5" /> Ivy-vetted
+              </span>
+            )}
           </div>
         </div>
-
-        {/* Rate footer */}
-        <div className="px-4 pb-4 pt-0 flex items-center justify-between">
-          <div>
-            <span className="font-display text-xl font-semibold text-ink-50">
-              £{coach.hourlyRate}
-            </span>
-            <span className="text-xs text-ink-400"> / session</span>
-          </div>
-          <div className="flex items-center gap-1 text-2xs text-ink-400">
-            <Clock className="w-3 h-3" />
-            <span>Responds in ~{coach.responseHours}h</span>
-          </div>
-        </div>
-
-        {/* Subtle hover glow */}
-        <div className="absolute inset-0 rounded-2xl pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-300"
-          style={{ boxShadow: 'inset 0 0 0 1px rgba(204,163,72,0.12)' }}
-        />
       </div>
     </Link>
   )
 }
 
-// ─── Main page ────────────────────────────────────────────────────────────────
-
 export default function CoachMarketplacePage() {
   const [searchQuery, setSearchQuery] = useState('')
-  const [activeSpecialty, setActiveSpecialty] = useState<Specialty | null>(null)
-  const [showFilters, setShowFilters] = useState(false)
-  const [coaches, setCoaches] = useState<MarketplaceCoach[]>(
-    // Start with mock data while the real fetch loads, so the page isn't blank
-    MOCK_MARKETPLACE_COACHES,
-  )
+  const [coaches, setCoaches] = useState<MarketplaceCoachSummary[]>([])
   const [loading, setLoading] = useState(true)
 
-  // Fetch real coaches from the backend
   useEffect(() => {
+    let alive = true
     coachMarketplaceApi.list()
-      .then((realCoaches) => {
-        if (realCoaches.length > 0) {
-          // Merge real data with mock fallbacks for schema-missing fields
-          setCoaches(realCoaches.map(mergeWithMock))
-        }
-        // If the API returns 0 results (no COACH users yet), keep the mock data
-        // so the page still renders meaningfully during development.
-      })
-      .catch(() => {
-        // On error keep mock data — non-fatal, marketplace degrades gracefully
-      })
-      .finally(() => setLoading(false))
+      .then((list) => { if (alive) setCoaches(list) })
+      .catch(() => {})
+      .finally(() => { if (alive) setLoading(false) })
+    return () => { alive = false }
   }, [])
 
-  // Filters run client-side on whatever data we have (real or mock)
   const filtered = useMemo(() => {
-    let list = coaches
-    if (activeSpecialty) {
-      list = list.filter((c) => c.specialties.includes(activeSpecialty))
-    }
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase()
-      list = list.filter((c) =>
-        c.displayName.toLowerCase().includes(q) ||
-        c.tagline.toLowerCase().includes(q) ||
-        c.bio.toLowerCase().includes(q) ||
-        c.specialties.some((s) => s.includes(q))
-      )
-    }
-    return list
-  }, [searchQuery, activeSpecialty, coaches])
-
-  // MOCK: client has no coach yet
-  // TODO(api): GET /api/user/coach → check if user has an active coach
-  const hasCoach = false
+    if (!searchQuery.trim()) return coaches
+    const q = searchQuery.toLowerCase()
+    return coaches.filter((c) => {
+      const name = (c.displayName || `${c.firstName} ${c.lastName}`).toLowerCase()
+      return name.includes(q) ||
+        (c.programmeName ?? '').toLowerCase().includes(q) ||
+        (c.coachingStyle ?? '').toLowerCase().includes(q)
+    })
+  }, [searchQuery, coaches])
 
   return (
     <div className="min-h-dvh mesh-bg-subtle pb-safe-b">
@@ -274,129 +129,69 @@ export default function CoachMarketplacePage() {
             <div>
               <p className="text-sm font-semibold text-ink-50 mb-1">Human expertise, Ivy accountability</p>
               <p className="text-xs text-ink-400 leading-relaxed">
-                Each coach is Ivy-vetted, sets their own rate, and bills you directly — Ivy takes 0%.
+                Each coach is Ivy-vetted and bills you directly — Ivy takes 0%.
                 Add a coach any time. Cancel any time. No lock-in.
               </p>
             </div>
           </div>
         </div>
 
-        {/* ── Already has a coach ── */}
-        {hasCoach && (
-          <Link href="/coaches/my-coach" className="block mb-5">
-            <div className="rounded-2xl surface border-gold-400/20 p-4 flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-gold-400/10 flex items-center justify-center">
-                <Star className="w-5 h-5 text-gold-400" />
-              </div>
-              <div className="flex-1">
-                <p className="text-sm font-semibold text-ink-50">Your coach</p>
-                <p className="text-xs text-ink-400">View your active coaching relationship</p>
-              </div>
-              <ChevronRight className="w-4 h-4 text-ink-400" />
-            </div>
-          </Link>
-        )}
-
         {/* ── Search ── */}
-        <div className="flex gap-2 mb-4">
-          <div className="relative flex-1">
+        {coaches.length > 0 && (
+          <div className="relative flex-1 mb-4">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-ink-400 pointer-events-none" />
             <input
               type="search"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search coaches, specialties…"
-              className="
-                w-full pl-9 pr-4 py-2.5 rounded-xl
-                bg-ink-800 border border-ink-600
-                text-sm text-ink-50 placeholder:text-ink-400
-                focus:outline-none focus:ring-1 focus:ring-gold-400/50 focus:border-gold-400/30
-                transition-colors
-              "
+              placeholder="Search coaches…"
+              className="w-full pl-9 pr-4 py-2.5 rounded-xl bg-ink-800 border border-ink-600 text-sm text-ink-50 placeholder:text-ink-400 focus:outline-none focus:ring-1 focus:ring-gold-400/50 focus:border-gold-400/30 transition-colors"
             />
             {searchQuery && (
-              <button
-                onClick={() => setSearchQuery('')}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-ink-400 hover:text-ink-200"
-                aria-label="Clear search"
-              >
+              <button onClick={() => setSearchQuery('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-ink-400 hover:text-ink-200" aria-label="Clear search">
                 <X className="w-3.5 h-3.5" />
               </button>
             )}
           </div>
-          <button
-            onClick={() => setShowFilters(!showFilters)}
-            className={`
-              w-10 h-10 rounded-xl border flex items-center justify-center shrink-0 transition-colors
-              ${showFilters || activeSpecialty
-                ? 'bg-gold-400/10 border-gold-400/30 text-gold-400'
-                : 'bg-ink-800 border-ink-600 text-ink-400 hover:text-ink-200'}
-            `}
-            aria-label="Filters"
-          >
-            <SlidersHorizontal className="w-4 h-4" />
-          </button>
-        </div>
-
-        {/* ── Specialty filter pills ── */}
-        {showFilters && (
-          <div className="flex flex-wrap gap-1.5 mb-4 animate-fade-in">
-            <button
-              onClick={() => setActiveSpecialty(null)}
-              className={`
-                px-3 py-1.5 rounded-full text-xs font-medium border transition-colors
-                ${activeSpecialty === null
-                  ? 'bg-gold-400 text-ink-900 border-gold-400'
-                  : 'bg-ink-800 text-ink-400 border-ink-600 hover:border-ink-400'}
-              `}
-            >
-              All
-            </button>
-            {ALL_SPECIALTIES.map((s) => (
-              <button
-                key={s}
-                onClick={() => setActiveSpecialty(activeSpecialty === s ? null : s)}
-                className={`
-                  px-3 py-1.5 rounded-full text-xs font-medium border transition-colors
-                  ${activeSpecialty === s
-                    ? 'bg-gold-400 text-ink-900 border-gold-400'
-                    : 'bg-ink-800 text-ink-400 border-ink-600 hover:border-ink-400'}
-                `}
-              >
-                {SPECIALTY_LABELS[s]}
-              </button>
-            ))}
-          </div>
         )}
 
-        {/* ── Result count ── */}
-        <p className="text-2xs text-ink-400 mb-3 uppercase tracking-wider font-medium">
-          {filtered.length} coach{filtered.length !== 1 ? 'es' : ''}{activeSpecialty ? ` · ${SPECIALTY_LABELS[activeSpecialty]}` : ''}
-        </p>
-
-        {/* ── Coach cards ── */}
-        {filtered.length === 0 ? (
+        {/* ── Results ── */}
+        {loading ? (
+          <div className="flex justify-center py-16">
+            <span className="w-6 h-6 rounded-full border-2 border-ink-600 border-t-gold-400 animate-spin" />
+          </div>
+        ) : coaches.length === 0 ? (
+          <div className="text-center py-16">
+            <div className="w-14 h-14 rounded-2xl bg-ink-700 border border-ink-600 flex items-center justify-center mx-auto mb-4">
+              <Shield className="w-6 h-6 text-ink-400" />
+            </div>
+            <p className="text-sm font-semibold text-ink-200 mb-1">No coaches available yet</p>
+            <p className="text-xs text-ink-400 leading-relaxed max-w-xs mx-auto">
+              Ivy-vetted coaches will appear here as they join. For now, Ivy handles your daily accountability solo.
+            </p>
+          </div>
+        ) : filtered.length === 0 ? (
           <div className="text-center py-16">
             <p className="text-ink-400 text-sm">No coaches match your search.</p>
-            <button
-              onClick={() => { setSearchQuery(''); setActiveSpecialty(null) }}
-              className="mt-3 text-xs text-gold-400 hover:text-gold-300 underline underline-offset-2"
-            >
-              Clear filters
+            <button onClick={() => setSearchQuery('')} className="mt-3 text-xs text-gold-400 hover:text-gold-300 underline underline-offset-2">
+              Clear search
             </button>
           </div>
         ) : (
-          <div className="space-y-3">
-            {filtered.map((coach) => (
-              <CoachCard key={coach.id} coach={coach} />
-            ))}
-          </div>
+          <>
+            <p className="text-2xs text-ink-400 mb-3 uppercase tracking-wider font-medium">
+              {filtered.length} coach{filtered.length !== 1 ? 'es' : ''}
+            </p>
+            <div className="space-y-3">
+              {filtered.map((coach) => <CoachCard key={coach.id} coach={coach} />)}
+            </div>
+          </>
         )}
 
         {/* ── Bottom note ── */}
         <div className="mt-8 mb-4 text-center">
           <p className="text-2xs text-ink-400 leading-relaxed">
-            All coaches pass Ivy's basic screening. Billing is direct between you and your coach — Ivy facilitates the accountability layer only.
+            All coaches pass Ivy&rsquo;s screening. Billing is direct between you and your coach — Ivy facilitates the accountability layer only.
           </p>
         </div>
 

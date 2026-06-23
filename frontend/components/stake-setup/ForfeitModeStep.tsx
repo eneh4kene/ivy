@@ -4,10 +4,15 @@
  * Step 2 — Pick forfeit destination mode: MIDDLE or SAVAGE.
  * See §3 of docs/product-pricing-rework.md for product rationale.
  *
- * MOCK DATA ONLY — no backend calls.
+ * The MIDDLE pool is fetched from the real charity catalogue
+ * (donationsApi.getCharities → isHouseDefault). FORFEIT_OPTIONS is static
+ * product copy, not display data.
  */
 
-import { FORFEIT_OPTIONS, HOUSE_CHARITIES, type ForfeitMode } from '@/lib/mock/stake-setup'
+import { useState, useEffect } from 'react'
+import { FORFEIT_OPTIONS, type ForfeitMode } from '@/lib/mock/stake-setup'
+import { donationsApi } from '@/lib/api'
+import type { Charity } from '@/lib/types'
 
 interface ForfeitModeStepProps {
   value: ForfeitMode
@@ -33,6 +38,22 @@ const TEETH_BARS: Record<1 | 2, React.ReactNode> = {
 }
 
 export function ForfeitModeStep({ value, onChange, onNext }: ForfeitModeStepProps) {
+  const [houseCharities, setHouseCharities] = useState<Charity[]>([])
+  const [loadingHouse, setLoadingHouse] = useState(true)
+
+  useEffect(() => {
+    let alive = true
+    donationsApi
+      .getCharities()
+      .then((list) => {
+        if (!alive) return
+        setHouseCharities(list.filter((c) => c.isHouseDefault))
+      })
+      .catch(() => {})
+      .finally(() => { if (alive) setLoadingHouse(false) })
+    return () => { alive = false }
+  }, [])
+
   return (
     <div className="flex flex-col gap-6">
 
@@ -117,25 +138,27 @@ export function ForfeitModeStep({ value, onChange, onNext }: ForfeitModeStepProp
                 {opt.description}
               </p>
 
-              {/* For MIDDLE: show the house charities */}
+              {/* For MIDDLE: show the real house charity pool */}
               {opt.mode === 'MIDDLE' && selected && (
                 <div className="mt-3 pl-8 space-y-1.5">
                   <p className="text-2xs font-semibold uppercase tracking-widest text-ink-400">House charity pool</p>
-                  {HOUSE_CHARITIES.map((c) => (
-                    <div key={c.id} className="flex items-center gap-2">
-                      <div
-                        className="w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold text-ink-900 shrink-0"
-                        style={{ background: `hsl(${c.logoHue}, 60%, 60%)` }}
-                      >
-                        {c.logoInitials[0]}
+                  {loadingHouse ? (
+                    <p className="text-2xs text-ink-400">Loading…</p>
+                  ) : houseCharities.length > 0 ? (
+                    houseCharities.map((c) => (
+                      <div key={c.id} className="flex items-center gap-2">
+                        <div className="w-5 h-5 rounded-full bg-sage-400/20 flex items-center justify-center text-[9px] font-bold text-sage-300 shrink-0">
+                          {c.name[0]}
+                        </div>
+                        <span className="text-xs text-ink-300">{c.name}</span>
+                        {c.category && <span className="text-2xs text-ink-400">· {c.category}</span>}
                       </div>
-                      <span className="text-xs text-ink-300">{c.name}</span>
-                      <span className="text-2xs text-ink-400">· {c.cause}</span>
-                    </div>
-                  ))}
-                  <p className="text-2xs text-ink-400 mt-1">
-                    ⚑ Founder is confirming the final 1–3 vetted orgs
-                  </p>
+                    ))
+                  ) : (
+                    <p className="text-2xs text-ink-400">
+                      A vetted charity you didn&rsquo;t choose. When you slip, your stake goes there.
+                    </p>
+                  )}
                 </div>
               )}
 
