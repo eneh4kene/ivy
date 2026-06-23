@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { useAuthStore } from '@/lib/store/auth.store'
+import { postLoginDestination } from '@/lib/auth-routing'
 import api, { paymentsApi } from '@/lib/api'
 import { Leaf, CheckCircle2, XCircle, ArrowRight, Users } from 'lucide-react'
 
@@ -39,7 +40,7 @@ function VerifyContent() {
 
         setStatus('success')
         if (authUser?.isOnboarded) {
-          setTimeout(() => router.push('/dashboard'), 2000)
+          setTimeout(() => router.push(postLoginDestination(authUser)), 2000)
           return
         }
         if (plan) {
@@ -65,7 +66,7 @@ function VerifyContent() {
       const updated = await api.users.acceptCoachInvite()
       setUser(updated)
       setStatus('success')
-      setTimeout(() => router.push('/dashboard'), 1500)
+      setTimeout(() => router.push(postLoginDestination(updated)), 1500)
     } catch {
       setCoachAction('idle')
     }
@@ -78,7 +79,7 @@ function VerifyContent() {
       const authUser = useAuthStore.getState().user
       if (authUser) setUser({ ...authUser, pendingCoachId: null })
       setStatus('success')
-      setTimeout(() => router.push('/dashboard'), 1500)
+      setTimeout(() => router.push(authUser ? postLoginDestination(authUser) : '/home'), 1500)
     } catch {
       setCoachAction('idle')
     }

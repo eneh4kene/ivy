@@ -30,6 +30,7 @@ import { CharitySelectStep }  from './CharitySelectStep'
 import { ArmingWindowStep }   from './ArmingWindowStep'
 import { ConfirmStep }        from './ConfirmStep'
 import { ExpressConfirmStep } from './ExpressConfirmStep'
+import { EnablePushCard }     from '@/components/pwa/EnablePushCard'
 import { deferStakeGate }     from '@/lib/stake'
 
 import {
@@ -95,6 +96,11 @@ function DoneScreen({ state }: { state: StakeSetupState }) {
         <span className="glass rounded-xl px-3 py-1.5 text-xs text-ink-200 font-mono">
           Arm by {state.armingWindowEnd}
         </span>
+      </div>
+
+      {/* Enable morning reminders — highest-leverage thing to turn on now */}
+      <div className="w-full max-w-xs">
+        <EnablePushCard />
       </div>
 
       {/* CTA */}

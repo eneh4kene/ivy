@@ -15,6 +15,7 @@ import Link from 'next/link'
 import { Flame, Users, Target, Heart, ArrowRight, Shield, ChevronRight, Mic } from 'lucide-react'
 import { useStakeGate } from '@/hooks/useStakeGate'
 import { StakeReNudge } from '@/components/stake-setup/StakeReNudge'
+import { InstallPrompt } from '@/components/pwa/InstallPrompt'
 import {
   MOCK_DASHBOARD_STAKE,
   MOCK_WEEK_DAYS,
@@ -384,7 +385,7 @@ export function HomeScreen() {
     : MOCK_DASHBOARD_USER
 
   return (
-    <div className="min-h-dvh mesh-bg-subtle pb-8">
+    <div className="min-h-dvh mesh-bg-subtle pb-28">
       {/* Header */}
       <div className="sticky top-0 z-10 bg-ink-900/80 backdrop-blur-xl border-b border-ink-700/60 safe-top">
         <div className="px-4 py-3 flex items-center justify-between">
@@ -438,6 +439,9 @@ export function HomeScreen() {
           Ivy · {new Date().getFullYear()} · Your commitment. Your money. Their future.
         </p>
       </div>
+
+      {/* Install-to-Home-Screen nudge (self-hides when installed/dismissed) */}
+      <InstallPrompt />
     </div>
   )
 }

@@ -3,24 +3,10 @@
 import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuthStore } from '@/lib/store/auth.store'
-import type { User } from '@/lib/types'
+import { postLoginDestination } from '@/lib/auth-routing'
 
 const GOOGLE_CLIENT_ID = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID
 const GSI_SRC = 'https://accounts.google.com/gsi/client'
-
-/**
- * Routes a freshly-authenticated user to the right place. Mirrors the
- * magic-link verify page so SSO and email login land identically.
- */
-function destinationFor(user: User, isNewUser: boolean): string {
-  if (user.subscriptionTier === 'COACH') {
-    return user.isOnboarded ? '/coach' : '/coach/settings'
-  }
-  if (isNewUser || !user.isOnboarded) {
-    return '/onboard/welcome'
-  }
-  return '/dashboard'
-}
 
 declare global {
   interface Window {
@@ -59,7 +45,7 @@ export function GoogleSignInButton({ region, tcpaConsent, onError }: Props) {
           region: optsRef.current.region,
           tcpaConsent: optsRef.current.tcpaConsent,
         })
-        router.push(destinationFor(user, isNewUser))
+        router.push(postLoginDestination(user, isNewUser))
       } catch (err: any) {
         onError?.(err?.message || 'Could not sign in with Google. Please try again.')
       }
