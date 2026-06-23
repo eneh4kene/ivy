@@ -242,8 +242,8 @@ export default function SettingsPage() {
 
   return (
     <div className="p-6 sm:p-8 max-w-3xl mx-auto">
-      {/* Header */}
-      <div className="mb-8 animate-fade-in">
+      {/* Header — hidden on mobile, where the layout shows a back-to-home bar */}
+      <div className="mb-8 animate-fade-in hidden md:block">
         <h1 className="text-2xl sm:text-3xl font-bold tracking-tight mb-1">Settings</h1>
         <p className="text-muted-foreground text-sm">Manage your account and preferences</p>
       </div>
@@ -437,7 +437,7 @@ export default function SettingsPage() {
         </SectionCard>
 
         {/* Goals & Track */}
-        <SectionCard title="Goals & Track" description="Define your wellness journey" icon={Target}>
+        <SectionCard title="Goals & Track" description="Your accountability track and what you're working toward" icon={Target}>
           <form onSubmit={handlePreferencesUpdate} className="space-y-4">
             <div className="space-y-1.5">
               <label className="text-sm font-medium">Accountability Track</label>
@@ -498,32 +498,22 @@ export default function SettingsPage() {
                 </p>
                 <Link href="/pricing">
                   <Button variant="outline" size="sm" className="mt-2">
-                    {user?.subscriptionTier === 'CONCIERGE' ? 'View Plans' : 'Upgrade'}
+                    View plans
                     <ChevronRight className="w-3.5 h-3.5 ml-1" />
                   </Button>
                 </Link>
               </div>
             </div>
 
-            {user && (user.subscriptionTier === 'FREE' || user.subscriptionTier === 'PRO') && (
+            {user?.subscriptionTier === 'FREE' && (
               <div className="p-4 rounded-xl border border-primary/20 bg-primary/5">
-                <p className="text-sm font-semibold mb-2.5">
-                  {user.subscriptionTier === 'FREE' ? 'Choose a plan to continue after your trial:' : 'Upgrade to Ivy Plus for:'}
+                <p className="text-sm font-semibold mb-1">Start your commitment</p>
+                <p className="text-sm text-muted-foreground mb-4">
+                  Pick a plan to set your weekly stake and begin your accountability cycle.
                 </p>
-                <ul className="space-y-1.5 text-sm text-muted-foreground mb-4">
-                  {(user.subscriptionTier === 'FREE'
-                    ? [`${getTierPrice('PRO', currency)} — complete AI experience`, `Impact wallet included`, '14-day free trial, no card required']
-                    : [`Larger impact wallet (${currency === 'USD' ? '$55' : '£45'}/month)`, 'Ivy Circles — peer group coaching sessions', 'Quarterly 1-on-1 with peer coach']
-                  ).map(f => (
-                    <li key={f} className="flex items-center gap-2">
-                      <CheckCircle2 className="w-3.5 h-3.5 text-primary flex-shrink-0" />
-                      {f}
-                    </li>
-                  ))}
-                </ul>
                 <Link href="/pricing">
                   <Button className="w-full" size="sm">
-                    {user.subscriptionTier === 'FREE' ? 'Choose a plan' : 'Upgrade to Ivy Plus'}
+                    Choose a plan
                     <ChevronRight className="w-3.5 h-3.5 ml-1.5" />
                   </Button>
                 </Link>
@@ -723,7 +713,7 @@ export default function SettingsPage() {
         </SectionCard>
 
         {/* Charity */}
-        <SectionCard title="Your Cause" description={`Choose up to ${charityLimit === 999 ? 'unlimited' : charityLimit} charities — your wallet splits equally`} icon={Heart}>
+        <SectionCard title="Your Cause" description={`Choose up to ${charityLimit === 999 ? 'unlimited' : charityLimit} ${charityLimit === 1 ? 'cause' : 'causes'} — a forfeited stake is split equally between them`} icon={Heart}>
           {charitiesLoading ? (
             <div className="space-y-2">{[1,2,3].map(i => <div key={i} className="h-12 rounded-lg bg-muted/40 animate-pulse" />)}</div>
           ) : (

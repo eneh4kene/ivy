@@ -1,24 +1,20 @@
+import crypto from 'crypto';
 import twilio from 'twilio';
 import prisma from '../utils/prisma';
 import config from '../config';
 import logger from '../utils/logger';
 import { BadRequestError } from '../utils/errors';
 
-interface PendingVerification {
-  code: string;
-  newPhone: string;
-  expiresAt: Date;
-  attempts: number;
-}
-
-// In-memory store — keyed by userId. Single-process; appropriate for Railway.
-const pending = new Map<string, PendingVerification>();
-
 const TTL_MS = 5 * 60 * 1000;    // 5 minutes
 const MAX_ATTEMPTS = 5;
 
 function generateCode(): string {
-  return String(Math.floor(100000 + Math.random() * 900000));
+  // crypto-grade 6-digit code
+  return String(crypto.randomInt(100000, 1000000));
+}
+
+function hashCode(code: string): string {
+  return crypto.createHash('sha256').update(code.trim()).digest('hex');
 }
 
 function normalisePhone(phone: string): string {
@@ -59,13 +55,14 @@ class PhoneVerifyService {
     const code = generateCode();
     const expiresAt = new Date(Date.now() + TTL_MS);
 
-    pending.set(userId, { code, newPhone, expiresAt, attempts: 0 });
-
-    // Auto-clean after TTL
-    setTimeout(() => {
-      const entry = pending.get(userId);
-      if (entry && entry.expiresAt <= new Date()) pending.delete(userId);
-    }, TTL_MS + 1000);
+    // One pending verification per user — upsert resets code/attempts/expiry.
+    // DB-backed (not in-memory) so a verify request can be served by any API
+    // instance once the app scales beyond a single machine.
+    await prisma.phoneVerification.upsert({
+      where: { userId },
+      create: { userId, codeHash: hashCode(code), newPhone, expiresAt, attempts: 0 },
+      update: { codeHash: hashCode(code), newPhone, expiresAt, attempts: 0 },
+    });
 
     const client = this.getClient();
     if (!client) {
@@ -84,34 +81,43 @@ class PhoneVerifyService {
   }
 
   async verifyOtp(userId: string, code: string): Promise<string> {
-    const entry = pending.get(userId);
+    const entry = await prisma.phoneVerification.findUnique({ where: { userId } });
 
     if (!entry) {
       throw new BadRequestError('No verification in progress. Request a new code.');
     }
     if (entry.expiresAt < new Date()) {
-      pending.delete(userId);
+      await prisma.phoneVerification.delete({ where: { userId } }).catch(() => {});
       throw new BadRequestError('Code expired. Request a new one.');
     }
     if (entry.attempts >= MAX_ATTEMPTS) {
-      pending.delete(userId);
+      await prisma.phoneVerification.delete({ where: { userId } }).catch(() => {});
       throw new BadRequestError('Too many attempts. Request a new code.');
     }
 
-    entry.attempts += 1;
-
-    if (entry.code !== code.trim()) {
-      throw new BadRequestError(`Incorrect code. ${MAX_ATTEMPTS - entry.attempts} attempt${MAX_ATTEMPTS - entry.attempts === 1 ? '' : 's'} remaining.`);
+    if (entry.codeHash !== hashCode(code)) {
+      const updated = await prisma.phoneVerification.update({
+        where: { userId },
+        data: { attempts: { increment: 1 } },
+        select: { attempts: true },
+      });
+      const remaining = MAX_ATTEMPTS - updated.attempts;
+      throw new BadRequestError(`Incorrect code. ${remaining} attempt${remaining === 1 ? '' : 's'} remaining.`);
     }
 
-    // Code is correct — update phone in DB
+    // Code is correct — claim the new phone, then clear the pending row. The
+    // unique constraint is the final guard if the number was taken since the
+    // request (race between two accounts verifying the same number).
     const newPhone = entry.newPhone;
-    pending.delete(userId);
-
-    await prisma.user.update({
-      where: { id: userId },
-      data: { phone: newPhone },
-    });
+    try {
+      await prisma.user.update({ where: { id: userId }, data: { phone: newPhone } });
+    } catch (err: any) {
+      if (err?.code === 'P2002') {
+        throw new BadRequestError('That number was just claimed by another account. Try a different one.');
+      }
+      throw err;
+    }
+    await prisma.phoneVerification.delete({ where: { userId } }).catch(() => {});
 
     logger.info(`Phone updated for user ${userId} → ${newPhone}`);
     return newPhone;

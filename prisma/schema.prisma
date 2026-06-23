@@ -130,6 +130,7 @@ model User {
   circleCatchups      CircleCatchup[]
   stakeCycles         StakeCycle[]
   voiceNotes          VoiceNote[]
+  phoneVerification   PhoneVerification?
   coachProfile        CoachProfile?       // set if this user is a COACH
   clients             User[]              @relation("CoachClients")
   coach               User?               @relation("CoachClients", fields: [coachId], references: [id])
@@ -139,6 +140,25 @@ model User {
   @@index([email])
   @@index([companyId])
   @@map("users")
+}
+
+// Pending phone-number change awaiting SMS OTP verification. DB-backed (not
+// in-memory) so request-code and verify-code work across multiple API
+// instances once the app scales beyond a single machine. One pending row per
+// user (upserted on each request); deleted on success/expiry.
+model PhoneVerification {
+  id        String   @id @default(uuid())
+  userId    String   @unique
+  codeHash  String   // sha256 of the 6-digit code — never store plaintext
+  newPhone  String   // E.164, validated + uniqueness-checked at request time
+  attempts  Int      @default(0)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("phone_verifications")
 }
 
 enum CommStyle {
