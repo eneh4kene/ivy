@@ -19,6 +19,7 @@ import {
   Sun, Moon, Flame,
 } from 'lucide-react'
 import { IVY_PRICE, STAKE_MIN_WEEKLY, CURRENCY_SYMBOL, type Currency } from '@/lib/pricing'
+import { Logo } from '@/components/brand/Logo'
 
 // ── The daily loop ────────────────────────────────────────────────────────────
 const LOOP = [
@@ -109,9 +110,7 @@ export default function LandingPage() {
       <nav className="fixed top-0 left-0 right-0 z-50 border-b border-ink-700/60 bg-ink-900/80 backdrop-blur-xl safe-top">
         <div className="max-w-5xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-lg bg-gold-400/10 border border-gold-400/20 flex items-center justify-center">
-              <span className="font-display text-sm text-gold-400 font-semibold italic">I</span>
-            </div>
+            <Logo size={28} className="rounded-lg" />
             <span className="font-display text-base font-semibold text-ink-50">Ivy</span>
           </div>
           <div className="flex items-center gap-2">
@@ -267,9 +266,7 @@ export default function LandingPage() {
       <footer className="border-t border-ink-700/60 safe-bottom">
         <div className="max-w-5xl mx-auto px-4 py-8 flex flex-col sm:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-2">
-            <div className="w-6 h-6 rounded-md bg-gold-400/10 border border-gold-400/20 flex items-center justify-center">
-              <span className="font-display text-xs text-gold-400 font-semibold italic">I</span>
-            </div>
+            <Logo size={24} className="rounded-md" />
             <span className="font-display text-sm font-semibold text-ink-100">Ivy</span>
           </div>
           <p className="text-xs text-ink-500">© 2026 Ivy. All rights reserved.</p>

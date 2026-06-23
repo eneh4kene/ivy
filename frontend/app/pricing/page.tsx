@@ -16,6 +16,7 @@ import {
   ChevronDown, Dumbbell, Star,
 } from 'lucide-react'
 import { IVY_PRICE, STAKE_MIN_WEEKLY, CURRENCY_SYMBOL, type Currency } from '@/lib/pricing'
+import { Logo } from '@/components/brand/Logo'
 
 // ─── Included features (core, always on) ─────────────────────────────────────
 const CORE_FEATURES = [
@@ -191,9 +192,7 @@ export default function PricingPage() {
       <nav className="sticky top-0 z-40 border-b border-ink-700/60 bg-ink-900/80 backdrop-blur-xl safe-top">
         <div className="max-w-2xl mx-auto px-4 h-14 flex items-center justify-between">
           <Link href="/" className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-lg bg-gold-400/10 border border-gold-400/20 flex items-center justify-center">
-              <span className="font-display text-sm text-gold-400 font-semibold italic">I</span>
-            </div>
+            <Logo size={28} className="rounded-lg" />
             <span className="font-display text-base font-semibold text-ink-50">Ivy</span>
           </Link>
           <div className="flex items-center gap-3">
