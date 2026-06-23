@@ -12,7 +12,7 @@
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
-import { Flame, Users, Target, Heart, ArrowRight, Shield, ChevronRight, Mic } from 'lucide-react'
+import { Flame, Users, Target, Heart, ArrowRight, Shield, ChevronRight, Mic, Settings } from 'lucide-react'
 import { useStakeGate } from '@/hooks/useStakeGate'
 import { StakeReNudge } from '@/components/stake-setup/StakeReNudge'
 import { InstallPrompt } from '@/components/pwa/InstallPrompt'
@@ -487,12 +487,21 @@ export function HomeScreen() {
               {greeting()}, {firstName}
             </h1>
           </div>
-          <div className="flex items-center gap-1.5">
-            <Flame className="w-3.5 h-3.5 text-ember-400" />
-            <span className="font-mono text-sm font-medium text-ink-200 tabular-nums">
-              {streak.current}
-            </span>
-            <span className="text-2xs text-ink-600">days</span>
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-1.5">
+              <Flame className="w-3.5 h-3.5 text-ember-400" />
+              <span className="font-mono text-sm font-medium text-ink-200 tabular-nums">
+                {streak.current}
+              </span>
+              <span className="text-2xs text-ink-600">days</span>
+            </div>
+            <Link
+              href="/settings"
+              aria-label="Settings"
+              className="w-9 h-9 -mr-1.5 flex items-center justify-center rounded-full text-ink-400 hover:text-ink-100 hover:bg-ink-700/50 transition-colors"
+            >
+              <Settings className="w-5 h-5" />
+            </Link>
           </div>
         </div>
       </div>
