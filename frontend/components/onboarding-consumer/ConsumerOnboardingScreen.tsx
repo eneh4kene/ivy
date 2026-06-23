@@ -19,6 +19,7 @@ import { ArrowLeft, ArrowRight, Check, Mic, MessageSquare, Shuffle, Phone } from
 import { useVisualViewport } from '@/hooks/useVisualViewport'
 import { usersApi } from '@/lib/api'
 import { useAuthStore } from '@/lib/store/auth.store'
+import { Logo } from '@/components/brand/Logo'
 import {
   TRACK_OPTIONS,
   CHANNEL_OPTIONS,
@@ -123,11 +124,8 @@ function WelcomeStep({ onNext }: { onNext: () => void }) {
     <div className="flex flex-col flex-1 px-4 pt-6 pb-6 animate-fade-in">
       {/* Wordmark */}
       <div className="text-center mb-8">
-        <div
-          className="w-16 h-16 mx-auto rounded-2xl flex items-center justify-center mb-4 border border-gold-400/20 glow-gold"
-          style={{ background: 'rgba(204,163,72,0.08)' }}
-        >
-          <span className="font-display text-2xl text-gold-400 font-semibold italic">I</span>
+        <div className="flex justify-center mb-4">
+          <Logo size={64} className="glow-gold" />
         </div>
         <h1 className="font-display text-3xl text-ink-50 tracking-tight leading-snug">
           Accountability<br />
