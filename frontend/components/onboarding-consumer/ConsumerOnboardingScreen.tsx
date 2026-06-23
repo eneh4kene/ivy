@@ -14,6 +14,7 @@
  */
 
 import { useState, useCallback } from 'react'
+import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { ArrowLeft, ArrowRight, Check, Mic, MessageSquare, Shuffle, Phone } from 'lucide-react'
 import { useVisualViewport } from '@/hooks/useVisualViewport'
@@ -375,6 +376,7 @@ function ChannelStep({
 // ─── Root orchestrator ────────────────────────────────────────────────────────
 
 export function ConsumerOnboardingScreen() {
+  const router = useRouter()
   const [step, setStep] = useState<ConsumerOnboardingStep>('welcome')
   const [state, setState] = useState<OnboardingState>(DEFAULT_ONBOARDING_STATE)
   const storeUser = useAuthStore((s) => s.user)
@@ -404,12 +406,15 @@ export function ConsumerOnboardingScreen() {
       })
       await usersApi.markAsOnboarded()
       await fetchUser().catch(() => {})
-      window.location.href = '/stake-setup'
+      // Soft nav (not window.location) so the in-memory auth store survives —
+      // a hard reload drops it and the /stake-setup gate bounces to /login
+      // before the persisted store rehydrates.
+      router.push('/stake-setup')
     } catch (e: any) {
       setError(e?.message ?? "Couldn't save your details. Check the number and try again.")
       setSubmitting(false)
     }
-  }, [submitting, state.track, state.channelPreference, phone, fetchUser])
+  }, [submitting, state.track, state.channelPreference, phone, fetchUser, router])
 
   const stepIndex = STEPS.indexOf(step)
   const canGoBack = stepIndex > 0
