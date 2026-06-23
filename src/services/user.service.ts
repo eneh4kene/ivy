@@ -156,7 +156,9 @@ class UserService {
     }
 
     // Update user
-    const user = await prisma.user.update({
+    let user;
+    try {
+      user = await prisma.user.update({
       where: { id: userId },
       data,
       select: {
@@ -182,7 +184,15 @@ class UserService {
         preferredDays: true,
         updatedAt: true,
       },
-    });
+      });
+    } catch (err: any) {
+      // Phone is globally unique — surface a clear 409 instead of a masked
+      // "Database error occurred" when the number is already on another account.
+      if (err?.code === 'P2002' && (err?.meta?.target as string[] | undefined)?.includes('phone')) {
+        throw new ConflictError('That phone number is already linked to another account.');
+      }
+      throw err;
+    }
 
     logger.info(`User updated: ${user.id}`);
 
