@@ -899,6 +899,12 @@ export interface StakeStateResult {
     armingWindowStart: string | null
     armingWindowEnd: string | null
     withinArmingWindow: boolean
+    /**
+     * The explicit next-day commitment captured on the user's most recent call
+     * (evening review / opt-in morning call), surfaced as a hint above the
+     * morning voice-note recorder. null if no recent call captured one.
+     */
+    suggestedIntention: { text: string; capturedAt: string } | null
   }
   /** Mon→Sun grid for the current week. */
   week: { label: string; date: string; status: DayStatus; isToday: boolean }[]
@@ -1020,6 +1026,29 @@ export async function getStakeState(userId: string): Promise<StakeStateResult> {
     armingWindowStart: user.armingWindowStart,
     armingWindowEnd: user.armingWindowEnd,
     withinArmingWindow,
+    suggestedIntention: null,
+  }
+
+  // ── Next-day intention hint (from the most recent call's insights) ────────
+  // Surfaced above the morning VN recorder: "Last night you said you'll…".
+  // We scan the few most recent COMPLETED calls and take the first that
+  // captured a clean next_intention (insight.service writes this from the
+  // evening review / opt-in morning call transcript).
+  const recentCalls = await prisma.call.findMany({
+    where: { userId, status: 'COMPLETED' },
+    orderBy: { scheduledAt: 'desc' },
+    take: 8,
+    select: { callInsights: true, scheduledAt: true, createdAt: true },
+  })
+  for (const c of recentCalls) {
+    const text = (c.callInsights as { next_intention?: unknown } | null)?.next_intention
+    if (typeof text === 'string' && text.trim()) {
+      today.suggestedIntention = {
+        text: text.trim(),
+        capturedAt: (c.scheduledAt ?? c.createdAt).toISOString(),
+      }
+      break
+    }
   }
 
   // ── Mon→Sun week grid ─────────────────────────────────────────────────────

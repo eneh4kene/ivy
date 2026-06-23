@@ -710,6 +710,8 @@ export interface StakeState {
     armingWindowStart: string | null
     armingWindowEnd: string | null
     withinArmingWindow: boolean
+    /** Next-day commitment captured on the most recent call — shown as the morning VN hint. */
+    suggestedIntention: { text: string; capturedAt: string } | null
   }
   week: { label: string; date: string; status: StakeDayStatus; isToday: boolean }[]
 }

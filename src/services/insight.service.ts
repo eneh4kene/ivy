@@ -14,6 +14,7 @@ export interface CallInsights {
   completed_outcome: boolean | null; // true=completed, false=missed, null=unknown
   key_insight: string;               // single most notable behavioural signal
   call_summary: string;              // 2-3 sentences from Ivy's perspective — surfaced in the next call
+  next_intention: string | null;     // explicit next-day commitment ("gym 7am, 40min upper body") — surfaced as the morning VN hint
   next_season_goal: string | null;   // SEASON_CLOSE only: user's stated goal for the next season
   memorable_moments: Array<{         // specific facts worth remembering long-term
     content: string;
@@ -76,6 +77,9 @@ key_insight
 
 call_summary
   2-3 sentences written from Ivy's perspective, as if briefing the next Ivy call. What was planned or confirmed? What was the person's energy like? Anything notable?
+
+next_intention
+  The explicit commitment the person made for their NEXT day or session — what they said they'll do, with time and place if they gave them. Verbatim or close paraphrase ("Gym at 7am before work, 40 min upper body" or "Walk after lunch"). This is shown back to them the next morning as a reminder of what they committed to, so write it as a clean action they'd recognise — not a summary of the conversation. null if no clear next-day intention was stated (e.g. they were vague, only rested, or didn't plan ahead).
 
 next_season_goal
   SEASON_CLOSE calls only: the user's stated goal for the next season, in their own words. Extract verbatim or close paraphrase. null for all other call types, or if the user did not state a goal.

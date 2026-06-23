@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, Users, BarChart2, Flame, Shield } from 'lucide-react'
+import { ArrowLeft, Users, BarChart2, Flame, Shield, Sparkles } from 'lucide-react'
 import { useVisualViewport } from '@/hooks/useVisualViewport'
 import { StakeBar } from './StakeBar'
 import { VoiceRecorder } from './VoiceRecorder'
@@ -130,6 +130,41 @@ function ArmedCard({ vn, dailySlice, currency }: { vn: VoiceNote | null; dailySl
             <BarChart2 className="w-4 h-4 text-gold-400" /> Home
           </button>
         </Link>
+      </div>
+    </div>
+  )
+}
+
+/* ── Morning intention hint ───────────────────────────────────────────────── */
+/**
+ * Surfaces the next-day commitment Ivy captured on the last call, so the
+ * morning VN screen isn't a blank page: "Last night you said you'll…".
+ * Dismissible — it's a prompt, not a prescription.
+ */
+function IntentionHint({ intention }: { intention: { text: string; capturedAt: string } }) {
+  const [dismissed, setDismissed] = useState(false)
+  if (dismissed) return null
+
+  // "Last night" if it was captured within the last ~36h, else "Last time".
+  const ageHours = (Date.now() - new Date(intention.capturedAt).getTime()) / 36e5
+  const lead = ageHours <= 36 ? 'Last night you said you’ll' : 'Last time you said you’ll'
+
+  return (
+    <div className="w-full max-w-sm mx-auto mb-5 animate-fade-in">
+      <div className="glass-gold rounded-2xl p-4 space-y-1.5 relative">
+        <div className="flex items-center gap-2">
+          <Sparkles className="w-3.5 h-3.5 text-gold-400" />
+          <span className="text-2xs font-semibold uppercase tracking-widest text-gold-400">{lead}</span>
+          <button
+            onClick={() => setDismissed(true)}
+            className="ml-auto text-2xs text-ink-500 hover:text-ink-300 transition-colors"
+            aria-label="Dismiss hint"
+          >
+            Dismiss
+          </button>
+        </div>
+        <p className="text-sm text-ink-100 leading-relaxed font-display italic">&ldquo;{intention.text}&rdquo;</p>
+        <p className="text-2xs text-ink-400">Still the plan? Say it your way below.</p>
       </div>
     </div>
   )
@@ -286,6 +321,9 @@ export function DailyLoopScreen() {
       ) : (
         <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain flex flex-col">
           <div className="flex-1 flex flex-col items-center justify-center px-4 pb-8">
+            {state?.today.suggestedIntention && (
+              <IntentionHint intention={state.today.suggestedIntention} />
+            )}
             <VoiceRecorder
               onSubmit={onVoiceNoteSubmit}
               prompt={morningPrompt}
