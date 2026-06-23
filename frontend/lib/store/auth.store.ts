@@ -134,6 +134,14 @@ export const useAuthStore = create<AuthState>()(
         user: state.user,
         isAuthenticated: state.isAuthenticated
       }),
+      // Self-heal the token/isAuthenticated desync: if a token survived but the
+      // flag rehydrated stale-false, a logged-in user would otherwise be treated
+      // as logged-out. A token is the source of truth for auth.
+      onRehydrateStorage: () => (state) => {
+        if (state && state.token && !state.isAuthenticated) {
+          state.isAuthenticated = true
+        }
+      },
     }
   )
 )
