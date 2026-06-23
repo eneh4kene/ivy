@@ -6,6 +6,7 @@ import { useState } from 'react'
 import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/lib/store/auth.store'
 import { getTierName } from '@/lib/permissions'
+import { Logo } from '@/components/brand/Logo'
 import {
   LayoutDashboard,
   Zap,
@@ -15,7 +16,6 @@ import {
   LogOut,
   Menu,
   X,
-  Leaf,
   ChevronRight,
   Phone,
   Target,
@@ -49,9 +49,7 @@ export function Sidebar() {
       {/* Logo */}
       <div className="p-6 pb-4">
         <Link href="/dashboard" className="flex items-center gap-3 group">
-          <div className="w-9 h-9 rounded-xl bg-primary/15 border border-primary/30 flex items-center justify-center group-hover:bg-primary/20 transition-colors glow-sm">
-            <Leaf className="w-5 h-5 text-primary" />
-          </div>
+          <Logo size={36} className="glow-sm group-hover:opacity-90 transition-opacity" />
           <span className="text-xl font-bold tracking-tight text-gradient">Ivy</span>
         </Link>
       </div>

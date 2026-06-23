@@ -5,7 +5,8 @@ import { useParams } from 'next/navigation'
 import { inviteApi } from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Leaf, CheckCircle2, XCircle } from 'lucide-react'
+import { CheckCircle2, XCircle } from 'lucide-react'
+import { Logo } from '@/components/brand/Logo'
 
 type Info = {
   coachName: string
@@ -51,9 +52,7 @@ export default function InvitePage() {
     ? <img src={info.logoUrl} alt={brandName} className="h-9" />
     : (
       <div className="flex items-center gap-2.5">
-        <div className="w-10 h-10 rounded-xl bg-primary/15 border border-primary/30 flex items-center justify-center">
-          <Leaf className="w-5 h-5 text-primary" />
-        </div>
+        <Logo size={40} />
         <span className="text-2xl font-bold tracking-tight">{brandName}</span>
       </div>
     )

@@ -7,7 +7,8 @@ import { Button } from '@/components/ui/button'
 import { useAuthStore } from '@/lib/store/auth.store'
 import { postLoginDestination } from '@/lib/auth-routing'
 import api, { paymentsApi } from '@/lib/api'
-import { Leaf, CheckCircle2, XCircle, ArrowRight, Users } from 'lucide-react'
+import { CheckCircle2, XCircle, ArrowRight, Users } from 'lucide-react'
+import { Logo } from '@/components/brand/Logo'
 
 function VerifyContent() {
   const router = useRouter()
@@ -92,9 +93,7 @@ function VerifyContent() {
       <div className="w-full max-w-sm relative animate-fade-in">
         {/* Logo */}
         <div className="flex items-center justify-center gap-2.5 mb-10">
-          <div className="w-10 h-10 rounded-xl bg-primary/15 border border-primary/30 flex items-center justify-center glow-sm">
-            <Leaf className="w-5 h-5 text-primary" />
-          </div>
+          <Logo size={40} className="glow-sm" />
           <span className="text-2xl font-bold tracking-tight text-gradient">Ivy</span>
         </div>
 
