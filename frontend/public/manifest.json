@@ -2,7 +2,7 @@
   "name": "Ivy — The accountability that has teeth",
   "short_name": "Ivy",
   "description": "Put your money where your commitment is. Follow through or your stake goes somewhere you'd hate.",
-  "start_url": "/daily",
+  "start_url": "/home",
   "id": "/daily",
   "display": "standalone",
   "display_override": ["standalone", "minimal-ui"],
