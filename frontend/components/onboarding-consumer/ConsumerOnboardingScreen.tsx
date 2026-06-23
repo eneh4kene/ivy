@@ -1,19 +1,24 @@
 'use client'
 
 /**
- * ConsumerOnboardingScreen — new consumer signup flow.
+ * ConsumerOnboardingScreen — the consumer signup flow (post-checkout).
  *
- * Steps: welcome → track → channel → (hands off to StakeSetupScreen)
+ * Steps: welcome → track → channel (+ phone) → marks user onboarded →
+ * hands off to StakeSetupScreen.
  *
- * MOCK DATA ONLY — all API calls marked // TODO(api):
+ * Track/channel copy is static config from lib/mock/onboarding.ts. The flow
+ * persists track + commStyle + phone via usersApi.updateProfile, then calls
+ * markAsOnboarded (backend requires a phone) and refreshes the auth store so
+ * the user isn't bounced back into onboarding.
  * Follows §1d (channel preference), §5b (one plan) from product-pricing-rework.md.
  */
 
-import { useState, useCallback, useRef, useEffect } from 'react'
+import { useState, useCallback } from 'react'
 import Link from 'next/link'
-import { ArrowLeft, ArrowRight, Check, Mic, MessageSquare, Shuffle, ChevronRight } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Check, Mic, MessageSquare, Shuffle, Phone } from 'lucide-react'
 import { useVisualViewport } from '@/hooks/useVisualViewport'
 import { usersApi } from '@/lib/api'
+import { useAuthStore } from '@/lib/store/auth.store'
 import {
   TRACK_OPTIONS,
   CHANNEL_OPTIONS,
@@ -23,6 +28,12 @@ import {
   type ConsumerOnboardingStep,
   type OnboardingState,
 } from '@/lib/mock/onboarding'
+
+// Lenient E.164-ish check — backend requires a phone to complete onboarding.
+function isValidPhone(p: string): boolean {
+  const cleaned = p.replace(/[\s()-]/g, '')
+  return /^\+?\d{8,15}$/.test(cleaned)
+}
 
 // ─── Progress bar ─────────────────────────────────────────────────────────────
 
@@ -251,12 +262,23 @@ const CHANNEL_COLORS: Record<ChannelPreference, { selected: string; dot: string 
 function ChannelStep({
   value,
   onChange,
+  phone,
+  onPhoneChange,
   onNext,
+  submitting,
+  error,
 }: {
   value: ChannelPreference | null
   onChange: (c: ChannelPreference) => void
+  phone: string
+  onPhoneChange: (p: string) => void
   onNext: () => void
+  submitting: boolean
+  error: string | null
 }) {
+  const phoneValid = isValidPhone(phone)
+  const canContinue = !!value && phoneValid && !submitting
+
   return (
     <div className="flex flex-col flex-1 px-4 pt-2 pb-6 animate-fade-in">
       <div className="mb-6">
@@ -264,6 +286,24 @@ function ChannelStep({
         <p className="text-sm text-ink-400 mt-1.5 leading-snug">
           Voice or text — same price, same system. You can change this in settings.
         </p>
+      </div>
+
+      {/* Phone number — required for the daily check-ins */}
+      <div className="mb-5">
+        <label className="text-xs font-semibold text-ink-200 uppercase tracking-wider">Your phone number</label>
+        <p className="text-2xs text-ink-400 mt-1 mb-2 leading-snug">Ivy reaches you here each day. Include your country code.</p>
+        <div className="relative">
+          <Phone className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-ink-500" />
+          <input
+            type="tel"
+            inputMode="tel"
+            autoComplete="tel"
+            value={phone}
+            onChange={(e) => onPhoneChange(e.target.value)}
+            placeholder="+44 7700 900000"
+            className="w-full pl-10 pr-4 py-3.5 rounded-2xl bg-ink-800/60 border border-ink-600 text-ink-50 text-sm placeholder:text-ink-600 focus:outline-none focus:border-gold-400/60 transition-colors"
+          />
+        </div>
       </div>
 
       {/* The morning VN note */}
@@ -322,8 +362,9 @@ function ChannelStep({
       </div>
 
       <div className="mt-auto">
-        <PrimaryButton onClick={onNext} disabled={!value}>
-          Continue to stake setup <ArrowRight className="inline-block ml-2 w-4 h-4" />
+        {error && <p className="text-center text-xs text-ember-400 mb-2">{error}</p>}
+        <PrimaryButton onClick={onNext} disabled={!canContinue}>
+          {submitting ? 'Setting up…' : <>Continue to stake setup <ArrowRight className="inline-block ml-2 w-4 h-4" /></>}
         </PrimaryButton>
         <p className="text-center text-2xs text-ink-600 mt-3">
           Next: put your money where your commitment is
@@ -338,12 +379,39 @@ function ChannelStep({
 export function ConsumerOnboardingScreen() {
   const [step, setStep] = useState<ConsumerOnboardingStep>('welcome')
   const [state, setState] = useState<OnboardingState>(DEFAULT_ONBOARDING_STATE)
+  const storeUser = useAuthStore((s) => s.user)
+  const fetchUser = useAuthStore((s) => s.fetchUser)
+  const [phone, setPhone] = useState(storeUser?.phone ?? '')
+  const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   const { height: viewportH } = useVisualViewport()
 
   const goBack = useCallback(() => {
     if (step === 'track') setStep('welcome')
     else if (step === 'channel') setStep('track')
   }, [step])
+
+  // Persist track + channel + phone, mark the user onboarded, refresh the store,
+  // then hand off to stake setup. markAsOnboarded needs the phone to be saved
+  // first (backend rejects onboarding without one), so do it in order.
+  const completeOnboarding = useCallback(async () => {
+    if (submitting) return
+    setSubmitting(true)
+    setError(null)
+    try {
+      await usersApi.updateProfile({
+        track: state.track ?? undefined,
+        phone: phone.trim().replace(/\s/g, ''),
+        commStyle: (state.channelPreference ?? 'ADAPTIVE') as ChannelPreference,
+      })
+      await usersApi.markAsOnboarded()
+      await fetchUser().catch(() => {})
+      window.location.href = '/stake-setup'
+    } catch (e: any) {
+      setError(e?.message ?? "Couldn't save your details. Check the number and try again.")
+      setSubmitting(false)
+    }
+  }, [submitting, state.track, state.channelPreference, phone, fetchUser])
 
   const stepIndex = STEPS.indexOf(step)
   const canGoBack = stepIndex > 0
@@ -408,22 +476,11 @@ export function ConsumerOnboardingScreen() {
             <ChannelStep
               value={state.channelPreference}
               onChange={(c) => setState((s) => ({ ...s, channelPreference: c }))}
-              onNext={async () => {
-                // Persist track and channel preference to profile before proceeding
-                try {
-                  await usersApi.updateProfile({
-                    track: state.track ?? undefined,
-                    commStyle: (state.channelPreference === 'CALLS'
-                      ? 'CALLS'
-                      : state.channelPreference === 'TEXTS'
-                      ? 'TEXTS'
-                      : 'ADAPTIVE') as any,
-                  })
-                } catch {
-                  // Non-fatal: profile update best-effort; continue to stake setup
-                }
-                window.location.href = '/stake-setup'
-              }}
+              phone={phone}
+              onPhoneChange={setPhone}
+              onNext={completeOnboarding}
+              submitting={submitting}
+              error={error}
             />
           )}
         </div>

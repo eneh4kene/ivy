@@ -20,7 +20,7 @@ function CheckoutSuccessContent() {
       setCountdown((prev) => {
         if (prev <= 1) {
           clearInterval(timer)
-          router.push('/onboard/welcome')
+          router.push('/onboard-consumer')
           return 0
         }
         return prev - 1
@@ -74,7 +74,7 @@ function CheckoutSuccessContent() {
           </div>
 
           <div className="text-center space-y-4">
-            <Button size="lg" onClick={() => router.push('/onboard/welcome')} className="w-full">
+            <Button size="lg" onClick={() => router.push('/onboard-consumer')} className="w-full">
               Start Onboarding Now
             </Button>
             <p className="text-sm text-muted-foreground">Redirecting in {countdown} seconds...</p>

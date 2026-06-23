@@ -15,7 +15,9 @@ export function postLoginDestination(user: User, isNewUser = false): string {
     return user.isOnboarded ? '/coach' : '/coach/settings'
   }
   if (isNewUser || !user.isOnboarded) {
-    return '/onboard/welcome'
+    // Consumers get the modern stake-aware flow; B2B still uses the legacy
+    // multi-step wizard (company/employee/admin setup).
+    return user.subscriptionTier === 'B2B' ? '/onboard/welcome' : '/onboard-consumer'
   }
   return '/home'
 }

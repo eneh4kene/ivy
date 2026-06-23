@@ -33,7 +33,7 @@ function VerifyContent() {
         if (user.subscriptionTier === 'COACH') {
           destination = user.isOnboarded ? '/coach' : '/coach/settings'
         } else if (!user.isOnboarded) {
-          destination = `/onboard/${user.subscriptionTier === 'B2B' ? 'welcome' : 'welcome'}`
+          destination = user.subscriptionTier === 'B2B' ? '/onboard/welcome' : '/onboard-consumer'
         }
         setTimeout(() => router.push(destination), 1000)
       } catch (err: any) {
