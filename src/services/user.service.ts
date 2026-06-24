@@ -5,6 +5,42 @@ import logger from '../utils/logger';
 // IMPACT_WALLET_MONTHLY import removed in Phase 5: bundled wallet allocation retired (§8).
 import seasonService from './season.service';
 import callService from './call.service';
+import { fromZonedTime } from 'date-fns-tz';
+
+/**
+ * computeOnboardingCallAt — pick a humane time for a brand-new user's single
+ * Day-Zero onboarding call, in their own timezone.
+ *
+ * Preference order:
+ *   1. Their chosen evening slot today, if it's still comfortably ahead.
+ *   2. If that slot has passed but it's not yet late (<21:00 local), call shortly
+ *      (they clearly just signed up and are active) — but never mid-workday,
+ *      because we only reach this branch after the evening slot.
+ *   3. Otherwise (late at night) tomorrow at the evening slot.
+ *
+ * Defaults to a 19:00 evening slot when the user hasn't set one.
+ */
+function computeOnboardingCallAt(
+  timezone: string | null | undefined,
+  eveningCallTime: string | null | undefined,
+  now: Date = new Date(),
+): Date {
+  const tz = timezone || 'Europe/London';
+  const hhmm = eveningCallTime && /^\d{2}:\d{2}$/.test(eveningCallTime) ? eveningCallTime : '19:00';
+  const todayStr = now.toLocaleDateString('en-CA', { timeZone: tz });
+  const slotToday = fromZonedTime(`${todayStr}T${hhmm}:00`, tz);
+  const localHour = (() => {
+    const h = Number(now.toLocaleString('en-GB', { hour: '2-digit', hour12: false, timeZone: tz }));
+    return Number.isFinite(h) ? h % 24 : 12;
+  })();
+
+  // 1. Evening slot still ahead today (≥10 min buffer).
+  if (slotToday.getTime() > now.getTime() + 10 * 60 * 1000) return slotToday;
+  // 2. Slot passed but still a reasonable hour → call shortly.
+  if (localHour < 21) return new Date(now.getTime() + 10 * 60 * 1000);
+  // 3. Late night → tomorrow's evening slot (+24h; DST drift acceptable for beta).
+  return new Date(slotToday.getTime() + 24 * 60 * 60 * 1000);
+}
 
 class UserService {
   /**
@@ -205,7 +241,7 @@ class UserService {
   async markUserAsOnboarded(userId: string) {
     const fullUser = await prisma.user.findUnique({
       where: { id: userId },
-      select: { id: true, goal: true, morningCallTime: true, eveningCallTime: true, phone: true, subscriptionTier: true },
+      select: { id: true, goal: true, morningCallTime: true, eveningCallTime: true, phone: true, subscriptionTier: true, timezone: true },
     });
 
     // Coaches don't need a phone (they receive calls from their clients, not Ivy)
@@ -231,23 +267,20 @@ class UserService {
         .catch((err) => logger.warn(`Failed to create Season 1 for ${userId}:`, err));
     }
 
-    // Schedule first call (non-blocking). Try regular daily calls first; if call times have
-    // already passed today (or weren't set), fire an ONBOARDING call in 5 minutes instead.
+    // Day Zero: schedule ONE onboarding call at a humane hour — never the daily
+    // loop (morning VN + evening review), and never an auto-dial in the middle of
+    // someone's workday. We aim for the evening (when people are free), in the
+    // user's own timezone; if it's already late, we push to tomorrow. The normal
+    // loop takes over from the next day's scheduler. See docs/foundation-run-and-day-zero.md.
     const canCall = fullUser?.phone && fullUser.subscriptionTier !== 'FREE';
     if (canCall) {
       (async () => {
         try {
-          const scheduled = (fullUser.morningCallTime || fullUser.eveningCallTime)
-            ? await callService.scheduleDailyCalls(userId, new Date())
-            : [];
-
-          if (scheduled.length === 0) {
-            const scheduledAt = new Date(Date.now() + 5 * 60 * 1000);
-            await callService.scheduleCall(userId, 'ONBOARDING', scheduledAt);
-            logger.info(`Onboarding call scheduled for user ${userId} in 5 min`);
-          }
+          const at = computeOnboardingCallAt(fullUser.timezone, fullUser.eveningCallTime);
+          await callService.scheduleCall(userId, 'ONBOARDING', at);
+          logger.info(`Onboarding call scheduled for user ${userId} at ${at.toISOString()}`);
         } catch (err) {
-          logger.warn(`Failed to schedule first calls for ${userId}:`, err);
+          logger.warn(`Failed to schedule onboarding call for ${userId}:`, err);
         }
       })();
     }

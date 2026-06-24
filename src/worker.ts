@@ -143,12 +143,14 @@ cron.schedule('5 0 * * 1', async () => {
   );
 });
 
-// ── StakeCycle settle — every Sunday at 23:55 UTC ─────────────────────────
-// Settles all StakeCycles whose periodEnd has passed.
+// ── StakeCycle settle — every night at 23:55 UTC ──────────────────────────
+// DAILY (not weekly): Foundation Runs end on any weekday, so settlement must
+// sweep nightly. settleExpiredStakeCycles only touches cycles whose periodEnd
+// has actually passed, so weekly cycles still settle on their Sunday.
 // settleStakeCycle() captures forfeited slices and releases the rest.
 // SAFETY: real Stripe capture — never run against production until Phase 2
 // money-flow checkpoint is cleared (§ Phase 2 ✋).
-cron.schedule('55 23 * * 0', async () => {
+cron.schedule('55 23 * * *', async () => {
   logger.info('Settling expired StakeCycles...');
   await settleExpiredStakeCycles().catch((err) =>
     logger.error('StakeCycle settle job error:', err)

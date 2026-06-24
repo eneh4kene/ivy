@@ -525,6 +525,15 @@ model StakeCycle {
   // Lifecycle
   status      StakeCycleStatus @default(AUTHORIZED)
 
+  // Foundation Run — a brand-new user's FIRST cycle: a flat low starter stake
+  // (STAKE_CONFIG.foundationFlatAmount) over a shorter-than-weekly window, so the
+  // first commitment is low-friction. Full-price weekly cycles start the cycle
+  // after. daysInCycle = the number of forfeitable days THIS cycle actually spans
+  // (foundation runs are often <7 days), used for per-day slice math instead of
+  // the global STAKE_CONFIG.cycleDays so slices sum to the held amount.
+  isFoundation Boolean @default(false)
+  daysInCycle  Int     @default(7)
+
   // Day-level counters (denormalised for quick settlement logic)
   daysArmed     Int @default(0) // days the VN was recorded before the deadline
   daysCompleted Int @default(0) // armed days where the evening review was positive

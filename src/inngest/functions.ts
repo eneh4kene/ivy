@@ -139,13 +139,14 @@ const stakeCycleOpen = inngest.createFunction(
   }
 );
 
-// ── StakeCycle settle — every Sunday at 23:55 UTC ─────────────────────────
-// Settles all StakeCycles whose periodEnd has passed. settleStakeCycle()
-// captures forfeited slices and releases the rest.
+// ── StakeCycle settle — every night at 23:55 UTC ──────────────────────────
+// DAILY (not weekly): Foundation Runs end on any weekday, so settlement must
+// sweep nightly. settleExpiredStakeCycles only touches cycles whose periodEnd
+// has actually passed, so weekly cycles still settle on their Sunday.
 // SAFETY: real Stripe capture — never run against production until Phase 2
 // money-flow checkpoint is cleared (§ Phase 2 ✋).
 const stakeCycleSettle = inngest.createFunction(
-  { id: 'stakecycle-settle', name: 'Settle expired StakeCycles', triggers: { cron: '55 23 * * 0' } },
+  { id: 'stakecycle-settle', name: 'Settle expired StakeCycles', triggers: { cron: '55 23 * * *' } },
   async ({ step }) => {
     await step.run('settle-expired-stake-cycles', () => settleExpiredStakeCycles());
     return { ok: true };

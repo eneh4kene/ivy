@@ -17,6 +17,21 @@ export const STAKE_CONFIG = {
   forfeitModeDefault: 'MIDDLE' as const,
   /** Stripe auth window in days; weekly cycle fits the ~7-day hold (§2) */
   cycleDays: 7,
+  /**
+   * Foundation Run — a brand-new user's FIRST cycle. A flat low starter stake
+   * (NOT the full weekly amount, NOT prorated) so Day Zero is about proving the
+   * loop works, not the money. Equal to the weekly minimum so the hold passes the
+   * min-stake guard. Full-price weekly cycles begin the cycle after.
+   * See docs/foundation-run-and-day-zero.md.
+   */
+  foundationFlatAmount: { GBP: 7, USD: 10 } as Record<Currency, number>,
+  /**
+   * If fewer than this many forfeitable days remain before the coming Sunday
+   * reset, don't open a tiny stub Foundation Run at signup — defer to the Monday
+   * opener, which opens the Foundation Run as the next full Mon→Sun week (still
+   * flat, still ≤7 days so the Stripe hold is safe).
+   */
+  minFoundationDays: 2,
 } as const
 
 // ---------------------------------------------------------------------------

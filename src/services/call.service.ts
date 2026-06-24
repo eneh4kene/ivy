@@ -9,6 +9,7 @@ import circleService from './circle.service';
 import circleGameService from './circle-game.service';
 import circleCatchupService from './circle-catchup.service';
 import coachService from './coach.service';
+import { STAKE_CONFIG, type Currency } from '../config/pricing';
 
 export type CallType = 'MORNING_PLANNING' | 'EVENING_REVIEW' | 'RESCUE' | 'WEEKLY_PLANNING' | 'MONTHLY_CHECKIN' | 'ONBOARDING' | 'SEASON_CLOSE' | 'COACH_PONDER' | 'ARMING_CHASE';
 
@@ -346,6 +347,19 @@ class CallService {
     const stake_today = stake_weekly != null
       ? Math.round((stake_weekly / 7) * 100) / 100
       : null;
+
+    // Foundation Run framing for the onboarding/first call: the flat starter
+    // stake Ivy can name ("your first run is just £7"), independent of whatever
+    // full weekly amount they set. is_evening_first_call lets the onboarding
+    // flow open with an evening-aware greeting instead of a morning framing.
+    const foundationCurrency = (user?.currency ?? 'GBP') as Currency;
+    const foundation_stake = STAKE_CONFIG.foundationFlatAmount[foundationCurrency];
+    const callLocalHour = (() => {
+      const tz = user?.timezone || 'Europe/London';
+      const h = Number(now.toLocaleString('en-GB', { hour: '2-digit', hour12: false, timeZone: tz }));
+      return Number.isFinite(h) ? h % 24 : 12;
+    })();
+    const is_evening_first_call = completedCallCount === 0 && callLocalHour >= 17;
     const forfeit_destination = (() => {
       if (!user) return null;
       if (user.forfeitMode === 'SAVAGE') {
@@ -465,6 +479,9 @@ class CallService {
 
       // Flags
       is_first_call: completedCallCount === 0,
+      is_evening_first_call,       // first call AND it's evening (≥17:00 local) — onboarding flow greets accordingly
+      foundation_stake,            // flat starter stake for the Foundation Run, in the user's currency
+
       is_first_week_of_month: now.getDate() <= 7,
       is_quarterly_milestone: [12, 24, 36, 48].includes(weeks_in_program),
       days_since_last_interaction,

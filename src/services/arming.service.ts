@@ -611,7 +611,7 @@ export async function runArmingForStage(stage: ArmingStage, now: Date): Promise<
  * Tests must mock stake.service to avoid real network calls.
  */
 export async function openStakeCyclesForActiveUsers(): Promise<void> {
-  const { openStakeCycle } = await import('./stake.service')
+  const { openStakeCycle, openFoundationCycle } = await import('./stake.service')
 
   const users = await prisma.user.findMany({
     where: {
@@ -628,7 +628,18 @@ export async function openStakeCyclesForActiveUsers(): Promise<void> {
 
   for (const user of users) {
     try {
-      await openStakeCycle(user.id)
+      // A user's FIRST cycle is always a flat-rate Foundation Run. This catches
+      // Sat/Sun signups whose mid-week window was too short to open at payment
+      // time (deferred here) — they get the Foundation Run as a full first week.
+      // Everyone with a prior cycle gets the normal full-price weekly open.
+      const priorCycles = await prisma.stakeCycle.count({
+        where: { userId: user.id, status: { not: 'FAILED' } },
+      })
+      if (priorCycles === 0) {
+        await openFoundationCycle(user.id) // default window = full 7-day week
+      } else {
+        await openStakeCycle(user.id)
+      }
       opened++
     } catch (err: any) {
       // "already has an open cycle" is expected on re-run / server restart — not an error

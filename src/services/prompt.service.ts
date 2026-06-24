@@ -367,27 +367,35 @@ const FLOWS: Record<string, FlowFn> = {
 
   onboarding: (ctx) => {
     const track = ctx.track ?? '(to confirm)';
-    const stakeWeekly = ctx.stake_weekly ?? null;
     const forfeitDest = ctx.forfeit_destination ?? null;
     const successCharity = ctx.success_charity_name ?? ctx.charity_name ?? null;
+    const isEvening = ctx.is_evening_first_call === true;
+    const foundationStake = ctx.foundation_stake ?? null;
 
-    // Stake + VN arming explanation: their own money, set weekly; completing keeps it.
-    // Missing forfeits the day's slice to forfeit_destination.
-    // Morning arming = spoken voice note (NOT a live call by default).
-    const stakeLine = stakeWeekly
-      ? `"Your £${stakeWeekly}/week stake is your commitment device — your own money, set by you. Completing each day keeps your daily slice. Miss one and that slice goes to ${forfeitDest ?? 'a charity you didn\'t choose'}. The stake isn't ours — it's yours. That's the teeth." Keep it simple, one explanation.`
+    // Stake + VN arming explanation: the FIRST cycle is a flat low starter stake
+    // (the "Foundation Run") — name that amount, not the full weekly figure, so
+    // Day Zero is low-friction. Completing keeps the daily slice; missing forfeits
+    // it to forfeit_destination. Morning arming = spoken voice note, NOT a live call.
+    const stakeLine = foundationStake
+      ? `"Your first run is just £${foundationStake} on the line — a real stake, training wheels on. Complete each day and you keep that day's slice; miss one and it goes to ${forfeitDest ?? 'a charity you didn\'t choose'}. It's your own money — that's the teeth. From next week it steps up to the weekly stake you set." Keep it simple, one explanation.`
       : `"Your stake is your commitment device — your own money on the line. Complete the day and you keep it. Miss and it forfeits. That's the teeth." Keep it simple.`;
-    const vnLine = `MORNING VN: "Each morning you'll drop a quick voice note — what you're taking on today, said out loud. That arms the day. No VN = unarmed = the day doesn't count."`;
+    const vnLine = `MORNING VN: "Each morning you'll drop a quick voice note — what you're taking on today, said out loud. That arms the day. No VN = unarmed = the day doesn't count." (Mornings are an async voice note; the only live call is the evening one.)`;
     const successCharityLine = successCharity
-      ? `SUCCESS FRAMING: On days you complete, ${successCharity} benefits (via a corporate donation — it fires when the system is live). Tonight it's about keeping your stake.`
+      ? `SUCCESS FRAMING: On days you complete, ${successCharity} benefits (via a corporate donation — it fires when the system is live). Right now it's about keeping your stake.`
       : '';
 
+    // Day Zero can land at any hour. If it's evening, open by acknowledging that
+    // and that they've just joined — don't run a morning "what are you doing today" framing.
+    const welcomeLine = isEvening
+      ? `1. WELCOME (1 min): Warm, genuine. "I know it's evening and you've literally just joined — thanks for picking up. This is our first proper conversation; let's set you up right." No morning framing.`
+      : `1. WELCOME (1 min): Warm, genuine. "This is your first call. Give it a real shot."`;
+
     return [
-      `THIS CALL: Onboarding — first call with Ivy.`,
+      `THIS CALL: Onboarding — first call with Ivy${isEvening ? ' (evening, brand-new user)' : ''}.`,
       `Target: 12-15 minutes. Sets the tone for everything.`,
       '',
       `FLOW:`,
-      `1. WELCOME (1 min): Warm, genuine. "This is your first call. Give it a real shot."`,
+      welcomeLine,
       '',
       `2. UNDERSTAND THEM (4 min):`,
       `   - "What's the real goal behind the goal? What changes if you get there?"`,

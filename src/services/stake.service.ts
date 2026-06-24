@@ -22,6 +22,7 @@
 
 import Stripe from 'stripe'
 import { startOfDay, endOfDay, startOfWeek, addDays, isSameDay } from 'date-fns'
+import { fromZonedTime } from 'date-fns-tz'
 import { Decimal } from '@prisma/client/runtime/library'
 import prisma from '../utils/prisma'
 import logger from '../utils/logger'
@@ -201,29 +202,16 @@ export interface OpenStakeCycleResult {
  * Does NOT move money.  Capture only happens in settleStakeCycle().
  */
 export async function openStakeCycle(userId: string): Promise<OpenStakeCycleResult> {
-  const stripe = getStripe()
-
-  // ── Load user ──────────────────────────────────────────────────────────────
+  // ── Load stake config + enforce minimum (§9 decision 2) ───────────────────
+  // Guard is in the service, not the controller, so it applies at every entry point.
   const user = await prisma.user.findUnique({
     where: { id: userId },
-    select: {
-      id: true,
-      email: true,
-      firstName: true,
-      currency: true,
-      stripeCustomerId: true,
-      stakeWeeklyAmount: true,
-      forfeitMode: true,
-      dislikedCharityId: true,
-    },
+    select: { id: true, currency: true, stakeWeeklyAmount: true },
   })
   if (!user) throw new NotFoundError('User not found')
 
   const currency = (user.currency ?? 'GBP') as Currency
   const stakeAmount = user.stakeWeeklyAmount ? Number(user.stakeWeeklyAmount) : null
-
-  // Enforce minimum stake (§9 decision 2) — guard is in the service, not the controller,
-  // so it applies regardless of the entry point.
   const minStake = STAKE_CONFIG.minWeeklyStake[currency]
   if (stakeAmount === null || stakeAmount < minStake) {
     throw new BadRequestError(
@@ -231,6 +219,132 @@ export async function openStakeCycle(userId: string): Promise<OpenStakeCycleResu
       `(§9 decision 2). Got: ${stakeAmount ?? 'not set'}`
     )
   }
+
+  const now = new Date()
+  const periodEnd = new Date(now.getTime() + STAKE_CONFIG.cycleDays * 24 * 60 * 60 * 1000)
+  return placeHoldAndCreateCycle(userId, {
+    stakeAmount,
+    periodStart: now,
+    periodEnd,
+    daysInCycle: STAKE_CONFIG.cycleDays,
+    isFoundation: false,
+    descriptionLabel: 'weekly stake',
+  })
+}
+
+// ---------------------------------------------------------------------------
+// Foundation Run — a brand-new user's FIRST cycle, at a flat low starter stake.
+// See docs/foundation-run-and-day-zero.md.
+// ---------------------------------------------------------------------------
+
+const ISO_DAY: Record<string, number> = {
+  monday: 1, tuesday: 2, wednesday: 3, thursday: 4, friday: 5, saturday: 6, sunday: 7,
+}
+
+/** Add `days` to a YYYY-MM-DD string, returning a YYYY-MM-DD string (UTC-safe). */
+function addDaysToDateStr(dateStr: string, days: number): string {
+  const [y, m, d] = dateStr.split('-').map(Number)
+  const dt = new Date(Date.UTC(y, m - 1, d))
+  dt.setUTCDate(dt.getUTCDate() + days)
+  return dt.toISOString().slice(0, 10)
+}
+
+/**
+ * computeFoundationWindow — the mid-week Foundation Run window for a signup.
+ *
+ * No teeth on signup day: forfeitable days start TOMORROW (day 1) in the user's
+ * timezone and run to the coming Sunday 23:59. Returns null when too few days
+ * remain (< minFoundationDays, i.e. a Sat/Sun signup) — the caller should defer
+ * to the Monday opener, which opens the Foundation Run as the next full week.
+ */
+export function computeFoundationWindow(
+  tz: string,
+  now: Date = new Date(),
+): { periodStart: Date; periodEnd: Date; daysInCycle: number } | null {
+  const todayStr = now.toLocaleDateString('en-CA', { timeZone: tz })
+  const weekday = now.toLocaleDateString('en-US', { weekday: 'long', timeZone: tz }).toLowerCase()
+  const isoDay = ISO_DAY[weekday] ?? 1
+  const forfeitableDays = 7 - isoDay // day1..coming-Sunday inclusive; 0 if today is Sunday
+  if (forfeitableDays < STAKE_CONFIG.minFoundationDays) return null
+
+  const day1Str = addDaysToDateStr(todayStr, 1)
+  const sundayStr = addDaysToDateStr(todayStr, forfeitableDays)
+  return {
+    periodStart: fromZonedTime(`${day1Str}T00:00:00`, tz),
+    periodEnd: fromZonedTime(`${sundayStr}T23:59:59`, tz),
+    daysInCycle: forfeitableDays,
+  }
+}
+
+/**
+ * openFoundationCycle — open a brand-new user's FIRST cycle at the flat starter
+ * stake (STAKE_CONFIG.foundationFlatAmount — NOT the user's weekly amount, NOT
+ * prorated). `window` defaults to a full 7-day run from now (the Monday-opener
+ * path for Sat/Sun signups); pass an explicit window for the mid-week path.
+ *
+ * Never longer than 7 days, so the Stripe auth hold (~7-day expiry) always fits.
+ */
+export async function openFoundationCycle(
+  userId: string,
+  window?: { periodStart: Date; periodEnd: Date; daysInCycle: number },
+): Promise<OpenStakeCycleResult> {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { id: true, currency: true },
+  })
+  if (!user) throw new NotFoundError('User not found')
+  const currency = (user.currency ?? 'GBP') as Currency
+  const flat = STAKE_CONFIG.foundationFlatAmount[currency]
+
+  const now = new Date()
+  const win = window ?? {
+    periodStart: now,
+    periodEnd: new Date(now.getTime() + STAKE_CONFIG.cycleDays * 24 * 60 * 60 * 1000),
+    daysInCycle: STAKE_CONFIG.cycleDays,
+  }
+
+  return placeHoldAndCreateCycle(userId, {
+    stakeAmount: flat,
+    periodStart: win.periodStart,
+    periodEnd: win.periodEnd,
+    daysInCycle: win.daysInCycle,
+    isFoundation: true,
+    descriptionLabel: 'first run',
+  })
+}
+
+// ---------------------------------------------------------------------------
+
+interface PlaceHoldParams {
+  stakeAmount: number
+  periodStart: Date
+  periodEnd: Date
+  daysInCycle: number
+  isFoundation: boolean
+  /** Human label for the Stripe PI description, e.g. 'weekly stake' / 'first run'. */
+  descriptionLabel: string
+}
+
+/**
+ * placeHoldAndCreateCycle — shared core for openStakeCycle / openFoundationCycle.
+ *
+ * Places the off-session manual-capture auth hold and persists the StakeCycle.
+ * Does NOT move money (G2, G6). Caller supplies the amount, window, and flags;
+ * the min-stake guard and amount resolution live in the callers.
+ */
+async function placeHoldAndCreateCycle(
+  userId: string,
+  params: PlaceHoldParams,
+): Promise<OpenStakeCycleResult> {
+  const stripe = getStripe()
+  const { stakeAmount, periodStart, periodEnd, daysInCycle, isFoundation, descriptionLabel } = params
+
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { id: true, email: true, firstName: true, currency: true, stripeCustomerId: true },
+  })
+  if (!user) throw new NotFoundError('User not found')
+  const currency = (user.currency ?? 'GBP') as Currency
 
   // ── Guard: no overlapping open cycle ──────────────────────────────────────
   const existingOpen = await prisma.stakeCycle.findFirst({
@@ -271,10 +385,9 @@ export async function openStakeCycle(userId: string): Promise<OpenStakeCycleResu
   }
 
   // ── Stripe: create + confirm a manual-capture PaymentIntent off-session ────
-  // capture_method: 'manual' + confirm + off_session → the full weekly stake is
-  // EARMARKED as a real auth hold but NOT moved (G2, G6). On success the intent
-  // sits in 'requires_capture' until settleStakeCycle() captures forfeits.
-  // We pass the stakeAmount in minor units (pence/cents).
+  // capture_method: 'manual' + confirm + off_session → the stake is EARMARKED as
+  // a real auth hold but NOT moved (G2, G6). On success the intent sits in
+  // 'requires_capture' until settleStakeCycle() captures forfeits.
   let paymentIntent: Stripe.PaymentIntent
   try {
     paymentIntent = await stripe.paymentIntents.create({
@@ -287,11 +400,11 @@ export async function openStakeCycle(userId: string): Promise<OpenStakeCycleResu
       off_session: true, // unattended — fails fast if the card needs SCA/3DS
       metadata: {
         userId,
-        purpose: 'stake_cycle',
+        purpose: isFoundation ? 'stake_cycle_foundation' : 'stake_cycle',
         // Guardrail audit trail — recorded so Stripe dashboard shows this is pass-through
         guardrail: 'PASS_THROUGH_NOT_IVY_REVENUE',
       },
-      description: `Ivy weekly stake — ${user.firstName} — ${currency} ${stakeAmount.toFixed(2)}`,
+      description: `Ivy ${descriptionLabel} — ${user.firstName} — ${currency} ${stakeAmount.toFixed(2)}`,
     })
   } catch (err) {
     // Off-session confirm failed — typically authentication_required (SCA) or a
@@ -318,18 +431,17 @@ export async function openStakeCycle(userId: string): Promise<OpenStakeCycleResu
   }
 
   // ── DB: persist StakeCycle ────────────────────────────────────────────────
-  const now = new Date()
-  const periodEnd = new Date(now.getTime() + STAKE_CONFIG.cycleDays * 24 * 60 * 60 * 1000)
-
   const cycle = await prisma.stakeCycle.create({
     data: {
       userId,
-      periodStart: now,
+      periodStart,
       periodEnd,
       stakeAmount,
       stripePaymentIntentId: paymentIntent.id,
       capturedAmount: 0,
       status: 'AUTHORIZED',
+      isFoundation,
+      daysInCycle,
       daysArmed: 0,
       daysCompleted: 0,
       daysForfeited: 0,
@@ -338,8 +450,8 @@ export async function openStakeCycle(userId: string): Promise<OpenStakeCycleResu
   })
 
   logger.info(
-    `StakeCycle opened: ${cycle.id} | user=${userId} | ` +
-    `amount=${currency} ${stakeAmount} | pi=${paymentIntent.id}`
+    `StakeCycle opened${isFoundation ? ' (FOUNDATION)' : ''}: ${cycle.id} | user=${userId} | ` +
+    `amount=${currency} ${stakeAmount} | days=${daysInCycle} | pi=${paymentIntent.id}`
   )
 
   return {
@@ -376,14 +488,16 @@ export async function linkWorkoutToCycle(workoutId: string, userId: string): Pro
   // Exactly one AUTHORIZED cycle exists per user at a time (guarded in openStakeCycle).
   const cycle = await prisma.stakeCycle.findFirst({
     where: { userId, status: 'AUTHORIZED' },
-    select: { id: true, stakeAmount: true, periodEnd: true },
+    select: { id: true, stakeAmount: true, periodEnd: true, daysInCycle: true },
   })
   if (!cycle) return
 
   // Don't link a workout planned beyond this cycle's window (e.g. next week).
   if (workout.plannedDate > cycle.periodEnd) return
 
-  const slice = Math.round((Number(cycle.stakeAmount) / STAKE_CONFIG.cycleDays) * 100) / 100
+  // Slice is the held amount over THIS cycle's day count (foundation runs are
+  // often <7 days), not the global weekly cycleDays, so slices sum to the hold.
+  const slice = Math.round((Number(cycle.stakeAmount) / cycle.daysInCycle) * 100) / 100
   await prisma.workout.update({
     where: { id: workout.id },
     data: { stakeCycleId: cycle.id, stakeSliceAmount: slice },
@@ -472,7 +586,7 @@ export async function settleStakeCycle(cycleId: string): Promise<SettleStakeCycl
   // an unlinked miss would be silently released. Use startOfDay(periodStart) so
   // the cycle's own opening day (cycle opens minutes after midnight) is included.
   const sliceForSweep =
-    Math.round((Number(cycle.stakeAmount) / STAKE_CONFIG.cycleDays) * 100) / 100
+    Math.round((Number(cycle.stakeAmount) / cycle.daysInCycle) * 100) / 100
   const unlinked = await prisma.workout.findMany({
     where: {
       userId: cycle.userId,
@@ -515,8 +629,9 @@ export async function settleStakeCycle(cycleId: string): Promise<SettleStakeCycl
   }
 
   // ── Calculate amounts ─────────────────────────────────────────────────────
-  // Sum forfeited slice amounts. If stakeSliceAmount is null, fall back to weeklyAmount/7.
-  const dailySlice = Number(cycle.stakeAmount) / 7
+  // Sum forfeited slice amounts. If stakeSliceAmount is null, fall back to the
+  // held amount over this cycle's own day count (foundation runs are <7 days).
+  const dailySlice = Number(cycle.stakeAmount) / cycle.daysInCycle
 
   const captureAmountDecimal = toForfeit.reduce(
     (sum, w) => sum + (w.stakeSliceAmount ? Number(w.stakeSliceAmount) : dailySlice),
@@ -862,6 +977,10 @@ export interface StakeStateResult {
   cycle: {
     id: string
     status: StakeCycleStatus
+    /** True when this is the user's flat-rate first cycle (Foundation Run). */
+    isFoundation: boolean
+    /** Forfeitable days this cycle spans (foundation runs are often <7). */
+    daysInCycle: number
     weeklyAmount: number
     dailySlice: number
     currency: Currency
@@ -971,13 +1090,15 @@ export async function getStakeState(userId: string): Promise<StakeStateResult> {
   let cycle: StakeStateResult['cycle'] = null
   if (cycleRow) {
     const cycleWeekly = Number(cycleRow.stakeAmount)
-    const dailySlice = round2(cycleWeekly / STAKE_CONFIG.cycleDays)
+    const dailySlice = round2(cycleWeekly / cycleRow.daysInCycle)
     const amountSafe = round2(dailySlice * cycleRow.daysCompleted)
-    const undecidedDays = Math.max(0, STAKE_CONFIG.cycleDays - cycleRow.daysCompleted - cycleRow.daysForfeited)
+    const undecidedDays = Math.max(0, cycleRow.daysInCycle - cycleRow.daysCompleted - cycleRow.daysForfeited)
     const amountAtRisk = round2(dailySlice * undecidedDays)
     cycle = {
       id: cycleRow.id,
       status: cycleRow.status,
+      isFoundation: cycleRow.isFoundation,
+      daysInCycle: cycleRow.daysInCycle,
       weeklyAmount: cycleWeekly,
       dailySlice,
       currency,
