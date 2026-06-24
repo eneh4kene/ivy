@@ -16,7 +16,7 @@
 import { useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, ArrowRight, Check, Mic, MessageSquare, Shuffle, Phone } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Check, Mic, MessageSquare, Shuffle, Phone, Loader2, ShieldCheck } from 'lucide-react'
 import { useVisualViewport } from '@/hooks/useVisualViewport'
 import { usersApi } from '@/lib/api'
 import { useAuthStore } from '@/lib/store/auth.store'
@@ -258,6 +258,7 @@ function ChannelStep({
   onChange,
   phone,
   onPhoneChange,
+  verifiedPhone,
   onNext,
   submitting,
   error,
@@ -266,13 +267,116 @@ function ChannelStep({
   onChange: (c: ChannelPreference) => void
   phone: string
   onPhoneChange: (p: string) => void
+  verifiedPhone: string | null
   onNext: () => void
   submitting: boolean
   error: string | null
 }) {
-  const phoneCheck = checkPhone(phone)
-  const canContinue = !!value && phoneCheck.valid && !submitting
+  // Phase "enter": pick channel + type number. Phase "code": confirm the SMS
+  // OTP. We verify the number through the same backend endpoints settings uses,
+  // so onboarding can't save an unverified (typo'd / wrong-owner) phone.
+  const [phase, setPhase] = useState<'enter' | 'code'>('enter')
+  const [code, setCode] = useState('')
+  const [sending, setSending] = useState(false)
+  const [verifying, setVerifying] = useState(false)
+  const [otpError, setOtpError] = useState<string | null>(null)
 
+  const phoneCheck = checkPhone(phone)
+  const canSend = !!value && phoneCheck.valid && !sending
+
+  const handleSend = async () => {
+    setOtpError(null)
+    const check = checkPhone(phone)
+    if (!check.valid) { setOtpError(check.error || 'Enter a valid number with country code'); return }
+    // Resumed onboarding: if this number is already verified on the account,
+    // there's nothing to re-confirm — go straight on.
+    if (verifiedPhone && normalizePhone(phone) === verifiedPhone) { onNext(); return }
+    setSending(true)
+    try {
+      await usersApi.requestPhoneOtp(normalizePhone(phone))
+      setCode('')
+      setPhase('code')
+    } catch (e: any) {
+      const msg = e?.response?.data?.error || e?.message || 'Couldn’t send the code. Try again.'
+      // Backend says it's already this user's number → nothing to verify.
+      if (/already your current number/i.test(msg)) { onNext(); return }
+      setOtpError(msg)
+    } finally {
+      setSending(false)
+    }
+  }
+
+  const handleVerify = async () => {
+    if (code.length < 6) return
+    setOtpError(null)
+    setVerifying(true)
+    try {
+      // On success the backend sets+confirms the phone; onNext finishes onboarding.
+      await usersApi.verifyPhoneOtp(code)
+      onNext()
+    } catch (e: any) {
+      setOtpError(e?.response?.data?.error || e?.message || 'Incorrect code. Try again.')
+      setVerifying(false)
+    }
+  }
+
+  // ── Phase 2: enter the SMS code ──────────────────────────────────────────
+  if (phase === 'code') {
+    return (
+      <div className="flex flex-col flex-1 px-4 pt-2 pb-6 animate-fade-in">
+        <div className="mb-6">
+          <div className="w-12 h-12 rounded-2xl bg-gold-400/12 flex items-center justify-center mb-4">
+            <ShieldCheck className="w-6 h-6 text-gold-400" />
+          </div>
+          <h2 className="font-display text-2xl text-ink-50">Confirm your number</h2>
+          <p className="text-sm text-ink-400 mt-1.5 leading-snug">
+            We sent a 6-digit code to <span className="text-ink-100 font-medium">{normalizePhone(phone)}</span>.
+            Enter it to verify Ivy can reach you.
+          </p>
+        </div>
+
+        <input
+          type="text"
+          inputMode="numeric"
+          autoComplete="one-time-code"
+          autoFocus
+          value={code}
+          maxLength={6}
+          onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))}
+          placeholder="••••••"
+          className="w-full py-4 rounded-2xl bg-ink-800/60 border border-ink-600 text-ink-50 text-center text-2xl tracking-[0.5em] font-mono placeholder:text-ink-700 focus:outline-none focus:border-gold-400/60 transition-colors"
+        />
+        {otpError && <p className="text-2xs text-ember-400 mt-2 text-center leading-snug">{otpError}</p>}
+
+        <div className="flex items-center justify-center gap-5 mt-4">
+          <button
+            type="button"
+            onClick={() => { setPhase('enter'); setCode(''); setOtpError(null) }}
+            className="text-xs text-ink-400 hover:text-ink-200 transition-colors"
+          >
+            ← Wrong number
+          </button>
+          <button
+            type="button"
+            disabled={sending}
+            onClick={handleSend}
+            className="text-xs text-ink-400 hover:text-ink-200 transition-colors disabled:opacity-40"
+          >
+            {sending ? 'Sending…' : 'Resend code'}
+          </button>
+        </div>
+
+        <div className="mt-auto pt-8">
+          <PrimaryButton onClick={handleVerify} disabled={code.length < 6 || verifying}>
+            {verifying ? <><Loader2 className="inline-block mr-2 w-4 h-4 animate-spin" /> Verifying…</>
+              : <>Verify &amp; continue <ArrowRight className="inline-block ml-2 w-4 h-4" /></>}
+          </PrimaryButton>
+        </div>
+      </div>
+    )
+  }
+
+  // ── Phase 1: pick channel + enter number ─────────────────────────────────
   return (
     <div className="flex flex-col flex-1 px-4 pt-2 pb-6 animate-fade-in">
       <div className="mb-6">
@@ -285,7 +389,7 @@ function ChannelStep({
       {/* Phone number — required for the daily check-ins */}
       <div className="mb-5">
         <label className="text-xs font-semibold text-ink-200 uppercase tracking-wider">Your phone number</label>
-        <p className="text-2xs text-ink-400 mt-1 mb-2 leading-snug">Ivy reaches you here each day. Include your country code.</p>
+        <p className="text-2xs text-ink-400 mt-1 mb-2 leading-snug">Ivy texts a code to confirm this number. Include your country code.</p>
         <div className="relative">
           <Phone className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-ink-500" />
           <input
@@ -293,7 +397,7 @@ function ChannelStep({
             inputMode="tel"
             autoComplete="tel"
             value={phone}
-            onChange={(e) => onPhoneChange(e.target.value)}
+            onChange={(e) => { onPhoneChange(e.target.value); setOtpError(null) }}
             placeholder="+44 7700 900000"
             className={`w-full pl-10 pr-4 py-3.5 rounded-2xl bg-ink-800/60 border text-ink-50 text-sm placeholder:text-ink-600 focus:outline-none transition-colors ${
               phoneCheck.error ? 'border-ember-400/60 focus:border-ember-400/60' : 'border-ink-600 focus:border-gold-400/60'
@@ -361,12 +465,13 @@ function ChannelStep({
       </div>
 
       <div className="mt-auto">
-        {error && <p className="text-center text-xs text-ember-400 mb-2">{error}</p>}
-        <PrimaryButton onClick={onNext} disabled={!canContinue}>
-          {submitting ? 'Setting up…' : <>Continue to stake setup <ArrowRight className="inline-block ml-2 w-4 h-4" /></>}
+        {(otpError || error) && <p className="text-center text-xs text-ember-400 mb-2">{otpError || error}</p>}
+        <PrimaryButton onClick={handleSend} disabled={!canSend || submitting}>
+          {sending ? <><Loader2 className="inline-block mr-2 w-4 h-4 animate-spin" /> Sending code…</>
+            : <>Send verification code <ArrowRight className="inline-block ml-2 w-4 h-4" /></>}
         </PrimaryButton>
         <p className="text-center text-2xs text-ink-600 mt-3">
-          Next: put your money where your commitment is
+          We&apos;ll text a code to confirm it&apos;s really you
         </p>
       </div>
     </div>
@@ -391,9 +496,10 @@ export function ConsumerOnboardingScreen() {
     else if (step === 'channel') setStep('track')
   }, [step])
 
-  // Persist track + channel + phone, mark the user onboarded, refresh the store,
-  // then hand off to stake setup. markAsOnboarded needs the phone to be saved
-  // first (backend rejects onboarding without one), so do it in order.
+  // Persist track + channel, mark the user onboarded, refresh the store, then
+  // hand off to stake setup. The phone is already set+verified via the SMS OTP
+  // step (so markAsOnboarded — which requires a phone — passes), no need to
+  // resend it here.
   const completeOnboarding = useCallback(async () => {
     if (submitting) return
     setSubmitting(true)
@@ -401,7 +507,6 @@ export function ConsumerOnboardingScreen() {
     try {
       await usersApi.updateProfile({
         track: state.track ?? undefined,
-        phone: normalizePhone(phone),
         commStyle: (state.channelPreference ?? 'ADAPTIVE') as ChannelPreference,
       })
       await usersApi.markAsOnboarded()
@@ -481,6 +586,7 @@ export function ConsumerOnboardingScreen() {
               onChange={(c) => setState((s) => ({ ...s, channelPreference: c }))}
               phone={phone}
               onPhoneChange={setPhone}
+              verifiedPhone={storeUser?.phone ?? null}
               onNext={completeOnboarding}
               submitting={submitting}
               error={error}
