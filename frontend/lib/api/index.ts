@@ -677,6 +677,10 @@ export interface StakeState {
   cycle: {
     id: string
     status: 'AUTHORIZED' | 'SETTLED' | 'VOIDED' | 'FAILED'
+    /** True when this is the user's flat-rate first cycle (Foundation Run). */
+    isFoundation: boolean
+    /** Forfeitable days this cycle spans (foundation runs are often <7). */
+    daysInCycle: number
     weeklyAmount: number
     dailySlice: number
     currency: 'GBP' | 'USD'

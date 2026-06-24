@@ -40,8 +40,8 @@ function ScoreRing({ value, label, color }: { value: number; label: string; colo
 }
 
 const significanceConfig = {
-  major: { label: 'Major Milestone', color: 'text-red-400', dot: 'bg-red-400', bg: 'bg-red-400/10 border-red-400/20' },
-  medium: { label: 'Achievement', color: 'text-amber-400', dot: 'bg-amber-400', bg: 'bg-amber-400/10 border-amber-400/20' },
+  major: { label: 'Major Milestone', color: 'text-ember-400', dot: 'bg-ember-400', bg: 'bg-ember-400/10 border-ember-400/20' },
+  medium: { label: 'Achievement', color: 'text-gold-400', dot: 'bg-gold-400', bg: 'bg-gold-400/10 border-gold-400/20' },
   small: { label: 'Small Win', color: 'text-primary', dot: 'bg-primary', bg: 'bg-primary/10 border-primary/20' },
 }
 
@@ -108,15 +108,15 @@ export default function TransformationPage() {
 
       {/* Latest score card */}
       {latest && !isLoading && (
-        <div className="relative rounded-2xl border border-violet-500/20 bg-violet-500/5 p-6 sm:p-8 mb-6 overflow-hidden">
-          <div className="absolute top-0 right-0 w-48 h-48 bg-violet-500/8 rounded-full blur-3xl" />
+        <div className="relative rounded-2xl border border-periwinkle-400/20 bg-periwinkle-400/5 p-6 sm:p-8 mb-6 overflow-hidden">
+          <div className="absolute top-0 right-0 w-48 h-48 bg-periwinkle-400/8 rounded-full blur-3xl" />
           <div className="relative">
             <div className="flex items-center justify-between mb-6">
               <div>
                 <h2 className="font-bold">Latest Score</h2>
                 <p className="text-xs text-muted-foreground">Week {latest.weekNumber}</p>
               </div>
-              <TrendingUp className="w-5 h-5 text-violet-400" />
+              <TrendingUp className="w-5 h-5 text-periwinkle-400" />
             </div>
             <div className={`grid gap-8 ${canAccessHealthConfidence ? 'grid-cols-3' : 'grid-cols-2'}`}>
               <ScoreRing value={latest.energyScore || 0} label="Energy" color="#f59e0b" />
@@ -198,8 +198,8 @@ export default function TransformationPage() {
                     </div>
                     <div className="grid grid-cols-3 gap-2 text-center">
                       {[
-                        { label: 'Energy', val: score.energyScore, color: 'text-amber-400' },
-                        { label: 'Mood', val: score.moodScore, color: 'text-violet-400' },
+                        { label: 'Energy', val: score.energyScore, color: 'text-gold-400' },
+                        { label: 'Mood', val: score.moodScore, color: 'text-periwinkle-400' },
                         { label: 'Health', val: score.healthConfidence, color: 'text-primary' },
                       ].map((s) => (
                         <div key={s.label} className="bg-muted/40 rounded-lg p-2">
@@ -324,8 +324,8 @@ function ScoreModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: ()
         </div>
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
           {[
-            { key: 'energyScore', label: 'Energy Score', icon: Zap, color: 'text-amber-400' },
-            { key: 'moodScore', label: 'Mood Score', icon: Heart, color: 'text-violet-400' },
+            { key: 'energyScore', label: 'Energy Score', icon: Zap, color: 'text-gold-400' },
+            { key: 'moodScore', label: 'Mood Score', icon: Heart, color: 'text-periwinkle-400' },
             { key: 'healthConfidence', label: 'Health Confidence', icon: Shield, color: 'text-primary' },
           ].map(({ key, label, icon: Icon, color }) => (
             <div key={key} className="space-y-1.5">

@@ -19,10 +19,10 @@ const callTypeLabels: Record<string, string> = {
 const statusIcon = (status: string) => {
   switch (status) {
     case 'COMPLETED': return <CheckCircle className="w-4 h-4 text-primary" />
-    case 'SCHEDULED': return <Clock className="w-4 h-4 text-amber-400" />
+    case 'SCHEDULED': return <Clock className="w-4 h-4 text-gold-400" />
     case 'NO_ANSWER':
     case 'MISSED':
-    case 'FAILED': return <XCircle className="w-4 h-4 text-red-400" />
+    case 'FAILED': return <XCircle className="w-4 h-4 text-ember-400" />
     default: return <Phone className="w-4 h-4 text-muted-foreground" />
   }
 }
@@ -68,7 +68,7 @@ export default function CallsPage() {
           <p className="text-muted-foreground text-sm mt-1">Daily AI accountability calls</p>
         </div>
         <Button onClick={handleRescueCall} disabled={rescuePending} variant="outline" size="sm">
-          <Zap className="w-4 h-4 mr-2 text-amber-400" />
+          <Zap className="w-4 h-4 mr-2 text-gold-400" />
           {rescuePending ? 'Requesting...' : 'Request Rescue Call'}
         </Button>
       </div>

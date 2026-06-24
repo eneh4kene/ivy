@@ -296,3 +296,201 @@
 .page-enter-scale {
   animation: fadeInScale 0.28s cubic-bezier(0.22, 1, 0.36, 1);
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   ARCADE THEME — neon HUD system (additive; opt-in via .arcade-* classes).
+   Pure-black canvas, glass panels, neon cyan/lime/magenta, segmented LED type,
+   crisp grid + scanlines. Prototyped in /lab; promoted here for real screens.
+   ═══════════════════════════════════════════════════════════════════════════ */
+:root {
+  --neon-cyan:  #27e8ff;
+  --neon-lime:  #c6ff44;
+  --neon-mag:   #ff3b78;
+  --neon-amber: #ff8a3b;
+  --arcade-black: #04050a;
+}
+
+@layer utilities {
+  /* Full-screen arcade canvas: black base + vignette, grid (::before), scan (::after) */
+  .arcade-screen {
+    position: relative; isolation: isolate; color: #eaf2ff;
+    background:
+      radial-gradient(ellipse 78% 72% at 50% 22%, transparent 45%, rgba(0,0,0,.7) 100%),
+      var(--arcade-black);
+  }
+  .arcade-screen > * { position: relative; z-index: 1; }
+  .arcade-screen::before {
+    content: ""; position: absolute; inset: 0; z-index: 0; pointer-events: none; opacity: .5;
+    background-image:
+      linear-gradient(rgba(39,232,255,.05) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(39,232,255,.05) 1px, transparent 1px);
+    background-size: 36px 36px;
+    -webkit-mask-image: radial-gradient(ellipse 85% 62% at 50% 26%, #000 30%, transparent 82%);
+            mask-image: radial-gradient(ellipse 85% 62% at 50% 26%, #000 30%, transparent 82%);
+  }
+  .arcade-screen::after {
+    content: ""; position: absolute; inset: 0; z-index: 0; pointer-events: none; opacity: .3; mix-blend-mode: overlay;
+    background: repeating-linear-gradient(0deg, rgba(255,255,255,.04) 0 1px, transparent 1px 3px);
+    animation: arcade-scan 7s linear infinite;
+  }
+
+  /* Neon text */
+  .text-neon-cyan  { color: var(--neon-cyan);  text-shadow: 0 0 8px rgba(39,232,255,.6); }
+  .text-neon-lime  { color: var(--neon-lime);  text-shadow: 0 0 8px rgba(198,255,68,.6); }
+  .text-neon-mag   { color: var(--neon-mag);   text-shadow: 0 0 8px rgba(255,59,120,.6); }
+  .text-neon-amber { color: var(--neon-amber); text-shadow: 0 0 7px rgba(255,138,59,.55); }
+  .text-hud        { color: rgba(180,200,225,.55); }
+
+  /* LED numerals */
+  .led { font-variant-numeric: tabular-nums; letter-spacing: .02em; text-shadow: 0 0 12px rgba(39,232,255,.4); }
+
+  /* Glass panels + neon edges */
+  .glass-arcade {
+    background: rgba(255,255,255,.035);
+    backdrop-filter: blur(14px) saturate(140%); -webkit-backdrop-filter: blur(14px) saturate(140%);
+    border: 1px solid rgba(255,255,255,.09);
+  }
+  .panel-cyan { border-color: rgba(39,232,255,.4); box-shadow: 0 0 16px rgba(39,232,255,.16); }
+  .panel-lime { border-color: rgba(198,255,68,.42); box-shadow: 0 0 16px rgba(198,255,68,.16); }
+  .panel-mag  { border-color: rgba(255,59,120,.42); box-shadow: 0 0 16px rgba(255,59,120,.16); }
+
+  /* Buttons */
+  .btn-arcade {
+    position: relative; overflow: hidden; font-weight: 700; letter-spacing: .1em;
+    background: var(--neon-cyan); color: var(--arcade-black);
+    box-shadow: 0 0 24px rgba(39,232,255,.5), inset 0 0 0 1px rgba(255,255,255,.3);
+  }
+  .btn-arcade-lime {
+    position: relative; overflow: hidden; font-weight: 700; letter-spacing: .1em;
+    background: var(--neon-lime); color: var(--arcade-black); box-shadow: 0 0 22px rgba(198,255,68,.5);
+  }
+  .btn-ghost-arcade {
+    background: rgba(255,255,255,.05); color: rgba(220,232,255,.82); border: 1px solid rgba(255,255,255,.12);
+  }
+  .arcade-sheen {
+    position: absolute; inset: 0; pointer-events: none;
+    background: linear-gradient(110deg, transparent 20%, rgba(255,255,255,.55) 50%, transparent 80%);
+    transform: translateX(-120%); animation: arcade-sheen 3s ease-in-out infinite;
+  }
+
+  /* Neon dot */
+  .neon-dot { display: inline-block; width: 6px; height: 6px; border-radius: 999px; background: var(--neon-cyan); box-shadow: 0 0 6px rgba(39,232,255,.7); }
+  .neon-dot.lime { background: var(--neon-lime); box-shadow: 0 0 6px rgba(198,255,68,.7); }
+  .neon-dot.mag  { background: var(--neon-mag);  box-shadow: 0 0 6px rgba(255,59,120,.7); animation: arcade-blink 1s steps(2) infinite; }
+
+  /* Animation helpers */
+  .anim-breathe   { animation: arcade-breathe 3s ease-in-out infinite; }
+  .anim-blink     { animation: arcade-blink 1s steps(2) infinite; }
+  .anim-pulse-rec { animation: arcade-pulse-rec 1s ease-in-out infinite; }
+}
+
+@keyframes arcade-scan      { from { background-position: 0 0; } to { background-position: 0 120px; } }
+@keyframes arcade-sheen     { 0%,55% { transform: translateX(-120%); } 100% { transform: translateX(120%); } }
+@keyframes arcade-breathe   { 50% { transform: scale(1.12); } }
+@keyframes arcade-blink     { 50% { opacity: .25; } }
+@keyframes arcade-pulse-rec { 50% { transform: scale(1.07); } }
+@keyframes arcade-vu        { 0%,100% { transform: scaleY(.2); } 50% { transform: scaleY(1); } }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   .theme-arcade — scoped palette swap. Applied to consumer-PWA + coach route
+   roots. Redefines the semantic token variables (gold→cyan, sage→lime,
+   ember→magenta, periwinkle→cyan, ink→cool near-black) and the composite
+   utility classes (surface/glass/mesh/glow) to the arcade language — so every
+   screen built on tokens flips to neon with zero component changes. Admin
+   back-office and public marketing pages don't carry the class, so they're
+   untouched.
+   ═══════════════════════════════════════════════════════════════════════════ */
+.theme-arcade {
+  /* Accent → neon cyan (commitment / primary) */
+  --gold-500: 189 95% 50%;
+  --gold-400: 189 100% 58%;
+  --gold-300: 189 100% 72%;
+  --gold-100: 189 100% 88%;
+  /* Success → neon lime */
+  --sage-500: 78 70% 46%;
+  --sage-400: 78 95% 60%;
+  --sage-300: 78 100% 72%;
+  --sage-100: 78 80% 88%;
+  /* Stake / urgency → neon magenta */
+  --ember-500: 341 92% 56%;
+  --ember-400: 341 100% 62%;
+  /* Social → neon cyan */
+  --periwinkle-500: 189 90% 56%;
+  --periwinkle-400: 189 100% 66%;
+  /* Ink → cool, crisp near-black */
+  --ink-900: 230 45% 4%;
+  --ink-800: 228 32% 7%;
+  --ink-700: 226 24% 12%;
+  --ink-600: 224 18% 19%;
+  --ink-400: 220 14% 52%;
+  --ink-200: 214 20% 80%;
+  --ink-50:  210 32% 96%;
+  /* Glow atmosphere → neon */
+  --glow-gold:  rgba(39,232,255,.30);
+  --glow-sage:  rgba(198,255,68,.28);
+  --glow-ember: rgba(255,59,120,.30);
+
+  position: relative;
+  isolation: isolate;
+  color: hsl(var(--ink-50));
+  background:
+    radial-gradient(ellipse 80% 70% at 50% 18%, transparent 45%, rgba(0,0,0,.7) 100%),
+    var(--arcade-black);
+}
+/* Subtle cabinet grid behind transparent content */
+.theme-arcade::before {
+  content: ""; position: fixed; inset: 0; z-index: 0; pointer-events: none; opacity: .35;
+  background-image:
+    linear-gradient(rgba(39,232,255,.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(39,232,255,.05) 1px, transparent 1px);
+  background-size: 36px 36px;
+  -webkit-mask-image: radial-gradient(ellipse 90% 75% at 50% 24%, #000 28%, transparent 84%);
+          mask-image: radial-gradient(ellipse 90% 75% at 50% 24%, #000 28%, transparent 84%);
+}
+.theme-arcade > * { position: relative; z-index: 1; }
+
+/* Crisp mono headings */
+.theme-arcade h1, .theme-arcade h2, .theme-arcade h3, .theme-arcade .font-display {
+  font-family: 'DM Mono', 'Fira Mono', monospace;
+  letter-spacing: -0.012em;
+  font-feature-settings: normal;
+}
+
+/* Surfaces → glass */
+.theme-arcade .surface,
+.theme-arcade .surface-raised,
+.theme-arcade .glass,
+.theme-arcade .glass-gold,
+.theme-arcade .glass-sage {
+  background: rgba(255,255,255,.035);
+  backdrop-filter: blur(14px) saturate(140%); -webkit-backdrop-filter: blur(14px) saturate(140%);
+  border: 1px solid rgba(255,255,255,.09);
+}
+.theme-arcade .glass-gold { border-color: rgba(39,232,255,.40); box-shadow: 0 0 16px rgba(39,232,255,.14); }
+.theme-arcade .glass-sage { border-color: rgba(198,255,68,.42); box-shadow: 0 0 16px rgba(198,255,68,.14); }
+
+/* Warm mesh page backgrounds → transparent (let the arcade canvas show) */
+.theme-arcade .mesh-bg,
+.theme-arcade .mesh-bg-subtle { background: transparent; }
+
+/* Gradient text → neon solid with glow */
+.theme-arcade .text-gradient-gold {
+  background: none; -webkit-text-fill-color: currentColor; color: var(--neon-cyan); text-shadow: 0 0 8px rgba(39,232,255,.55);
+}
+.theme-arcade .text-gradient-sage {
+  background: none; -webkit-text-fill-color: currentColor; color: var(--neon-lime); text-shadow: 0 0 8px rgba(198,255,68,.55);
+}
+
+/* Gradient border → neon */
+.theme-arcade .border-gradient-gold::before {
+  background: linear-gradient(135deg, rgba(39,232,255,.5), rgba(39,232,255,.1), rgba(39,232,255,.5));
+}
+
+/* Status pulses → neon rings */
+.theme-arcade .pulse-gold { animation: arcade-pulse-cyan 2.2s cubic-bezier(0.4,0,0.6,1) infinite; }
+.theme-arcade .pulse-sage { animation: arcade-pulse-lime 2.2s cubic-bezier(0.4,0,0.6,1) infinite; }
+.theme-arcade .pulse-ember { animation: arcade-pulse-mag 1.6s cubic-bezier(0.4,0,0.6,1) infinite; }
+
+@keyframes arcade-pulse-cyan { 0%,100% { box-shadow: 0 0 0 0 rgba(39,232,255,.5); } 50% { box-shadow: 0 0 0 8px rgba(39,232,255,0); } }
+@keyframes arcade-pulse-lime { 0%,100% { box-shadow: 0 0 0 0 rgba(198,255,68,.5); } 50% { box-shadow: 0 0 0 8px rgba(198,255,68,0); } }
+@keyframes arcade-pulse-mag  { 0%,100% { box-shadow: 0 0 0 0 rgba(255,59,120,.6); } 50% { box-shadow: 0 0 0 10px rgba(255,59,120,0); } }

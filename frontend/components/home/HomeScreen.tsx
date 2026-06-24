@@ -179,11 +179,11 @@ function TodayStakeCard({ state }: { state: StakeState }) {
         {/* Cycle bar */}
         <div className="relative mt-3.5 pt-3.5 border-t border-ink-700/60">
           <div className="flex items-center justify-between text-xs mb-1.5">
-            <span className="text-ink-400">Week cycle</span>
-            <span className="text-ink-400 font-mono tabular-nums">{cycle.daysCompleted}/7 days done</span>
+            <span className="text-ink-400">{cycle.isFoundation ? 'Your first run' : 'Week cycle'}</span>
+            <span className="text-ink-400 font-mono tabular-nums">{cycle.daysCompleted}/{cycle.daysInCycle} days done</span>
           </div>
           <div className="h-1.5 rounded-full bg-ink-700 overflow-hidden flex gap-0.5">
-            {[...Array(7)].map((_, i) => {
+            {[...Array(cycle.daysInCycle)].map((_, i) => {
               const forfeited = i < cycle.daysForfeited
               const done = !forfeited && i < daysDecided
               const armed = i === daysDecided && isArmed

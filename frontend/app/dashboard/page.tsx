@@ -58,8 +58,8 @@ function SkeletonCard() {
 const tierColors: Record<string, string> = {
   FREE: 'bg-muted text-muted-foreground',
   PRO: 'bg-primary/15 text-primary border border-primary/20',
-  ELITE: 'bg-blue-500/15 text-blue-400 border border-blue-500/20',
-  CONCIERGE: 'bg-amber-500/15 text-amber-400 border border-amber-500/20',
+  ELITE: 'bg-periwinkle-400/15 text-periwinkle-400 border border-periwinkle-400/20',
+  CONCIERGE: 'bg-gold-400/15 text-gold-400 border border-gold-400/20',
   B2B: 'bg-primary/15 text-primary border border-primary/20',
 }
 
@@ -179,7 +179,7 @@ export default function DashboardPage() {
         {showUpgrade && (
           <Link href="/pricing" className="hidden sm:block">
             <Button variant="outline" size="sm">
-              <Zap className="w-3.5 h-3.5 mr-1.5 text-amber-400" />
+              <Zap className="w-3.5 h-3.5 mr-1.5 text-gold-400" />
               Upgrade
             </Button>
           </Link>
@@ -232,7 +232,7 @@ export default function DashboardPage() {
                 accent={!!stats?.streak.current}
               />
               {(streak?.graceDays?.balance ?? 0) > 0 && (
-                <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-500/10 border border-amber-500/20 text-xs font-medium text-amber-400 self-start">
+                <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-gold-400/10 border border-gold-400/20 text-xs font-medium text-gold-400 self-start">
                   <Shield className="w-3 h-3" />
                   {streak!.graceDays.balance} grace {streak!.graceDays.balance === 1 ? 'day' : 'days'}
                 </div>
@@ -296,9 +296,9 @@ export default function DashboardPage() {
                 const pct = (item.count / (stats?.workouts.total || 1)) * 100
                 const colors: Record<string, string> = {
                   COMPLETED: 'bg-primary',
-                  PLANNED: 'bg-blue-500',
+                  PLANNED: 'bg-periwinkle-400',
                   SKIPPED: 'bg-muted-foreground',
-                  PARTIAL: 'bg-amber-500',
+                  PARTIAL: 'bg-gold-400',
                 }
                 return (
                   <div key={item.status} className="flex items-center gap-3">
@@ -354,55 +354,55 @@ export default function DashboardPage() {
             </Link>
 
             <Link href="/workouts">
-              <button className="flex items-center gap-4 w-full p-4 rounded-xl border border-border hover:border-emerald-500/30 hover:bg-emerald-500/5 transition-all group text-left">
-                <div className="w-10 h-10 rounded-xl bg-emerald-500/10 flex items-center justify-center flex-shrink-0 group-hover:bg-emerald-500/15">
-                  <CheckCircle className="w-5 h-5 text-emerald-400" />
+              <button className="flex items-center gap-4 w-full p-4 rounded-xl border border-border hover:border-sage-400/30 hover:bg-sage-400/5 transition-all group text-left">
+                <div className="w-10 h-10 rounded-xl bg-sage-400/10 flex items-center justify-center flex-shrink-0 group-hover:bg-sage-400/15">
+                  <CheckCircle className="w-5 h-5 text-sage-400" />
                 </div>
                 <div className="flex-1">
                   <p className="text-sm font-medium">Log Completion</p>
                   <p className="text-xs text-muted-foreground">Mark today's workout done</p>
                 </div>
-                <ArrowRight className="w-4 h-4 text-muted-foreground group-hover:text-emerald-400 transition-colors" />
+                <ArrowRight className="w-4 h-4 text-muted-foreground group-hover:text-sage-400 transition-colors" />
               </button>
             </Link>
 
             <Link href="/transformation">
-              <button className="flex items-center gap-4 w-full p-4 rounded-xl border border-border hover:border-violet-500/30 hover:bg-violet-500/5 transition-all group text-left">
-                <div className="w-10 h-10 rounded-xl bg-violet-500/10 flex items-center justify-center flex-shrink-0 group-hover:bg-violet-500/15">
-                  <TrendingUp className="w-5 h-5 text-violet-400" />
+              <button className="flex items-center gap-4 w-full p-4 rounded-xl border border-border hover:border-periwinkle-400/30 hover:bg-periwinkle-400/5 transition-all group text-left">
+                <div className="w-10 h-10 rounded-xl bg-periwinkle-400/10 flex items-center justify-center flex-shrink-0 group-hover:bg-periwinkle-400/15">
+                  <TrendingUp className="w-5 h-5 text-periwinkle-400" />
                 </div>
                 <div className="flex-1">
                   <p className="text-sm font-medium">Log Transformation</p>
                   <p className="text-xs text-muted-foreground">Track your weekly progress</p>
                 </div>
-                <ArrowRight className="w-4 h-4 text-muted-foreground group-hover:text-violet-400 transition-colors" />
+                <ArrowRight className="w-4 h-4 text-muted-foreground group-hover:text-periwinkle-400 transition-colors" />
               </button>
             </Link>
 
             <Link href="/donations">
-              <button className="flex items-center gap-4 w-full p-4 rounded-xl border border-border hover:border-pink-500/30 hover:bg-pink-500/5 transition-all group text-left">
-                <div className="w-10 h-10 rounded-xl bg-pink-500/10 flex items-center justify-center flex-shrink-0 group-hover:bg-pink-500/15">
-                  <Heart className="w-5 h-5 text-pink-400" />
+              <button className="flex items-center gap-4 w-full p-4 rounded-xl border border-border hover:border-ember-400/30 hover:bg-ember-400/5 transition-all group text-left">
+                <div className="w-10 h-10 rounded-xl bg-ember-400/10 flex items-center justify-center flex-shrink-0 group-hover:bg-ember-400/15">
+                  <Heart className="w-5 h-5 text-ember-400" />
                 </div>
                 <div className="flex-1">
                   <p className="text-sm font-medium">View Impact</p>
                   <p className="text-xs text-muted-foreground">See your donations & wallet</p>
                 </div>
-                <ArrowRight className="w-4 h-4 text-muted-foreground group-hover:text-pink-400 transition-colors" />
+                <ArrowRight className="w-4 h-4 text-muted-foreground group-hover:text-ember-400 transition-colors" />
               </button>
             </Link>
 
             {['ELITE', 'CONCIERGE', 'B2B'].includes(user?.subscriptionTier ?? '') && (
               <Link href="/circles">
-                <button className="flex items-center gap-4 w-full p-4 rounded-xl border border-border hover:border-amber-500/30 hover:bg-amber-500/5 transition-all group text-left">
-                  <div className="w-10 h-10 rounded-xl bg-amber-500/10 flex items-center justify-center flex-shrink-0 group-hover:bg-amber-500/15">
-                    <Trophy className="w-5 h-5 text-amber-400" />
+                <button className="flex items-center gap-4 w-full p-4 rounded-xl border border-border hover:border-gold-400/30 hover:bg-gold-400/5 transition-all group text-left">
+                  <div className="w-10 h-10 rounded-xl bg-gold-400/10 flex items-center justify-center flex-shrink-0 group-hover:bg-gold-400/15">
+                    <Trophy className="w-5 h-5 text-gold-400" />
                   </div>
                   <div className="flex-1">
                     <p className="text-sm font-medium">Circle Games</p>
                     <p className="text-xs text-muted-foreground">Games your group plays with Ivy</p>
                   </div>
-                  <ArrowRight className="w-4 h-4 text-muted-foreground group-hover:text-amber-400 transition-colors" />
+                  <ArrowRight className="w-4 h-4 text-muted-foreground group-hover:text-gold-400 transition-colors" />
                 </button>
               </Link>
             )}
@@ -410,13 +410,13 @@ export default function DashboardPage() {
             <button
               onClick={handleCallIvy}
               disabled={callingIvy || callRequested}
-              className="flex items-center gap-4 w-full p-4 rounded-xl border transition-all text-left disabled:opacity-60 disabled:cursor-not-allowed border-emerald-500/30 bg-emerald-500/5 hover:bg-emerald-500/10"
+              className="flex items-center gap-4 w-full p-4 rounded-xl border transition-all text-left disabled:opacity-60 disabled:cursor-not-allowed border-sage-400/30 bg-sage-400/5 hover:bg-sage-400/10"
             >
-              <div className="w-10 h-10 rounded-xl bg-emerald-500/15 flex items-center justify-center flex-shrink-0">
-                <Phone className="w-5 h-5 text-emerald-400" />
+              <div className="w-10 h-10 rounded-xl bg-sage-400/15 flex items-center justify-center flex-shrink-0">
+                <Phone className="w-5 h-5 text-sage-400" />
               </div>
               <div className="flex-1">
-                <p className="text-sm font-medium text-emerald-400">
+                <p className="text-sm font-medium text-sage-400">
                   {callRequested ? 'Ivy is calling you…' : callingIvy ? 'Requesting…' : 'Talk to Ivy'}
                 </p>
                 <p className="text-xs text-muted-foreground">

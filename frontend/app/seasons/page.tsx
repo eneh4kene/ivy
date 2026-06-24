@@ -8,7 +8,7 @@ import type { Season, Sprint } from '@/lib/types'
 
 const statusColors: Record<string, string> = {
   ACTIVE: 'text-primary bg-primary/10 border-primary/20',
-  CLOSING: 'text-amber-400 bg-amber-400/10 border-amber-400/20',
+  CLOSING: 'text-gold-400 bg-gold-400/10 border-gold-400/20',
   CLOSED: 'text-muted-foreground bg-muted/30 border-border',
 }
 
@@ -171,7 +171,7 @@ export default function SeasonsPage() {
               {season.arcSummary && (
                 <div className="mt-3 p-3 rounded-lg bg-muted/30 border border-border">
                   <div className="flex items-center gap-1.5 mb-1">
-                    <Sparkles className="w-3.5 h-3.5 text-violet-400" />
+                    <Sparkles className="w-3.5 h-3.5 text-periwinkle-400" />
                     <span className="text-xs font-medium">Season Close Summary</span>
                   </div>
                   <p className="text-xs text-muted-foreground">{season.arcSummary}</p>

@@ -23,4 +23,6 @@ export interface StakeStatus {
   daysLeft: number
   daysCompleted: number
   daysForfeited: number
+  /** True when this is the user's flat-rate first cycle (Foundation Run). */
+  isFoundation?: boolean
 }

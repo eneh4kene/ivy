@@ -29,6 +29,8 @@ interface ExpressConfirmStepProps {
 }
 
 const sym = STAKE_CONFIG.currencySymbol
+// First cycle is always a flat starter (Foundation Run), not the weekly amount.
+const foundationFlat = 7
 
 export function ExpressConfirmStep({ onActivated, onCustomise, onDefer }: ExpressConfirmStepProps) {
   const [busy, setBusy] = useState<null | 'default' | 'min'>(null)
@@ -110,8 +112,9 @@ export function ExpressConfirmStep({ onActivated, onCustomise, onDefer }: Expres
       <div className="surface rounded-xl px-4 py-3 flex items-start gap-2.5">
         <Shield className="w-4 h-4 text-sage-400 shrink-0 mt-0.5" />
         <p className="text-xs text-ink-300 leading-relaxed">
-          We save your card now — nothing today. Each week we place a hold for {sym}{defaults.weeklyAmount};
-          only days you miss are captured. You get <span className="text-sage-400 font-medium">1 grace skip</span> a week.
+          We save your card now — nothing today. Your first run is a flat {sym}{foundationFlat} hold with no teeth on
+          day one; from next week the hold becomes your weekly stake. Only days you miss are captured.
+          You get <span className="text-sage-400 font-medium">1 grace skip</span> a week.
         </p>
       </div>
 
@@ -127,7 +130,7 @@ export function ExpressConfirmStep({ onActivated, onCustomise, onDefer }: Expres
             Setting up…
           </span>
         ) : (
-          `Activate my stake — ${sym}${defaults.weeklyAmount}/week`
+          `Activate my stake — ${sym}${foundationFlat} first run`
         )}
       </button>
 

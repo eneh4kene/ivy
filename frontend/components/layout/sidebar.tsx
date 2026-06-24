@@ -34,8 +34,8 @@ const navigation = [
 const tierBadgeColors: Record<string, string> = {
   FREE: 'bg-muted text-muted-foreground',
   PRO: 'bg-primary/15 text-primary border border-primary/20',
-  ELITE: 'bg-blue-500/15 text-blue-400 border border-blue-500/20',
-  CONCIERGE: 'bg-amber-500/15 text-amber-400 border border-amber-500/20',
+  ELITE: 'bg-periwinkle-400/15 text-periwinkle-400 border border-periwinkle-400/20',
+  CONCIERGE: 'bg-gold-400/15 text-gold-400 border border-gold-400/20',
   B2B: 'bg-primary/15 text-primary border border-primary/20',
 }
 

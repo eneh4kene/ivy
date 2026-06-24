@@ -55,8 +55,8 @@ const selectClass = "flex h-11 w-full rounded-lg border border-input bg-input px
 const tierColors: Record<string, string> = {
   FREE: 'text-muted-foreground',
   PRO: 'text-primary',
-  ELITE: 'text-blue-400',
-  CONCIERGE: 'text-amber-400',
+  ELITE: 'text-periwinkle-400',
+  CONCIERGE: 'text-gold-400',
   B2B: 'text-primary',
 }
 
@@ -288,7 +288,7 @@ export default function SettingsPage() {
                   {user?.phone ? (
                     <>
                       <div className="flex items-center gap-1.5 flex-1">
-                        <ShieldCheck className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                        <ShieldCheck className="w-3.5 h-3.5 text-sage-400 shrink-0" />
                         <span className="text-sm text-foreground">{user.phone}</span>
                       </div>
                       <button
@@ -649,7 +649,7 @@ export default function SettingsPage() {
                 variant={isSubscribed ? 'outline' : 'default'}
                 onClick={isSubscribed ? unsubscribe : subscribe}
                 disabled={pushLoading || permission === 'denied'}
-                className={isSubscribed ? '' : 'bg-emerald-500 hover:bg-emerald-600 text-black'}
+                className={isSubscribed ? '' : 'bg-sage-400 hover:bg-sage-400 text-black'}
               >
                 {pushLoading ? (
                   <span className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
@@ -672,7 +672,7 @@ export default function SettingsPage() {
           {user?.telegramChatId ? (
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2.5">
-                <div className="w-2 h-2 rounded-full bg-emerald-400" />
+                <div className="w-2 h-2 rounded-full bg-sage-400" />
                 <div>
                   <p className="text-sm font-medium text-foreground">Connected</p>
                   <p className="text-xs text-muted-foreground mt-0.5">Ivy will message you here alongside your calls</p>
@@ -742,13 +742,13 @@ export default function SettingsPage() {
                       try { await donationsApi.setUserCharities(next) } catch {}
                       setCharitySaving(false)
                     }}
-                    className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-all ${selected ? 'border-emerald-500 bg-emerald-500/5' : atLimit ? 'border-border opacity-40 cursor-not-allowed' : 'border-border hover:bg-accent/20'}`}
+                    className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-all ${selected ? 'border-sage-400 bg-sage-400/5' : atLimit ? 'border-border opacity-40 cursor-not-allowed' : 'border-border hover:bg-accent/20'}`}
                   >
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium truncate">{charity.name}</p>
-                      <p className="text-xs text-emerald-400">{charity.impactPerPound}</p>
+                      <p className="text-xs text-sage-400">{charity.impactPerPound}</p>
                     </div>
-                    {selected && <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />}
+                    {selected && <CheckCircle2 className="w-4 h-4 text-sage-400 shrink-0" />}
                   </div>
                 )
               })}
@@ -798,7 +798,7 @@ export default function SettingsPage() {
             ) : (
               <div className="space-y-3">
                 <div>
-                  <p className="text-sm font-medium text-amber-400">Invite pending</p>
+                  <p className="text-sm font-medium text-gold-400">Invite pending</p>
                   <p className="text-xs text-muted-foreground mt-0.5">
                     {user.pendingCoach?.coachProfile?.brandName ?? user.pendingCoach?.firstName ?? 'A coach'} has invited you to their programme
                   </p>

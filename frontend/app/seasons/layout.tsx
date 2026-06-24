@@ -5,5 +5,5 @@
 import { ProtectedRoute } from '@/components/auth/protected-route'
 
 export default function SeasonsLayout({ children }: { children: React.ReactNode }) {
-  return <ProtectedRoute>{children}</ProtectedRoute>
+  return <ProtectedRoute><div className="theme-arcade min-h-[100dvh]">{children}</div></ProtectedRoute>
 }

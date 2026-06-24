@@ -6,7 +6,7 @@ import { Sidebar } from '@/components/layout/sidebar'
 export default function DonationsLayout({ children }: { children: React.ReactNode }) {
   return (
     <ProtectedRoute>
-      <div className="flex h-screen bg-background overflow-hidden">
+      <div className="theme-arcade flex h-screen bg-background overflow-hidden">
         <div className="hidden md:block w-60 flex-shrink-0">
           <Sidebar />
         </div>

@@ -67,6 +67,8 @@ export function ConfirmStep({ state, onConfirm, onEdit }: ConfirmStepProps) {
 
   const sym = '£'
   const daily = dailySlice(state.weeklyAmount)
+  // First cycle is always a flat starter (Foundation Run), not the weekly amount.
+  const foundationFlat = 7
   // Names are captured at selection time (ids are real DB ids saved to the config).
   const successCharityName = state.successCharityId ? state.successCharityName : null
   const dislikedCharityName = state.dislikedCharityId ? state.dislikedCharityName : null
@@ -99,8 +101,9 @@ export function ConfirmStep({ state, onConfirm, onEdit }: ConfirmStepProps) {
         </h2>
         <p className="text-sm text-ink-400 leading-relaxed">
           Review everything below, then we'll save your card and set your stake live.
-          Your weekly hold is placed at the start of each week — nothing is charged
-          unless you miss a day.
+          Your first run is a flat {sym}{foundationFlat} starter — it goes live as soon as
+          payment clears, with no teeth on day one. From next week it steps up to your
+          weekly stake. Nothing is charged unless you miss a day.
         </p>
       </div>
 
@@ -156,7 +159,7 @@ export function ConfirmStep({ state, onConfirm, onEdit }: ConfirmStepProps) {
           <div className="flex items-start gap-3">
             <div className="w-5 h-5 rounded-full bg-gold-400/15 flex items-center justify-center text-2xs font-bold text-gold-400 shrink-0 mt-0.5">2</div>
             <p className="text-xs text-ink-200">
-              At the start of each week we place a hold for {sym}{state.weeklyAmount} — earmarked, not charged. You'll see it as a pending hold.
+              Your first run places a flat {sym}{foundationFlat} hold — earmarked, not charged. From the next week on, the hold is your {sym}{state.weeklyAmount} weekly stake. You'll see it as a pending hold.
             </p>
           </div>
           <div className="flex items-start gap-3">
@@ -195,7 +198,7 @@ export function ConfirmStep({ state, onConfirm, onEdit }: ConfirmStepProps) {
             Setting up…
           </span>
         ) : (
-          `Arm my stake — ${sym}${state.weeklyAmount}/week`
+          `Arm my stake — ${sym}${foundationFlat} first run`
         )}
       </button>
 

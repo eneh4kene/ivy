@@ -80,7 +80,7 @@ export default function DonationsPage() {
                 </div>
                 <div className="w-full bg-muted/60 rounded-full h-3 overflow-hidden">
                   <div
-                    className="bg-gradient-to-r from-primary to-emerald-400 h-full rounded-full transition-all duration-1000"
+                    className="bg-gradient-to-r from-primary to-sage-400 h-full rounded-full transition-all duration-1000"
                     style={{ width: `${walletPercent}%` }}
                   />
                 </div>

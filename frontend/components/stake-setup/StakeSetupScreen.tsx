@@ -65,6 +65,8 @@ function ProgressDots({ steps, currentIndex }: { steps: StakeSetupStep[]; curren
 
 function DoneScreen({ state }: { state: StakeSetupState }) {
   const sym = '£'
+  // First cycle is always a flat starter (Foundation Run), not the weekly amount.
+  const foundationFlat = 7
   return (
     <div className="flex flex-col items-center justify-center min-h-dvh gap-8 px-6 text-center page-enter-scale mesh-bg">
       {/* Glow orbs */}
@@ -78,17 +80,18 @@ function DoneScreen({ state }: { state: StakeSetupState }) {
         <div className="w-20 h-20 mx-auto rounded-full bg-gold-400/10 border border-gold-400/25 flex items-center justify-center glow-gold mb-4">
           <span className="text-3xl">🏆</span>
         </div>
-        <h2 className="font-display text-3xl text-ink-50">Stake armed.</h2>
+        <h2 className="font-display text-3xl text-ink-50">Your first run is live.</h2>
         <p className="text-sm text-ink-400 leading-relaxed max-w-xs mx-auto">
-          {sym}{state.weeklyAmount} is authorised. Your morning prompt arrives at {state.armingWindowStart}.
-          Show up every day and you keep it all.
+          A flat {sym}{foundationFlat} starter goes on the line as soon as payment clears — no teeth on
+          day one. From next week it steps up to {sym}{state.weeklyAmount}. Your morning prompt
+          arrives at {state.armingWindowStart}; show up every day and you keep it all.
         </p>
       </div>
 
       {/* Summary pills */}
       <div className="flex flex-wrap gap-2 justify-center max-w-xs">
         <span className="glass-gold rounded-xl px-3 py-1.5 text-xs text-gold-300 font-mono">
-          {sym}{state.weeklyAmount}/wk on the line
+          {sym}{foundationFlat} first run · then {sym}{state.weeklyAmount}/wk
         </span>
         <span className="glass rounded-xl px-3 py-1.5 text-xs text-ink-200">
           {state.forfeitMode === 'SAVAGE' ? '😬 Savage mode' : '🏠 Middle mode'}

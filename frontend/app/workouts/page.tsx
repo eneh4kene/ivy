@@ -9,10 +9,10 @@ import type { Workout, CreateWorkoutInput } from '@/lib/types'
 import { Plus, Zap, CheckCircle2, Clock, SkipForward, Dumbbell, X, Calendar, Timer } from 'lucide-react'
 
 const statusConfig: Record<string, { label: string; color: string; dot: string }> = {
-  COMPLETED: { label: 'Completed', color: 'text-emerald-400', dot: 'bg-emerald-400' },
-  PLANNED: { label: 'Planned', color: 'text-blue-400', dot: 'bg-blue-400' },
+  COMPLETED: { label: 'Completed', color: 'text-sage-400', dot: 'bg-sage-400' },
+  PLANNED: { label: 'Planned', color: 'text-periwinkle-400', dot: 'bg-periwinkle-400' },
   SKIPPED: { label: 'Skipped', color: 'text-muted-foreground', dot: 'bg-muted-foreground' },
-  PARTIAL: { label: 'Partial', color: 'text-amber-400', dot: 'bg-amber-400' },
+  PARTIAL: { label: 'Partial', color: 'text-gold-400', dot: 'bg-gold-400' },
 }
 
 function SkeletonRow() {
@@ -82,9 +82,9 @@ export default function WorkoutsPage() {
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
         {[
           { label: 'Total', value: isLoading ? '—' : String(workouts.length), icon: Dumbbell, color: 'text-foreground' },
-          { label: 'Completed', value: isLoading ? '—' : String(completed), icon: CheckCircle2, color: 'text-emerald-400' },
-          { label: 'Planned', value: isLoading ? '—' : String(planned), icon: Clock, color: 'text-blue-400' },
-          { label: 'Success Rate', value: isLoading ? '—' : `${rate}%`, icon: Zap, color: rate >= 70 ? 'text-primary' : 'text-amber-400' },
+          { label: 'Completed', value: isLoading ? '—' : String(completed), icon: CheckCircle2, color: 'text-sage-400' },
+          { label: 'Planned', value: isLoading ? '—' : String(planned), icon: Clock, color: 'text-periwinkle-400' },
+          { label: 'Success Rate', value: isLoading ? '—' : `${rate}%`, icon: Zap, color: rate >= 70 ? 'text-primary' : 'text-gold-400' },
         ].map((s) => (
           <div key={s.label} className="bg-card border border-border rounded-xl p-4 hover:border-border/80 transition-colors">
             <div className="flex items-center justify-between mb-2">
@@ -134,7 +134,7 @@ export default function WorkoutsPage() {
                       <div className="flex items-center gap-2 mb-1">
                         <p className="font-medium text-sm truncate">{workout.activity}</p>
                         {workout.isMinimum && (
-                          <span className="text-[10px] bg-amber-500/15 text-amber-400 border border-amber-500/20 px-1.5 py-0.5 rounded font-medium flex-shrink-0">
+                          <span className="text-[10px] bg-gold-400/15 text-gold-400 border border-gold-400/20 px-1.5 py-0.5 rounded font-medium flex-shrink-0">
                             Min
                           </span>
                         )}

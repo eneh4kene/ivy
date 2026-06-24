@@ -33,7 +33,7 @@ function Waveform({
           return (
             <span
               key={i}
-              className="inline-block w-[3px] rounded-full bg-gold-400 origin-center"
+              className="inline-block w-[3px] rounded-full bg-[#ff3b78] origin-center shadow-[0_0_6px_rgba(255,59,120,.6)]"
               style={{
                 height: '100%',
                 transform: 'scaleY(0.25)',
@@ -47,7 +47,7 @@ function Waveform({
           <span
             key={i}
             className={`inline-block w-[3px] rounded-full origin-center transition-colors duration-100 ${
-              isFilled ? 'bg-gold-400' : 'bg-ink-600'
+              isFilled ? 'bg-[#27e8ff] shadow-[0_0_6px_rgba(39,232,255,.6)]' : 'bg-white/10'
             }`}
             style={{ height: `${h * 100}%` }}
           />
@@ -256,13 +256,13 @@ export function VoiceRecorder({ onSubmit, prompt, stakeAmount, currency }: Voice
   if (phase === 'submitted') {
     return (
       <div className="flex flex-col items-center gap-4 py-8 animate-fade-in-scale">
-        <div className="w-16 h-16 rounded-full bg-sage-400/15 border border-sage-400/30 flex items-center justify-center glow-sm-sage">
-          <Check className="w-7 h-7 text-sage-400" strokeWidth={2.5} />
+        <div className="w-16 h-16 rounded-full bg-[#c6ff44]/12 border border-[#c6ff44]/40 flex items-center justify-center shadow-[0_0_28px_rgba(198,255,68,.4)]">
+          <Check className="w-7 h-7 text-neon-lime" strokeWidth={2.5} />
         </div>
         <div className="text-center space-y-1">
-          <p className="font-display text-xl text-ink-50">Armed for the day</p>
-          <p className="text-sm text-ink-400">
-            {sym}{stakeAmount} secured · Ivy has your commitment
+          <p className="font-mono text-xl font-semibold uppercase tracking-tight text-white">Armed for the day</p>
+          <p className="text-sm text-white/50">
+            <span className="text-neon-lime led font-semibold">{sym}{stakeAmount}</span> secured · Ivy has your commitment
           </p>
         </div>
       </div>
@@ -273,7 +273,7 @@ export function VoiceRecorder({ onSubmit, prompt, stakeAmount, currency }: Voice
   return (
     <div className="flex flex-col items-center gap-6 w-full max-w-sm mx-auto py-4">
       {/* Prompt text */}
-      <p className="font-display text-lg text-ink-200 text-center leading-snug italic px-2">
+      <p className="text-lg text-white/85 text-center leading-snug px-2">
         {prompt}
       </p>
 
@@ -281,7 +281,7 @@ export function VoiceRecorder({ onSubmit, prompt, stakeAmount, currency }: Voice
       <div className="w-full px-4">
         {phase === 'idle' ? (
           <div className="h-12 flex items-center justify-center">
-            <p className="text-ink-400 text-sm">Press and hold the mic to record</p>
+            <p className="text-white/40 text-2xs uppercase tracking-[0.2em]">Press and hold the mic to record</p>
           </div>
         ) : (
           <Waveform
@@ -294,12 +294,12 @@ export function VoiceRecorder({ onSubmit, prompt, stakeAmount, currency }: Voice
       {/* Timer / duration */}
       <div className="h-6 flex items-center justify-center">
         {phase === 'recording' && (
-          <span className="font-mono text-sm text-ember-400 tabular-nums">
-            {formatTime(recordSeconds)} · recording
+          <span className="font-mono text-sm text-neon-mag tabular-nums led uppercase tracking-wider">
+            {formatTime(recordSeconds)} · rec
           </span>
         )}
         {(phase === 'recorded' || phase === 'playing') && (
-          <span className="font-mono text-sm text-ink-400 tabular-nums">
+          <span className="font-mono text-sm text-white/50 tabular-nums led">
             {formatTime(phase === 'playing' ? playSeconds : 0)} / {formatTime(totalSeconds)}
           </span>
         )}
@@ -311,14 +311,14 @@ export function VoiceRecorder({ onSubmit, prompt, stakeAmount, currency }: Voice
         <div className="relative flex items-center justify-center">
           {/* Expanding ring on press */}
           {isLongPressing && (
-            <span className="absolute w-24 h-24 rounded-full border-2 border-gold-400/50 animate-record-ring" />
+            <span className="absolute w-24 h-24 rounded-full border-2 border-[#27e8ff]/50 animate-record-ring" />
           )}
           {/* Outer glow ring */}
           <span
             className={`absolute w-20 h-20 rounded-full border transition-all duration-200 ${
               phase === 'recording'
-                ? 'border-ember-400/60 bg-ember-400/10 scale-110'
-                : 'border-gold-400/30 bg-gold-400/5 scale-100'
+                ? 'border-[#ff3b78]/60 bg-[#ff3b78]/10 scale-110'
+                : 'border-[#27e8ff]/40 bg-[#27e8ff]/5 scale-100'
             }`}
             style={{
               transform: `scale(${1 + holdProgress * 0.15})`,
@@ -334,14 +334,14 @@ export function VoiceRecorder({ onSubmit, prompt, stakeAmount, currency }: Voice
             className={`relative z-10 w-16 h-16 rounded-full flex items-center justify-center
               transition-all duration-150 active:scale-95 select-none touch-none
               ${phase === 'recording'
-                ? 'bg-ember-500 glow-ember shadow-lg'
-                : 'bg-gold-400 glow-gold shadow-lg'
+                ? 'bg-[#ff3b78] shadow-[0_0_28px_rgba(255,59,120,.6)]'
+                : 'bg-[#27e8ff] shadow-[0_0_28px_rgba(39,232,255,.6)]'
               }`}
             style={{ WebkitUserSelect: 'none', userSelect: 'none' }}
           >
             {phase === 'recording'
-              ? <Square className="w-5 h-5 text-ink-900" fill="currentColor" />
-              : <Mic className="w-5 h-5 text-ink-900" />
+              ? <Square className="w-5 h-5 text-[#04050a]" fill="currentColor" />
+              : <Mic className="w-5 h-5 text-[#04050a]" />
             }
           </button>
         </div>
@@ -351,21 +351,21 @@ export function VoiceRecorder({ onSubmit, prompt, stakeAmount, currency }: Voice
           {/* Retake */}
           <button
             onClick={retake}
-            className="w-11 h-11 rounded-full bg-ink-700 border border-ink-600 flex items-center justify-center
-              hover:bg-ink-600 transition-colors active:scale-95"
+            className="w-11 h-11 rounded-full glass-arcade flex items-center justify-center
+              hover:bg-white/[0.08] transition-colors active:scale-95"
           >
-            <RotateCcw className="w-4 h-4 text-ink-200" />
+            <RotateCcw className="w-4 h-4 text-white/70" />
           </button>
 
           {/* Play / pause */}
           <button
             onClick={togglePlay}
-            className="w-14 h-14 rounded-full bg-ink-700 border border-ink-600 flex items-center justify-center
-              hover:bg-ink-600 transition-colors active:scale-95"
+            className="w-14 h-14 rounded-full glass-arcade panel-cyan flex items-center justify-center
+              hover:bg-white/[0.08] transition-colors active:scale-95"
           >
             {phase === 'playing'
-              ? <Pause className="w-5 h-5 text-ink-50" fill="currentColor" />
-              : <Play  className="w-5 h-5 text-ink-50 ml-0.5" fill="currentColor" />
+              ? <Pause className="w-5 h-5 text-neon-cyan" fill="currentColor" />
+              : <Play  className="w-5 h-5 text-neon-cyan ml-0.5" fill="currentColor" />
             }
           </button>
 
@@ -373,17 +373,18 @@ export function VoiceRecorder({ onSubmit, prompt, stakeAmount, currency }: Voice
           <button
             onClick={submit}
             disabled={phase === 'submitting'}
-            className="flex items-center gap-2 px-5 py-3 rounded-2xl bg-gold-400 text-ink-900
-              font-semibold text-sm glow-sm-gold transition-all duration-150 active:scale-95
-              disabled:opacity-60 disabled:cursor-not-allowed hover:bg-gold-300"
+            className="relative overflow-hidden flex items-center gap-2 px-5 py-3 rounded-2xl btn-arcade-lime
+              text-sm uppercase transition-all duration-150 active:scale-95
+              disabled:opacity-60 disabled:cursor-not-allowed"
           >
             {phase === 'submitting' ? (
               <>
-                <span className="w-4 h-4 rounded-full border-2 border-ink-900/30 border-t-ink-900 animate-spin" />
+                <span className="w-4 h-4 rounded-full border-2 border-[#04050a]/30 border-t-[#04050a] animate-spin" />
                 Sending…
               </>
             ) : (
               <>
+                <span className="arcade-sheen" />
                 <Check className="w-4 h-4" strokeWidth={2.5} />
                 Arm {sym}{stakeAmount}
               </>
@@ -394,15 +395,15 @@ export function VoiceRecorder({ onSubmit, prompt, stakeAmount, currency }: Voice
 
       {/* Stake reminder */}
       {phase === 'idle' && (
-        <p className="text-2xs text-ink-400 text-center max-w-xs leading-relaxed">
-          Your {sym}{stakeAmount} stake is live. Recording arms your day.
-          Skip this and it's forfeited.
+        <p className="text-2xs text-white/45 text-center max-w-xs leading-relaxed">
+          Your <span className="text-neon-cyan led">{sym}{stakeAmount}</span> stake is live. Recording arms your day.
+          Skip this and it&apos;s forfeited.
         </p>
       )}
 
       {/* Upload error */}
       {submitError && (
-        <p className="text-2xs text-ember-400 text-center max-w-xs leading-relaxed">
+        <p className="text-2xs text-neon-mag text-center max-w-xs leading-relaxed">
           {submitError}
         </p>
       )}
