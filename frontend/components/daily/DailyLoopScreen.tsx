@@ -8,6 +8,7 @@ import { useVisualViewport } from '@/hooks/useVisualViewport'
 import { StakeBar } from './StakeBar'
 import { VoiceRecorder } from './VoiceRecorder'
 import { EveningReview } from './EveningReview'
+import { LivingForm, hashSeed, type LivingState } from './LivingForm'
 import { stakeApi, statsApi, circlesApi, type StakeState } from '@/lib/api'
 import { useAuthStore } from '@/lib/store/auth.store'
 import type { DailyLoopPhase, VoiceNote, StakeStatus } from './types'
@@ -222,6 +223,9 @@ export function DailyLoopScreen() {
   const [circleName, setCircleName] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [armedJustNow, setArmedJustNow] = useState(false)
+  // Live mic state — drives the LivingForm hero while you speak your intention.
+  const [recording, setRecording] = useState(false)
+  const [micLevel, setMicLevel] = useState(0)
 
   const loadState = useCallback(() => {
     return stakeApi.getState()
@@ -278,6 +282,20 @@ export function DailyLoopScreen() {
 
   const morningPrompt = `Morning. Your ${currency === 'GBP' ? '£' : '$'}${cycle?.dailySlice ?? ''} stake is live. What's the one thing you're taking on today — say it out loud.`
 
+  // ── LivingForm hero: geometry grown from real follow-through ──
+  // daysCompleted → living lime leaves; daysForfeited → magenta scars; the crown
+  // bloom is closed when unarmed, half-open when armed, and flares to your live
+  // voice while recording. Seed is stable per user so each plant is unique.
+  const livingSeed = hashSeed(authUser?.id ?? authUser?.email ?? 'ivy')
+  const livingState: LivingState =
+    phase === 'evening-review' ? 'bloom'
+    : phase === 'morning-armed' ? 'armed'
+    : recording ? 'speaking'
+    : 'asleep'
+  const livingPalette: 'dawn' | 'dusk' = phase === 'evening-review' ? 'dusk' : 'dawn'
+  const daysKept = cycle?.daysCompleted ?? 0
+  const daysForfeited = cycle?.daysForfeited ?? 0
+
   return (
     <div
       className="flex flex-col arcade-screen relative overflow-hidden"
@@ -302,16 +320,53 @@ export function DailyLoopScreen() {
           currency={currency}
         />
       ) : phase === 'evening-review' ? (
-        <div className="flex-1 min-h-0">
-          <EveningReview voiceNote={todayVN} isArmed={isArmed} />
+        <div className="flex-1 min-h-0 flex flex-col">
+          <div className="relative shrink-0 h-[24vh] min-h-[150px]">
+            <LivingForm
+              className="absolute inset-0"
+              daysKept={daysKept}
+              daysForfeited={daysForfeited}
+              state={livingState}
+              palette={livingPalette}
+              seed={livingSeed}
+              detail={0.85}
+            />
+          </div>
+          <div className="flex-1 min-h-0">
+            <EveningReview voiceNote={todayVN} isArmed={isArmed} />
+          </div>
         </div>
       ) : phase === 'morning-armed' ? (
-        <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain">
-          <ArmedCard vn={todayVN} dailySlice={cycle.dailySlice} currency={currency} />
+        <div className="flex-1 min-h-0 flex flex-col">
+          <div className="relative shrink-0 h-[30vh] min-h-[180px]">
+            <LivingForm
+              className="absolute inset-0"
+              daysKept={daysKept}
+              daysForfeited={daysForfeited}
+              state="armed"
+              palette={livingPalette}
+              seed={livingSeed}
+            />
+          </div>
+          <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain">
+            <ArmedCard vn={todayVN} dailySlice={cycle.dailySlice} currency={currency} />
+          </div>
         </div>
       ) : (
-        <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain flex flex-col">
-          <div className="flex-1 flex flex-col items-center justify-center px-4 pb-8">
+        <div className="flex-1 min-h-0 flex flex-col">
+          {/* Living hero — grows as you speak your intention */}
+          <div className="relative flex-1 min-h-0">
+            <LivingForm
+              className="absolute inset-0"
+              daysKept={daysKept}
+              daysForfeited={daysForfeited}
+              state={livingState}
+              intensity={micLevel}
+              palette={livingPalette}
+              seed={livingSeed}
+            />
+          </div>
+          <div className="shrink-0 px-4 pb-6">
             {state?.today.suggestedIntention && (
               <IntentionHint intention={state.today.suggestedIntention} />
             )}
@@ -320,6 +375,8 @@ export function DailyLoopScreen() {
               prompt={morningPrompt}
               stakeAmount={cycle.dailySlice}
               currency={currency}
+              onRecordingChange={setRecording}
+              onLevel={setMicLevel}
             />
           </div>
         </div>

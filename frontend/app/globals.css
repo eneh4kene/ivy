@@ -96,6 +96,9 @@
     /* Full-height on mobile; avoids the iOS address-bar shrink */
     min-height: 100dvh;
     overscroll-behavior: none;
+    /* Mobile-PWA guard: never let a stray wide child create a horizontal
+       scroll / shove fixed-width cards off the right edge. */
+    overflow-x: hidden;
   }
 
   /* Display / heading font */

@@ -65,9 +65,13 @@ interface VoiceRecorderProps {
   prompt: string
   stakeAmount: number
   currency: 'GBP' | 'USD'
+  /** Fires true when recording starts, false when it stops. */
+  onRecordingChange?: (recording: boolean) => void
+  /** Live mic level 0..1 (RMS, smoothed) while recording — drives the LivingForm bloom. */
+  onLevel?: (level: number) => void
 }
 
-export function VoiceRecorder({ onSubmit, prompt, stakeAmount, currency }: VoiceRecorderProps) {
+export function VoiceRecorder({ onSubmit, prompt, stakeAmount, currency, onRecordingChange, onLevel }: VoiceRecorderProps) {
   const [phase, setPhase]               = useState<RecorderState>('idle')
   const [recordSeconds, setRecordSecs]  = useState(0)
   const [playSeconds, setPlaySecs]      = useState(0)
@@ -84,6 +88,18 @@ export function VoiceRecorder({ onSubmit, prompt, stakeAmount, currency }: Voice
   const audioBlob       = useRef<Blob | null>(null)
   const audioUrl        = useRef<string | null>(null)
   const audioEl         = useRef<HTMLAudioElement | null>(null)
+  // Live mic-level analysis (feeds onLevel → LivingForm bloom)
+  const audioCtx        = useRef<AudioContext | null>(null)
+  const analyser        = useRef<AnalyserNode | null>(null)
+  const levelRaf        = useRef<number | null>(null)
+
+  // Tear down the WebAudio analysis graph and stop emitting level.
+  const stopLevelMeter = useCallback(() => {
+    if (levelRaf.current) { cancelAnimationFrame(levelRaf.current); levelRaf.current = null }
+    analyser.current = null
+    if (audioCtx.current) { audioCtx.current.close().catch(() => {}); audioCtx.current = null }
+    onLevel?.(0)
+  }, [onLevel])
 
   const sym = currency === 'GBP' ? '£' : '$'
 
@@ -93,6 +109,7 @@ export function VoiceRecorder({ onSubmit, prompt, stakeAmount, currency }: Voice
     setRecordSecs(0)
     audioChunks.current = []
     audioBlob.current = null
+    onRecordingChange?.(true)
 
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
@@ -119,6 +136,40 @@ export function VoiceRecorder({ onSubmit, prompt, stakeAmount, currency }: Voice
       }
 
       mr.start(100) // collect in 100ms chunks
+
+      // ── Live level meter: RMS → smoothed 0..1, emitted via onLevel ──
+      if (onLevel) {
+        try {
+          const Ctx = window.AudioContext || (window as any).webkitAudioContext
+          const ctx = new Ctx()
+          audioCtx.current = ctx
+          const src = ctx.createMediaStreamSource(stream)
+          const node = ctx.createAnalyser()
+          node.fftSize = 512
+          node.smoothingTimeConstant = 0.6
+          src.connect(node)
+          analyser.current = node
+          const buf = new Uint8Array(node.fftSize)
+          let smoothed = 0
+          const tick = () => {
+            if (!analyser.current) return
+            analyser.current.getByteTimeDomainData(buf)
+            let sum = 0
+            for (let i = 0; i < buf.length; i++) {
+              const v = (buf[i] - 128) / 128
+              sum += v * v
+            }
+            const rms = Math.sqrt(sum / buf.length)          // ~0..0.5 for speech
+            const level = Math.min(1, rms * 3.2)             // normalise into 0..1
+            smoothed += (level - smoothed) * 0.35            // gentle attack/decay
+            onLevel(smoothed)
+            levelRaf.current = requestAnimationFrame(tick)
+          }
+          levelRaf.current = requestAnimationFrame(tick)
+        } catch {
+          // WebAudio unavailable — recorder still works, bloom just won't react.
+        }
+      }
     } catch {
       // Mic permission denied or not available — fall back to timer-only mode
       // (the blob will be null and submit will handle gracefully)
@@ -127,17 +178,19 @@ export function VoiceRecorder({ onSubmit, prompt, stakeAmount, currency }: Voice
     timerRef.current = setInterval(() => {
       setRecordSecs((s) => s + 1)
     }, 1000)
-  }, [])
+  }, [onRecordingChange, onLevel])
 
   const stopRecording = useCallback(() => {
     if (timerRef.current) clearInterval(timerRef.current)
     if (mediaRecorder.current && mediaRecorder.current.state !== 'inactive') {
       mediaRecorder.current.stop()
     }
+    stopLevelMeter()
+    onRecordingChange?.(false)
     setPhase('recorded')
     setTotalSecs(recordSeconds)
     setPlaySecs(0)
-  }, [recordSeconds])
+  }, [recordSeconds, stopLevelMeter, onRecordingChange])
 
   // ── Press-and-hold handlers ──
   const onPressStart = useCallback(() => {
@@ -243,6 +296,8 @@ export function VoiceRecorder({ onSubmit, prompt, stakeAmount, currency }: Voice
     if (timerRef.current)       clearInterval(timerRef.current)
     if (longPressTimer.current) clearTimeout(longPressTimer.current)
     if (holdAnimRef.current)    clearInterval(holdAnimRef.current)
+    if (levelRaf.current)       cancelAnimationFrame(levelRaf.current)
+    audioCtx.current?.close().catch(() => {})
     audioEl.current?.pause()
     if (audioUrl.current) URL.revokeObjectURL(audioUrl.current)
     if (mediaRecorder.current && mediaRecorder.current.state !== 'inactive') {
