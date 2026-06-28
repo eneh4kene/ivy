@@ -1,22 +1,12 @@
 'use client'
 
-import { ProtectedRoute } from '@/components/auth/protected-route'
-import { Sidebar } from '@/components/layout/sidebar'
+/**
+ * Impact tab. Now part of the consumer mobile hub (shared bottom nav) rather
+ * than the desktop Sidebar shell — Impact is a primary consumer destination.
+ */
+
+import { ConsumerShell } from '@/components/layout/ConsumerShell'
 
 export default function DonationsLayout({ children }: { children: React.ReactNode }) {
-  return (
-    <ProtectedRoute>
-      <div className="theme-arcade flex h-screen bg-background overflow-hidden">
-        <div className="hidden md:block w-60 flex-shrink-0">
-          <Sidebar />
-        </div>
-        <div className="md:hidden">
-          <Sidebar />
-        </div>
-        <main className="flex-1 overflow-y-auto">
-          {children}
-        </main>
-      </div>
-    </ProtectedRoute>
-  )
+  return <ConsumerShell>{children}</ConsumerShell>
 }

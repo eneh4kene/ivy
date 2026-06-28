@@ -915,7 +915,7 @@ describe('linkWorkoutToCycle (Break 2)', () => {
       id: 'w-1', plannedDate: new Date('2026-06-23'), stakeCycleId: null,
     })
     ;(mockPrisma.stakeCycle.findFirst as jest.Mock).mockResolvedValue({
-      id: 'cycle-001', stakeAmount: 14, periodEnd: new Date('2026-06-29'),
+      id: 'cycle-001', stakeAmount: 14, periodEnd: new Date('2026-06-29'), daysInCycle: 7,
     })
     ;(mockPrisma.workout.update as jest.Mock).mockResolvedValue({})
 
@@ -954,7 +954,7 @@ describe('linkWorkoutToCycle (Break 2)', () => {
       id: 'w-future', plannedDate: new Date('2026-07-15'), stakeCycleId: null,
     })
     ;(mockPrisma.stakeCycle.findFirst as jest.Mock).mockResolvedValue({
-      id: 'cycle-001', stakeAmount: 14, periodEnd: new Date('2026-06-29'),
+      id: 'cycle-001', stakeAmount: 14, periodEnd: new Date('2026-06-29'), daysInCycle: 7,
     })
 
     await linkWorkoutToCycle('w-future', 'user-001')

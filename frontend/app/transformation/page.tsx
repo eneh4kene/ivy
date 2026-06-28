@@ -84,7 +84,7 @@ export default function TransformationPage() {
   return (
     <div className="p-6 sm:p-8 max-w-5xl mx-auto">
       {/* Header */}
-      <div className="flex items-start justify-between mb-8 animate-fade-in">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between mb-8 animate-fade-in pl-12 md:pl-0">
         <div>
           <h1 className="text-2xl sm:text-3xl font-bold tracking-tight mb-1">Transformation Journal</h1>
           <p className="text-muted-foreground text-sm">Track your personal growth and milestones</p>

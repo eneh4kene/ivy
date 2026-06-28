@@ -18,15 +18,17 @@
  *   Deadline: unarmed Workout → MISSED + sliceOutcome FORFEITED
  *
  * The morning VN is always a spoken voice note regardless of CommStyle (§1d).
- * Escalation nudges use web push; SMS fallback for the single morning prompt only (§1e, §9 d10).
- * Evening review delivery follows CommStyle (§1d) — handled in communication.service.ts.
+ * Escalation nudges use web push, with an SMS fallback at EVERY stage for users
+ * with no active push subscription (so they're not left with a single morning SMS
+ * and silence after — see deliverArmingNudge). Evening review delivery follows
+ * CommStyle (§1d) — handled in communication.service.ts.
  *
  * SAFETY: No real Twilio/Retell/push calls are made when DISABLE_EXTERNAL_SENDS=true.
  * Tests mock all external services.
  */
 
 import { startOfDay, endOfDay } from 'date-fns'
-import { fromZonedTime } from 'date-fns-tz'
+import { fromZonedTime, formatInTimeZone } from 'date-fns-tz'
 import prisma from '../utils/prisma'
 import logger from '../utils/logger'
 import { sendPushToUser, type PushPayload } from './push.service'
@@ -77,6 +79,15 @@ export const armingPushTemplates = {
     tag: 'arming-final-notice',
     url: '/daily?action=record',
     actions: [{ action: 'open', title: 'Arm now — it takes 30 seconds' }],
+  }),
+
+  /** Pre-commitment nudge — ~1h before the committed activity time, to keep them on track */
+  preCommit: (activity: string, timeStr: string): PushPayload => ({
+    title: `Coming up: ${activity}`,
+    body: `You said ${timeStr} — about an hour out. Set yourself up so it actually happens.`,
+    tag: 'pre-commit-nudge',
+    url: '/daily',
+    actions: [{ action: 'open', title: 'I\'m on it' }],
   }),
 }
 
@@ -212,6 +223,39 @@ async function ensureChaseCap(
   return currentCount
 }
 
+/**
+ * Deliver an arming nudge: web push if the user has an active subscription,
+ * otherwise SMS (if a phone + copy is available). Used by every stage so a
+ * push-less user still gets the full ladder over SMS instead of one morning text.
+ */
+async function deliverArmingNudge(
+  userId: string,
+  payload: PushPayload,
+  smsText: string | null,
+  phone: string | null,
+  label: string,
+): Promise<void> {
+  const pushSubs = await prisma.pushSubscription.count({
+    where: { userId, isActive: true },
+  })
+
+  if (pushSubs > 0) {
+    await sendPushToUser(userId, payload)
+    logger.info(`Arming ${label} (push) sent to user ${userId}`)
+    return
+  }
+
+  if (smsText && phone) {
+    await messagingService.sendSMSMessage(userId, smsText, 'reminder')
+    logger.info(`Arming ${label} (SMS fallback) sent to user ${userId}`)
+    return
+  }
+
+  logger.warn(`Arming ${label}: no delivery channel available for user ${userId}`)
+}
+
+const RECORD_URL = () => `${process.env.FRONTEND_URL ?? 'https://www.ivykeeps.life'}/daily?action=record`
+
 // ---------------------------------------------------------------------------
 // Step 1: Send the arming prompt at window start
 // ---------------------------------------------------------------------------
@@ -232,34 +276,13 @@ export async function sendArmingPrompt(userId: string): Promise<void> {
   const currency = (user.currency ?? 'GBP') as Currency
   const payload = armingPushTemplates.prompt(stakeAmt, currency)
 
-  // Attempt web push first
-  const pushSubs = await prisma.pushSubscription.count({
-    where: { userId, isActive: true },
-  })
+  const name = user.firstName ? ` ${user.firstName}` : ''
+  const symbol = CURRENCY_SYMBOL[currency]
+  const smsText = stakeAmt > 0
+    ? `Morning${name}! Drop your voice note — what's the one thing you're taking on today? Your ${symbol}${stakeAmt} stake is counting on it. Record: ${RECORD_URL()}`
+    : `Morning${name}! Drop your voice note — what's the one thing you're taking on today? Record: ${RECORD_URL()}`
 
-  if (pushSubs > 0) {
-    await sendPushToUser(userId, payload)
-    logger.info(`Arming prompt (push) sent to user ${userId}`)
-    return
-  }
-
-  // SMS fallback — morning prompt only (§1e / §9 d10)
-  // We only SMS this one touch; reminders + final-notice stay push-only
-  // (if they have no push subs at that point, they'll see it in-app when they open it)
-  if (user.phone) {
-    const name = user.firstName ? ` ${user.firstName}` : ''
-    const symbol = CURRENCY_SYMBOL[currency]
-    const smsText = stakeAmt > 0
-      ? `Morning${name}! Drop your voice note — what's the one thing you're taking on today? Your ${symbol}${stakeAmt} stake is counting on it. Open the app to record: ${process.env.FRONTEND_URL ?? 'https://www.ivykeeps.life'}/daily?action=record`
-      : `Morning${name}! Drop your voice note — what's the one thing you're taking on today? Open the app to record: ${process.env.FRONTEND_URL ?? 'https://www.ivykeeps.life'}/daily?action=record`
-
-    await messagingService.sendSMSMessage(userId, smsText, 'reminder')
-    logger.info(`Arming prompt (SMS fallback) sent to user ${userId}`)
-    return
-  }
-
-  // No push, no phone — log and skip (in-app notification visible on open)
-  logger.warn(`Arming prompt: no delivery channel available for user ${userId}`)
+  await deliverArmingNudge(userId, payload, smsText, user.phone, 'prompt')
 }
 
 // ---------------------------------------------------------------------------
@@ -285,8 +308,12 @@ export async function sendArmingReminder(userId: string, date: Date): Promise<vo
   const currency = (user.currency ?? 'GBP') as Currency
   const payload = armingPushTemplates.reminder(stakeAmt, currency)
 
-  await sendPushToUser(userId, payload)
-  logger.info(`Arming reminder (push) sent to user ${userId}`)
+  const symbol = CURRENCY_SYMBOL[currency]
+  const smsText = stakeAmt > 0
+    ? `You haven't armed today — your ${symbol}${stakeAmt} is on the line until you record your voice note. Takes 30 seconds: ${RECORD_URL()}`
+    : `You haven't armed today — record your voice note to lock today in. Takes 30 seconds: ${RECORD_URL()}`
+
+  await deliverArmingNudge(userId, payload, smsText, user.phone, 'reminder')
 }
 
 // ---------------------------------------------------------------------------
@@ -314,8 +341,12 @@ export async function sendArmingFinalNotice(userId: string, date: Date): Promise
 
   const payload = armingPushTemplates.finalNotice(stakeAmt, currency, deadlineStr)
 
-  await sendPushToUser(userId, payload)
-  logger.info(`Arming final notice (push) sent to user ${userId}`)
+  const symbol = CURRENCY_SYMBOL[currency]
+  const smsText = stakeAmt > 0
+    ? `Last chance — drop your VN by ${deadlineStr} or today won't count and your ${symbol}${stakeAmt} goes to your forfeit destination: ${RECORD_URL()}`
+    : `Last chance — drop your VN by ${deadlineStr} or today won't count: ${RECORD_URL()}`
+
+  await deliverArmingNudge(userId, payload, smsText, user.phone, 'final-notice')
 
   // ── Buddy nudge (free social layer, §4) ─────────────────────────────────
   // Only fires if the user has a pre-consented, active accountability buddy.
@@ -594,6 +625,92 @@ export async function runArmingForStage(stage: ArmingStage, now: Date): Promise<
   }
 
   logger.info(`Arming stage ${stage} complete — actioned ${actioned}/${users.length} users`)
+}
+
+// ---------------------------------------------------------------------------
+// Pre-commitment reminder — ~1h before the committed activity time
+// ---------------------------------------------------------------------------
+
+/** How long before the committed activity time the keep-on-track nudge fires. */
+const PRE_COMMIT_LEAD_MINS = 60
+
+/**
+ * Fire a "keep on track" push (SMS fallback) ~1h before a user's committed
+ * activity time, so the plan they locked with Ivy doesn't quietly slip.
+ *
+ * Trigger source: a PLANNED Workout with a plannedTime ("HH:MM") set. The
+ * committed instant is the workout's own stored date (read in UTC — plannedDate
+ * is persisted as UTC-midnight of the intended day) combined with plannedTime in
+ * the USER'S timezone. This is correct across regions (UK + US): a US evening
+ * session whose committed time crosses UTC midnight still resolves to the right
+ * instant, and the wide query window means no region is excluded by a UTC-day
+ * boundary. Each workout maps to one fixed instant, so the arming ladder's
+ * single-poll-match trick (target lands in exactly one ±7.5-min poll) still
+ * fires it exactly once — no sent-flag/column needed.
+ *
+ * Scoped to paid users (same audience as the arming loop) — free users don't run
+ * the stake loop, so we don't surprise them with SMS.
+ */
+export async function runPreCommitReminders(now: Date): Promise<void> {
+  const TOLERANCE_MS = 7.5 * 60 * 1000
+  // Wide enough that no user's local day is clipped by the server's UTC day.
+  const WINDOW_MS = 36 * 60 * 60 * 1000
+
+  const workouts = await prisma.workout.findMany({
+    where: {
+      status: 'PLANNED',
+      plannedTime: { not: null },
+      plannedDate: {
+        gte: new Date(now.getTime() - WINDOW_MS),
+        lte: new Date(now.getTime() + WINDOW_MS),
+      },
+      user: {
+        isActive: true,
+        isOnboarded: true,
+        subscriptionTier: { notIn: ['FREE', 'COACH'] },
+      },
+    },
+    select: {
+      id: true,
+      plannedDate: true,
+      plannedTime: true,
+      activity: true,
+      user: {
+        select: { id: true, firstName: true, phone: true, timezone: true },
+      },
+    },
+  })
+
+  let sent = 0
+
+  for (const w of workouts) {
+    try {
+      const tz = w.user.timezone ?? 'Europe/London'
+      // Intended calendar date as stored (UTC-midnight) + plannedTime in the
+      // user's tz → the true committed instant, region-agnostic.
+      const dateStr = formatInTimeZone(w.plannedDate, 'UTC', 'yyyy-MM-dd')
+      const committed = fromZonedTime(`${dateStr}T${w.plannedTime}:00`, tz)
+      const reminderTime = new Date(committed.getTime() - PRE_COMMIT_LEAD_MINS * 60 * 1000)
+
+      // Single-poll match, and never remind for a time that's already passed.
+      if (Math.abs(now.getTime() - reminderTime.getTime()) > TOLERANCE_MS) continue
+      if (committed.getTime() <= now.getTime()) continue
+
+      const timeStr = formatTime(w.plannedTime!, tz)
+      const activity = w.activity?.trim() || 'your session'
+      const payload = armingPushTemplates.preCommit(activity, timeStr)
+
+      const name = w.user.firstName ? ` ${w.user.firstName}` : ''
+      const smsText = `Heads up${name} — ${activity} at ${timeStr}, about an hour out. Set yourself up so it actually happens.`
+
+      await deliverArmingNudge(w.user.id, payload, smsText, w.user.phone, 'pre-commit')
+      sent++
+    } catch (err) {
+      logger.warn(`Pre-commit reminder error for workout ${w.id}:`, err)
+    }
+  }
+
+  logger.info(`Pre-commit reminders complete — sent ${sent}/${workouts.length} candidates`)
 }
 
 // ---------------------------------------------------------------------------

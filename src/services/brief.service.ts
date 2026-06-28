@@ -36,7 +36,9 @@ WHAT TO INCLUDE:
 - If contact_preference is "texts" but the call IS high-stakes: note "she/he usually prefers texts — if they answer, acknowledge it once: 'I know you usually prefer texts — I wanted to catch you for this one.'"
 - If contact_pattern_note is set: include a one-line directive reflecting it
 - How to close
-- If coach_name is set: this person has a PT. Reference the coach and programme naturally where relevant — "your coach Marcus has you on a 12-week fat loss programme." Let coach_notes shape what you probe for or avoid. If coach_style is set, match that register (e.g. "direct and data-driven" means skip the softening). Do NOT reveal the coach can read the summary — just use the notes to be a better extension of the PT.
+- If coach_name is set: this person has a PT. Reference the coach and programme naturally where relevant — "your coach Marcus has you on a 12-week fat loss programme." Let coach_notes shape what you probe for or avoid. If coach_style is set, match that register (e.g. "direct and data-driven" means skip the softening). If programme_areas is set, those are the coach's SPECIFIC prescriptions per area ("{area}: {instruction}") — use them to make your probe concrete (reference the prescribed focus/sets/sessions, e.g. "Marcus has you on 3x squats this week — is today one of them?"). If brand_name is set, the coaching is white-labelled — refer to "your {brand_name} programme" and never contradict the brand. Do NOT reveal the coach can read the summary — just use the notes to be a better extension of the PT.
+- If circle_name is set: this person is in an accountability circle. Reference it where it lands naturally as light social proof — their sprint pledge (circle_sprint_pledge), the group's consistency (circle_consistency_rate is a 0–100 %, e.g. "your circle's at 82% this sprint"), or the season theme (circle_season_theme). One mention max, as an aside — never a separate agenda item. Use it to pull them toward the group, not to shame.
+- If subscription_tier is "B2B" and company_wellness_theme is set: this is a workplace wellbeing programme. Frame lightly around the company theme (company_wellness_theme) and its goal (company_wellness_goal) where relevant — tie their session to the company push — but keep it personal first, corporate second. Never make it feel like surveillance.
 - If missed_sprint_session is true: this person missed their circle's sprint session. Open naturally — don't lead with guilt. Briefly acknowledge it ("you missed the session"), share what the group pledged (catchup_group_pledge), surface any highlights (catchup_highlights) in one line, then get their own sprint commitment. Close them aligned with the group. This takes priority over standard daily planning for this call.
 - If circle_game_name is set: include a brief directive about the game. Quote circle_game_state_summary as the current state. If circle_game_ivy_instruction is provided, let that guide the game interaction — do not invent mechanics not described there. Keep game mentions brief (1-2 sentences max) — it should feel like a natural aside, not a separate agenda item.
 
@@ -136,6 +138,25 @@ class BriefService {
       coach_programme: ctx.coach_programme,
       coach_notes: ctx.coach_notes,
       coach_style: ctx.coach_style,
+      // The coach's specific per-area prescriptions ("{area}: {instruction}") and
+      // white-label brand — let Ivy reference the actual prescribed plan, not just
+      // that a coach exists.
+      programme_areas: ctx.programme_areas,
+      brand_name: ctx.brand_name,
+
+      // Circle — everyday identity + real-time group activity. These are highly
+      // dynamic (pledge/consistency change per sprint) so they belong in the brief,
+      // not a static flow that the brief replaces.
+      circle_name: ctx.circle_name,
+      circle_sprint_pledge: ctx.circle_sprint_pledge,
+      circle_consistency_rate: ctx.circle_consistency_rate, // 0–100 (%)
+      circle_season_theme: ctx.circle_season_theme,
+
+      // B2B / workplace programme — so company calls reflect the company push,
+      // not just a single persona line.
+      subscription_tier: ctx.subscription_tier,
+      company_wellness_theme: ctx.company_wellness_theme,
+      company_wellness_goal: ctx.company_wellness_goal,
 
       // Circle game (if active)
       circle_game_name: ctx.circle_game_name,

@@ -487,6 +487,32 @@ const FLOWS: Record<string, FlowFn> = {
     ].filter(Boolean).join('\n');
   },
 
+  // Async in-app text chat. Same Ivy, different medium: short typed messages, not a
+  // spoken call. The evening call (or evening text check-in for text-first members)
+  // is still the main ritual — chat sits between rituals.
+  chat: (ctx) => {
+    const streak = ctx.current_streak > 1 ? `They're on a ${ctx.current_streak}-day streak.` : '';
+    const today = ctx.todays_workout_status
+      ? `Today's status: ${String(ctx.todays_workout_status).toLowerCase()}.`
+      : '';
+    const stake = ctx.stake_today ? `Today's stake on the line: ${ctx.stake_today}.` : '';
+    const ritual = ctx.comm_preference === 'TEXTS'
+      ? `This member prefers text — their daily check-in happens here, not on a call.`
+      : `Their main ritual is the evening call. Chat is for quick check-ins between calls; don't try to replace the call here.`;
+    return [
+      `THIS IS A TEXT CHAT, not a phone call. You are messaging back and forth in the app.`,
+      `${streak} ${today} ${stake}`.trim(),
+      ritual,
+      '',
+      `HOW TO TEXT:`,
+      `- Keep replies SHORT — 1-3 sentences, like a real text. No monologues, no bullet lists, no headers.`,
+      `- One idea or one question per message. Warm, direct, a little dry. Never gushing.`,
+      `- You can reference what you genuinely know about them (memories, recent days). Don't invent specifics.`,
+      `- If they want to be called now or reschedule, acknowledge it plainly — the app surfaces buttons for that.`,
+      `- No emoji unless they use them first. Never sign off with your name.`,
+    ].filter(Boolean).join('\n');
+  },
+
 };
 
 // ── Prompt service ─────────────────────────────────────────────────────────────
@@ -496,6 +522,7 @@ class PromptService {
   buildSystemPrompt(callType: string, ctx: Record<string, any>, isB2B: boolean, brief?: string): string {
     const sections = [
       this.persona(ctx, isB2B),
+      this.callbackContext(ctx),
       this.memoryBlock(ctx, callType),
       this.behaviouralAdapter(ctx),
       brief ?? this.resolveFlow(callType, ctx),
@@ -537,6 +564,7 @@ class PromptService {
         return 'evening_unknown';
       }
 
+      case 'CHAT':             return 'chat';
       case 'RESCUE':           return 'rescue';
       case 'ONBOARDING':       return 'onboarding';
       case 'SEASON_CLOSE':     return 'season_close';
@@ -584,6 +612,29 @@ class PromptService {
     ].join('\n');
   }
 
+  // This call exists because THEY asked Ivy to ring back. She should know that
+  // and own it in her opening — but in her own words each time, never a script.
+  private callbackContext(ctx: Record<string, any>): string {
+    if (!ctx.is_callback) return '';
+
+    const mins = Number(ctx.callback_requested_minutes) || 0;
+    // Give her the timing as a fact she can reach for if it feels natural —
+    // not a line to recite. "you wanted me to ring back" / "right on time" etc.
+    let timing = '';
+    if (mins > 0 && mins < 90) {
+      timing = `They asked for roughly ${mins} minute${mins === 1 ? '' : 's'} ago, so this is right on time.`;
+    } else if (mins >= 90) {
+      const hrs = Math.round(mins / 60);
+      timing = `They asked a while back (about ${hrs} hour${hrs === 1 ? '' : 's'} ago), so this is the callback they wanted.`;
+    }
+
+    return [
+      'WHY YOU ARE CALLING: This is the callback THEY asked you for on your last call — you said you would ring back, and you are keeping your word.',
+      timing,
+      'Acknowledge it naturally in your opening so they know you remembered — e.g. a quick "you asked me to call back" or "right on time, like you wanted." Phrase it your own way; do NOT use a fixed line, and do NOT over-explain it. One light touch, then move into the actual conversation.',
+    ].filter(Boolean).join(' ');
+  }
+
   private memoryBlock(ctx: Record<string, any>, callType: string): string {
     const parts: string[] = [];
 
@@ -599,6 +650,9 @@ class PromptService {
     }
     if (ctx.long_term_memories) {
       parts.push(`WHAT YOU KNOW ABOUT THEM:\n${ctx.long_term_memories}`);
+    }
+    if (callType !== 'CHAT' && ctx.recent_chat) {
+      parts.push(`RECENT TEXTS (you've been messaging them):\n${ctx.recent_chat}`);
     }
 
     if (!parts.length) return '';
@@ -661,6 +715,7 @@ class PromptService {
       successCharityLine,
       stakeReminder,
       `- Keep calls to the target length — Ivy respects their time`,
+      `- When the conversation is genuinely done (commitment locked, or a rest day accepted, and you've said goodbye), END THE CALL — use the end_call tool to hang up. Don't keep talking after the goodbye.`,
       '',
       `NEVER:`,
       `- Open with "Great!", "Absolutely!", "Of course!" or filler affirmations`,
@@ -668,6 +723,7 @@ class PromptService {
       `- Let a miss spiral into guilt — one sentence on what happened, then forward`,
       `- Invent details — if something is null or unknown, don't fabricate`,
       `- Say "your £X goes to charity" on a successful day — on success the stake is RETURNED, not donated`,
+      `- Do a "later check-in" inside THIS call. Verifying they actually did the thing is a SEPARATE future call — never circle back in the same call to ask "did you do it?" right after they committed. Once they commit, close, say goodbye, and hang up.`,
     ].filter(Boolean).join('\n');
   }
 

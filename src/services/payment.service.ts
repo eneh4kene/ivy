@@ -76,6 +76,14 @@ class PaymentService {
       throw new NotFoundError('User not found');
     }
 
+    // Already subscribed (including mid-trial) — a reusable card is on file. Don't
+    // create a duplicate checkout; signal the caller so it proceeds without a
+    // redirect instead of double-charging. The frontend treats this as success.
+    if (user.stripeSubscriptionId) {
+      logger.info(`Checkout skipped for ${userId} — already subscribed (${user.stripeSubscriptionId})`);
+      return { sessionId: null, url: null, alreadySubscribed: true };
+    }
+
     const priceId = this.getPriceId(tier, currency);
     if (!priceId) {
       throw new BadRequestError(`Price not configured for tier: ${tier}`);
@@ -311,6 +319,16 @@ class PaymentService {
 
     await this.updateSubscriptionTier(userId, tier, subscription.id);
 
+    // Day Zero starts at TRIAL START, not first payment: the card is now on file,
+    // so the stake can arm during the 14-day trial ("full access, stake required").
+    // Idempotent + gated on the user being onboarded — if they haven't finished
+    // onboarding yet, this no-ops and markUserAsOnboarded re-triggers it.
+    // Fire-and-forget; never block the webhook.
+    const { default: userService } = await import('./user.service');
+    userService.startDayZeroExperience(userId).catch((err) =>
+      logger.warn(`Day-Zero trigger failed for ${userId}:`, err)
+    );
+
     // Send confirmation email — non-blocking
     prisma.user.findUnique({
       where: { id: userId },
@@ -434,35 +452,16 @@ class PaymentService {
           logger.error(`Failed to dispatch pilot donations for ${user.id}:`, err)
         );
 
-        // ── Open the Foundation Run (the user's flat-rate FIRST stake cycle) ──
-        // First real payment means a card is now saved → we can place the hold.
-        // No teeth on signup day: the run starts tomorrow and ends the coming
-        // Sunday. If too few days remain (Sat/Sun signup) we defer to the Monday
-        // opener, which opens it as the next full week. Fire-and-forget — a hold
-        // failure self-nudges inside openFoundationCycle; never block the webhook.
+        // Backstop: ensure the Day-Zero experience (circle + onboarding call +
+        // Foundation Run) is running. It normally fires at trial start (the
+        // subscription-created webhook), so by first real payment this is an
+        // idempotent no-op — but it covers any case where the trial-start trigger
+        // didn't land. Fire-and-forget; never block the webhook.
         // See docs/foundation-run-and-day-zero.md.
-        if (
-          user.isOnboarded &&
-          user.stakeWeeklyAmount != null &&
-          user.subscriptionTier !== 'FREE' &&
-          user.subscriptionTier !== 'COACH'
-        ) {
-          (async () => {
-            try {
-              const { openFoundationCycle, computeFoundationWindow } = await import('./stake.service');
-              const tz = user.timezone || 'Europe/London';
-              const window = computeFoundationWindow(tz);
-              if (!window) {
-                logger.info(`Foundation Run for ${user.id} deferred to Monday opener (too few days before reset)`);
-                return;
-              }
-              await openFoundationCycle(user.id, window);
-              logger.info(`Foundation Run opened for ${user.id} (days=${window.daysInCycle})`);
-            } catch (err) {
-              logger.warn(`Failed to open Foundation Run for ${user.id}:`, err);
-            }
-          })();
-        }
+        const { default: userService } = await import('./user.service');
+        userService.startDayZeroExperience(user.id).catch((err) =>
+          logger.warn(`Day-Zero backstop failed for ${user.id}:`, err)
+        );
       }
 
       logger.info(`Payment succeeded for user ${user.id} - invoice ${invoice.id} - amount: ${amountPaid}`);

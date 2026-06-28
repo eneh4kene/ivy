@@ -40,7 +40,12 @@ jest.mock('../services/usage.service', () => ({ logUsage: jest.fn().mockResolved
 
 jest.mock('../services/retell.service', () => ({
   __esModule: true,
-  default: { initiateCall: jest.fn() },
+  default: { registerPhoneCall: jest.fn(), buildSipUri: jest.fn() },
+}));
+
+jest.mock('../services/outbound-call.service', () => ({
+  __esModule: true,
+  default: { placeCall: jest.fn() },
 }));
 
 jest.mock('../services/call.service', () => ({
@@ -79,7 +84,7 @@ jest.mock('../config', () => ({
 import prisma from '../utils/prisma';
 import axios from 'axios';
 import { logUsage } from '../services/usage.service';
-import retellService from '../services/retell.service';
+import outboundCallService from '../services/outbound-call.service';
 import callService from '../services/call.service';
 import { sendSmsHandler, sendTelegramHandler } from '../inngest/messaging';
 import { initiateCallHandler } from '../inngest/calls';
@@ -148,20 +153,20 @@ describe('initiateCallHandler', () => {
     phone: '+44', userName: 'Sam',
   };
 
-  test('C1 — dials Retell and marks IN_PROGRESS', async () => {
+  test('C1 — dials via outbound BYOC and marks IN_PROGRESS', async () => {
     (prisma.call.findUnique as jest.Mock).mockResolvedValue({ status: 'SCHEDULED' });
-    (retellService.initiateCall as jest.Mock).mockResolvedValue({ call_id: 'retell-1' });
+    (outboundCallService.placeCall as jest.Mock).mockResolvedValue({ retellCallId: 'retell-1', twilioSid: 'CA1', sipUri: 'sip:retell-1@host' });
     const step = makeStep();
     const res = await initiateCallHandler({ event: { data: baseData }, step });
     expect(step.sleepUntil).not.toHaveBeenCalled();
-    expect(retellService.initiateCall).toHaveBeenCalled();
+    expect(outboundCallService.placeCall).toHaveBeenCalled();
     expect(callService.updateCallStatus).toHaveBeenCalledWith('call-1', 'IN_PROGRESS', { retellCallId: 'retell-1' });
     expect(res).toMatchObject({ success: true, callId: 'call-1', retellCallId: 'retell-1' });
   });
 
   test('C2 — future scheduledAt sleeps until that time first', async () => {
     (prisma.call.findUnique as jest.Mock).mockResolvedValue({ status: 'SCHEDULED' });
-    (retellService.initiateCall as jest.Mock).mockResolvedValue({ call_id: 'retell-2' });
+    (outboundCallService.placeCall as jest.Mock).mockResolvedValue({ retellCallId: 'retell-2', twilioSid: 'CA2', sipUri: 'sip:retell-2@host' });
     const future = new Date(Date.now() + 60 * 60 * 1000).toISOString();
     const step = makeStep();
     await initiateCallHandler({ event: { data: { ...baseData, scheduledAt: future } }, step });
@@ -172,13 +177,13 @@ describe('initiateCallHandler', () => {
     (prisma.call.findUnique as jest.Mock).mockResolvedValue({ status: 'CANCELLED' });
     const res = await initiateCallHandler({ event: { data: baseData }, step: makeStep() });
     expect(res).toEqual({ skipped: true, status: 'CANCELLED' });
-    expect(retellService.initiateCall).not.toHaveBeenCalled();
+    expect(outboundCallService.placeCall).not.toHaveBeenCalled();
   });
 
-  test('C4 — Retell throws marks FAILED + rethrows', async () => {
+  test('C4 — placeCall throws marks FAILED (with reason) + rethrows', async () => {
     (prisma.call.findUnique as jest.Mock).mockResolvedValue({ status: 'SCHEDULED' });
-    (retellService.initiateCall as jest.Mock).mockRejectedValue(new Error('retell down'));
+    (outboundCallService.placeCall as jest.Mock).mockRejectedValue(new Error('retell down'));
     await expect(initiateCallHandler({ event: { data: baseData }, step: makeStep() })).rejects.toThrow('retell down');
-    expect(callService.updateCallStatus).toHaveBeenCalledWith('call-1', 'FAILED', { outcome: 'error' });
+    expect(callService.updateCallStatus).toHaveBeenCalledWith('call-1', 'FAILED', { outcome: 'error: retell down' });
   });
 });

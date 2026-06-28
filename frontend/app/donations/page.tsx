@@ -36,8 +36,7 @@ export default function DonationsPage() {
   const donationTypeLabel = (type: string) => type.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, c => c.toUpperCase())
 
   return (
-    <div className="p-6 sm:p-8 max-w-5xl mx-auto">
-      {/* Header */}
+    <div className="p-6 sm:p-8 pb-28 max-w-lg sm:max-w-2xl mx-auto">
       <div className="mb-8 animate-fade-in">
         <h1 className="text-2xl sm:text-3xl font-bold tracking-tight mb-1">Impact & Donations</h1>
         <p className="text-muted-foreground text-sm">Your charitable impact at a glance</p>

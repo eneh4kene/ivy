@@ -106,11 +106,12 @@ class CallService {
         callFrequency: true,
         coachId: true, // coach clients get one call/day (morning only) to halve voice COGS
         morningCallOptIn: true, // live morning call is opt-in only; default loop is the async VN (§1c)
+        commStyle: true, // TEXTS users get an evening chat check-in instead of a call
       } as any,
     })) as (null | {
       id: string; morningCallTime: string | null; eveningCallTime: string | null;
       timezone: string; preferredDays: string | null; callFrequency: number;
-      coachId: string | null; morningCallOptIn: boolean;
+      coachId: string | null; morningCallOptIn: boolean; commStyle: string | null;
     });
 
     if (!user) {
@@ -170,12 +171,50 @@ class CallService {
     if (!user.coachId && user.eveningCallTime) {
       const eveningUTC = toUTC(user.eveningCallTime);
       if (isBefore(now, eveningUTC)) {
-        const eveningCall = await this.scheduleCall(userId, 'EVENING_REVIEW', eveningUTC, await this.getUserContext(userId));
-        calls.push(eveningCall);
+        if (user.commStyle === 'TEXTS') {
+          // Text-preferred members get the evening ritual as a proactive chat
+          // check-in rather than a call. Same cadence (gated by eveningCallTime,
+          // same dedup guard), same EVENING_REVIEW context — different channel.
+          // Fire-and-forget: a chat hiccup must not abort morning scheduling.
+          this.scheduleEveningCheckIn(userId).catch((err) =>
+            logger.warn(`Evening chat check-in failed for ${userId}:`, err),
+          );
+        } else {
+          const eveningCall = await this.scheduleCall(userId, 'EVENING_REVIEW', eveningUTC, await this.getUserContext(userId));
+          calls.push(eveningCall);
+        }
       }
     }
 
     return calls;
+  }
+
+  /**
+   * Evening chat check-in for TEXTS-preferred members — the text counterpart to
+   * the EVENING_REVIEW call. Posts a proactive Ivy message built from the same
+   * evening context, idempotent per local day so a re-run of the daily job never
+   * double-posts. The member replies in-thread and Ivy responds with full context.
+   *
+   * chat.service is loaded dynamically to avoid the call↔chat import cycle (chat
+   * imports callService for scheduling; both only touch each other inside methods).
+   */
+  async scheduleEveningCheckIn(userId: string): Promise<void> {
+    const { default: chatService } = await import('./chat.service');
+
+    const since = startOfDay(new Date());
+    const existing = await prisma.message.findFirst({
+      where: { userId, channel: 'IN_APP', messageType: 'evening_checkin', createdAt: { gte: since } },
+      select: { id: true },
+    });
+    if (existing) return;
+
+    const ctx = await this.getUserContext(userId, 'EVENING_REVIEW');
+    const name = ctx.user_name ? ` ${ctx.user_name}` : '';
+    await chatService.postIvyMessage(
+      userId,
+      `Evening${name} — how did today land? Did you get your session in, or did life get in the way? Tell me how it went.`,
+      { messageType: 'evening_checkin', notify: true },
+    );
   }
 
   /**
@@ -241,9 +280,10 @@ class CallService {
     let last_evening_context: string | null = null;
     let recent_calls: string | null = null;
     let long_term_memories: string | null = null;
+    let recent_chat: string | null = null;
 
     if (callType) {
-      const [morningCall, morningVN, eveningCall, recentSummaries, ltMemories] = await Promise.all([
+      const [morningCall, morningVN, eveningCall, recentSummaries, ltMemories, recentChatMsgs] = await Promise.all([
         // Layer 1a: for EVENING_REVIEW — the live morning-call summary (only for opt-in morning-call users)
         callType === 'EVENING_REVIEW'
           ? prisma.call.findFirst({
@@ -300,6 +340,19 @@ class CallService {
           take: 8,
           select: { content: true, category: true },
         }),
+
+        // Same-day continuity: the most recent in-app chat exchange. The daily
+        // batch distils chat into long-term memory overnight; this raw snippet
+        // bridges the gap so a call right after a chat already knows it. Skipped
+        // for the CHAT flow itself (chat already sends full thread history).
+        callType !== 'CHAT'
+          ? prisma.message.findMany({
+              where: { userId, channel: 'IN_APP' },
+              orderBy: { createdAt: 'desc' },
+              take: 6,
+              select: { direction: true, content: true },
+            })
+          : Promise.resolve([] as { direction: string; content: string }[]),
       ]);
 
       // Prefer the spoken morning VN (the default arming mechanic); fall back to the live morning-call summary.
@@ -320,6 +373,14 @@ class CallService {
       if (ltMemories.length) {
         long_term_memories = ltMemories
           .map((m) => `${m.category}: ${m.content}`)
+          .join('\n');
+      }
+
+      if (recentChatMsgs.length) {
+        recent_chat = recentChatMsgs
+          .slice()
+          .reverse() // findMany was desc; show oldest → newest
+          .map((m) => `${m.direction === 'INBOUND' ? 'Them' : 'You'}: ${m.content}`)
           .join('\n');
       }
     }
@@ -533,6 +594,7 @@ class CallService {
       last_evening_context,   // Layer 1: last evening call summary (for MORNING_PLANNING)
       recent_calls,           // Layer 2: last 4 call summaries as rolling narrative
       long_term_memories,     // Layer 3: curated memorable facts about this person
+      recent_chat,            // Same-day bridge: latest in-app chat exchange (non-CHAT flows)
 
       // Behavioural intelligence (from insight.service — null until enough calls exist)
       inferred_patterns: (user?.inferredProfile as any)?.inferred_patterns ?? null,

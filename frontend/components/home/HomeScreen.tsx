@@ -12,7 +12,7 @@
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
-import { Flame, Users, Target, Heart, ArrowRight, Shield, ChevronRight, Mic, Settings } from 'lucide-react'
+import { Flame, Users, Target, Heart, ArrowRight, Shield, ChevronRight, Mic, Phone, MessageCircle } from 'lucide-react'
 import { useStakeGate } from '@/hooks/useStakeGate'
 import { StakeReNudge } from '@/components/stake-setup/StakeReNudge'
 import { InstallPrompt } from '@/components/pwa/InstallPrompt'
@@ -22,10 +22,12 @@ import {
   seasonsApi,
   circlesApi,
   donationsApi,
+  callsApi,
+  chatApi,
   type StakeState,
   type StakeDayStatus,
 } from '@/lib/api'
-import type { Season, Sprint, ImpactWallet } from '@/lib/types'
+import type { Season, Sprint, ImpactWallet, Call } from '@/lib/types'
 import { useAuthStore } from '@/lib/store/auth.store'
 
 // ─── Tokens / helpers ─────────────────────────────────────────────────────────
@@ -39,6 +41,12 @@ function greeting(): string {
   if (h < 12) return 'Morning'
   if (h < 18) return 'Afternoon'
   return 'Evening'
+}
+
+function initials(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean)
+  if (parts.length === 0) return '·'
+  return (parts[0][0] + (parts[1]?.[0] ?? '')).toUpperCase()
 }
 
 // ─── Day dot ──────────────────────────────────────────────────────────────────
@@ -82,7 +90,7 @@ function SectionHead({ label, href }: { label: string; href?: string }) {
 
 // ─── Today's stake status card ────────────────────────────────────────────────
 
-function TodayStakeCard({ state }: { state: StakeState }) {
+function TodayStakeCard({ state, hasCard }: { state: StakeState; hasCard: boolean }) {
   const { config, cycle, today } = state
   const s = sym(cycle?.currency ?? config.currency)
 
@@ -108,8 +116,34 @@ function TodayStakeCard({ state }: { state: StakeState }) {
     )
   }
 
-  // Stake configured but no active weekly cycle yet (cycles open Monday).
+  // Stake configured but no active cycle yet. Two very different states:
+  //  • No card on file → the stake CANNOT arm. Be honest and drive to add one;
+  //    never imply a cycle is coming when nothing will open. (This was the old
+  //    "Stake ready · cycle starts Monday" lie shown to card-less new users.)
+  //  • Card on file → the cycle genuinely opens with the weekly cron.
   if (!cycle) {
+    if (!hasCard) {
+      return (
+        <Link href="/stake-setup">
+          <div className="relative rounded-2xl p-4 overflow-hidden border border-gold-400/30 bg-gold-400/05 glow-sm-gold active:scale-[0.99] transition-all">
+            <div className="relative flex items-start gap-3">
+              <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 bg-gold-400/12">
+                <Shield className="w-5 h-5 text-gold-400" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold text-gold-300">Add a card to arm your stake</p>
+                <p className="text-xs text-ink-400 mt-0.5">
+                  {config.weeklyAmount != null
+                    ? `Your ${s}${config.weeklyAmount}/week stake activates the moment your card's on file. Nothing's charged today.`
+                    : "Your stake activates the moment your card's on file. Nothing's charged today."}
+                </p>
+              </div>
+              <ArrowRight className="w-4 h-4 shrink-0 mt-0.5 text-gold-400" />
+            </div>
+          </div>
+        </Link>
+      )
+    }
     return (
       <Link href="/stake-setup">
         <div className="relative rounded-2xl p-4 overflow-hidden border border-ink-700/60 surface active:scale-[0.99] transition-all">
@@ -207,6 +241,69 @@ function TodayStakeCard({ state }: { state: StakeState }) {
   )
 }
 
+// ─── Upcoming call (orientation / "Ivy is about to call you") ──────────────────
+
+function formatCallWhen(iso: string): string {
+  const when = new Date(iso)
+  const now = new Date()
+  const sameDay = when.toDateString() === now.toDateString()
+  const tmrw = new Date(now); tmrw.setDate(now.getDate() + 1)
+  const isTomorrow = when.toDateString() === tmrw.toDateString()
+  const time = when.toLocaleTimeString('en-GB', { hour: 'numeric', minute: '2-digit' })
+  if (sameDay) return `today at ${time}`
+  if (isTomorrow) return `tomorrow at ${time}`
+  return `${when.toLocaleDateString('en-GB', { weekday: 'long' })} at ${time}`
+}
+
+const CALL_COPY: Record<string, { title: string; sub: string }> = {
+  ONBOARDING: {
+    title: 'Ivy is calling to get you started',
+    sub: "Pick up — it's a quick chat to set up your week and show you the ropes.",
+  },
+  MORNING_PLANNING: { title: 'Morning planning call', sub: 'Ivy rings to set your intention for the day.' },
+  EVENING_REVIEW:   { title: 'Evening review call',   sub: 'Ivy rings to close out your day.' },
+  WEEKLY_PLANNING:  { title: 'Weekly planning call',  sub: 'Ivy rings to plan the week ahead.' },
+}
+
+function NextCallCard({ call }: { call: Call }) {
+  const copy = CALL_COPY[call.callType] ?? { title: 'Upcoming call with Ivy', sub: 'Ivy will call you shortly.' }
+  const isOnboarding = call.callType === 'ONBOARDING'
+  return (
+    <div className={`relative rounded-2xl p-4 overflow-hidden border ${isOnboarding ? 'border-periwinkle-400/30 bg-periwinkle-400/05 glow-sm' : 'border-ink-700/60 surface'}`}>
+      <div className="relative flex items-start gap-3">
+        <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${isOnboarding ? 'bg-periwinkle-400/12' : 'bg-ink-700/60'}`}>
+          <Phone className={`w-5 h-5 ${isOnboarding ? 'text-periwinkle-400' : 'text-ink-300'}`} />
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className={`text-sm font-semibold ${isOnboarding ? 'text-periwinkle-200' : 'text-ink-100'}`}>{copy.title}</p>
+          <p className="text-xs text-ink-400 mt-0.5">{copy.sub}</p>
+          <p className="text-xs font-medium text-periwinkle-300 mt-1.5 font-mono">📞 {formatCallWhen(call.scheduledAt)}</p>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function IvyMessageCard({ count }: { count: number }) {
+  return (
+    <Link
+      href="/ivy"
+      className="relative flex items-center gap-3 rounded-2xl p-4 overflow-hidden border border-gold-400/30 bg-gold-400/05 glow-sm transition-colors hover:bg-gold-400/10"
+    >
+      <div className="w-10 h-10 rounded-xl bg-gold-400/12 flex items-center justify-center shrink-0">
+        <MessageCircle className="w-5 h-5 text-gold-400" />
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-semibold text-gold-200">
+          Ivy left you {count > 1 ? `${count} messages` : 'a message'}
+        </p>
+        <p className="text-xs text-ink-400 mt-0.5">Tap to open your chat with Ivy.</p>
+      </div>
+      <ArrowRight className="w-4 h-4 text-gold-300 shrink-0" />
+    </Link>
+  )
+}
+
 // ─── Streak + week dots ───────────────────────────────────────────────────────
 
 interface StreakView { current: number; longest: number; graceRemaining: number }
@@ -245,7 +342,7 @@ function StreakWeekCard({ streak, week }: { streak: StreakView; week: StakeState
 type MyCircle = Awaited<ReturnType<typeof circlesApi.getMy>>[number]
 
 function CircleCard({ circle }: { circle: MyCircle }) {
-  const total = circle.maxSize || circle.size || circle.members.length
+  const total = circle.maxSize || circle.size || circle.members?.length || 0
   const activePct = total > 0 ? Math.round((circle.size / total) * 100) : 0
 
   return (
@@ -394,32 +491,6 @@ function ImpactCard({ impact, currency }: { impact: ImpactWallet; currency: stri
   )
 }
 
-// ─── Quick action row ─────────────────────────────────────────────────────────
-
-function QuickActions() {
-  const actions = [
-    { label: 'Record VN', icon: Mic, href: '/daily?action=record', color: 'text-gold-400', bg: 'bg-gold-400/10' },
-    { label: 'Circles', icon: Users, href: '/circles', color: 'text-periwinkle-400', bg: 'bg-periwinkle-400/10' },
-    { label: 'Season', icon: Target, href: '/seasons', color: 'text-sage-400', bg: 'bg-sage-400/10' },
-    { label: 'Impact', icon: Heart, href: '/donations', color: 'text-ember-400', bg: 'bg-ember-400/10' },
-  ]
-
-  return (
-    <div className="grid grid-cols-4 gap-2">
-      {actions.map((a) => (
-        <Link key={a.label} href={a.href}>
-          <div className="flex flex-col items-center gap-1.5 py-3 rounded-2xl surface hover:bg-ink-700/60 transition-colors active:scale-[0.97]">
-            <div className={`w-9 h-9 rounded-xl ${a.bg} flex items-center justify-center`}>
-              <a.icon className={`w-4 h-4 ${a.color}`} />
-            </div>
-            <span className="text-2xs text-ink-400 font-medium">{a.label}</span>
-          </div>
-        </Link>
-      ))}
-    </div>
-  )
-}
-
 // ─── Root ─────────────────────────────────────────────────────────────────────
 
 export function HomeScreen() {
@@ -432,7 +503,12 @@ export function HomeScreen() {
   const [sprint, setSprint] = useState<Sprint | null>(null)
   const [circle, setCircle] = useState<MyCircle | null>(null)
   const [impact, setImpact] = useState<ImpactWallet | null>(null)
+  const [nextCall, setNextCall] = useState<Call | null>(null)
+  const [ivyUnread, setIvyUnread] = useState(0)
   const [loading, setLoading] = useState(true)
+
+  // No card on file (FREE tier) → the stake can't arm yet. Drives honest copy.
+  const hasCard = (authUser?.subscriptionTier ?? 'FREE') !== 'FREE'
 
   useEffect(() => {
     let alive = true
@@ -468,6 +544,16 @@ export function HomeScreen() {
       .then((w) => { if (alive) setImpact(w ?? null) })
       .catch(() => {})
 
+    callsApi.getUpcoming()
+      .then((cs) => { if (alive) setNextCall(cs?.[0] ?? null) })
+      .catch(() => {})
+
+    // Unread count only — never getThread() here, which would mark Ivy's
+    // messages read as a side-effect of loading home.
+    chatApi.getUnreadCount()
+      .then((n) => { if (alive) setIvyUnread(n) })
+      .catch(() => {})
+
     return () => { alive = false }
   }, [])
 
@@ -497,10 +583,15 @@ export function HomeScreen() {
             </div>
             <Link
               href="/settings"
-              aria-label="Settings"
-              className="w-9 h-9 -mr-1.5 flex items-center justify-center rounded-full text-ink-400 hover:text-ink-100 hover:bg-ink-700/50 transition-colors"
+              aria-label="Profile & settings"
+              className="w-9 h-9 -mr-1 flex items-center justify-center rounded-full bg-gold-400/15 border border-gold-400/30 text-gold-300 text-sm font-semibold hover:bg-gold-400/25 transition-colors overflow-hidden"
             >
-              <Settings className="w-5 h-5" />
+              {authUser?.profileImage ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={authUser.profileImage} alt="" className="w-full h-full object-cover" />
+              ) : (
+                initials(firstName)
+              )}
             </Link>
           </div>
         </div>
@@ -517,15 +608,17 @@ export function HomeScreen() {
           </div>
         ) : (
           <>
+            {/* Ivy reached out — onboarding handoff / evening check-in / replies */}
+            {ivyUnread > 0 && <IvyMessageCard count={ivyUnread} />}
+
             {/* Today's primary CTA */}
-            {state && <TodayStakeCard state={state} />}
+            {state && <TodayStakeCard state={state} hasCard={hasCard} />}
+
+            {/* Upcoming call — Ivy reaching out (welcome call / daily check-ins) */}
+            {nextCall && <NextCallCard call={nextCall} />}
 
             {/* Streak / week dots */}
             <StreakWeekCard streak={streak} week={state?.week ?? []} />
-
-            {/* Quick actions */}
-            <SectionHead label="Go to" />
-            <QuickActions />
 
             {/* Circle */}
             <SectionHead label="Your circle" href="/circles" />

@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, Users, BarChart2, Flame, Shield, Sparkles } from 'lucide-react'
+import { ArrowLeft, Users, BarChart2, Flame, Sparkles, BellRing, Share, Plus } from 'lucide-react'
 import { useVisualViewport } from '@/hooks/useVisualViewport'
 import { StakeBar } from './StakeBar'
 import { VoiceRecorder } from './VoiceRecorder'
@@ -11,6 +11,8 @@ import { EveningReview } from './EveningReview'
 import { LivingForm, hashSeed, type LivingState } from './LivingForm'
 import { stakeApi, statsApi, circlesApi, type StakeState } from '@/lib/api'
 import { useAuthStore } from '@/lib/store/auth.store'
+import { usePushNotifications } from '@/hooks/usePushNotifications'
+import { isIOS, isStandalone } from '@/lib/pwa'
 import type { DailyLoopPhase, VoiceNote, StakeStatus } from './types'
 
 /* ── Circle badge ─────────────────────────────────────────────────────────── */
@@ -74,11 +76,90 @@ function DayHeader({ phase, name, streakDays }: { phase: DailyLoopPhase; name: s
 }
 
 /* ── Armed confirmation card ──────────────────────────────────────────────── */
+/* ── Push opt-in (arcade-themed, daily screen) ────────────────────────────── */
+/**
+ * The whole stake loop depends on the user arming each morning, and the morning
+ * reminder ladder is push-first. Plenty of users never hit the stake-setup screen
+ * where EnablePushCard lives (or armed before it existed), so they get a single
+ * morning SMS and silence. This surfaces the opt-in right on the daily screen —
+ * the page every reminder deep-links to — so future nudges actually land.
+ *
+ * Self-hides once notifications are on. Dismissible per-session so it's a nudge,
+ * not a nag. Styled to match the arcade daily screen (not the dawn EnablePushCard).
+ */
+function DailyPushPrompt() {
+  const { permission, isSubscribed, isLoading, subscribe } = usePushNotifications()
+  const [dismissed, setDismissed] = useState(false)
+  const [iosTab] = useState(() => isIOS() && !isStandalone())
+
+  // Already on, blocked (can't re-prompt), unsupported, or dismissed → show nothing.
+  if (
+    dismissed ||
+    (isSubscribed && permission === 'granted') ||
+    permission === 'denied' ||
+    permission === 'unsupported'
+  ) {
+    return null
+  }
+
+  // iOS browser tab — push needs Home Screen install first.
+  if (iosTab) {
+    return (
+      <div className="w-full max-w-sm mx-auto mb-4 animate-fade-in">
+        <div className="glass-arcade rounded-2xl p-4 space-y-2 relative">
+          <div className="flex items-center gap-2">
+            <BellRing className="w-3.5 h-3.5 text-neon-cyan" />
+            <span className="text-2xs font-bold uppercase tracking-widest text-neon-cyan">Get your morning reminder</span>
+            <button
+              onClick={() => setDismissed(true)}
+              className="ml-auto text-2xs text-white/35 hover:text-white/70 transition-colors uppercase tracking-wider"
+              aria-label="Dismiss"
+            >
+              Later
+            </button>
+          </div>
+          <p className="text-2xs text-white/55 leading-relaxed">
+            On iPhone, add Ivy to your Home Screen: tap <Share className="w-3 h-3 inline text-neon-cyan" /> then
+            <span className="text-white/80 font-medium"> Add to Home Screen </span><Plus className="w-3 h-3 inline text-white/60" />, and open Ivy from there.
+          </p>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="w-full max-w-sm mx-auto mb-4 animate-fade-in">
+      <button
+        onClick={subscribe}
+        disabled={isLoading}
+        className="w-full glass-arcade rounded-2xl px-4 py-3 flex items-center gap-3 text-left hover:bg-white/[0.07] transition-colors active:scale-[0.98] disabled:opacity-60"
+      >
+        <div className="w-8 h-8 rounded-xl bg-[#27e8ff]/12 border border-[#27e8ff]/25 flex items-center justify-center shrink-0">
+          {isLoading
+            ? <span className="w-3.5 h-3.5 rounded-full border-2 border-neon-cyan/40 border-t-neon-cyan animate-spin" />
+            : <BellRing className="w-4 h-4 text-neon-cyan" />}
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-medium text-white/90">Turn on morning reminders</p>
+          <p className="text-2xs text-white/45 mt-0.5">So Ivy can nudge you to arm before your deadline</p>
+        </div>
+        <span
+          onClick={(e) => { e.stopPropagation(); setDismissed(true) }}
+          className="text-2xs text-white/30 hover:text-white/60 transition-colors uppercase tracking-wider shrink-0"
+        >
+          Later
+        </span>
+      </button>
+    </div>
+  )
+}
+
 function ArmedCard({ vn, dailySlice, currency }: { vn: VoiceNote | null; dailySlice: number; currency: 'GBP' | 'USD' }) {
   const sym = currency === 'GBP' ? '£' : '$'
 
   return (
     <div className="px-4 flex-1 flex flex-col gap-4 animate-fade-in">
+      <DailyPushPrompt />
       {vn && (
         <div className="glass-arcade panel-cyan rounded-2xl p-4 space-y-2.5">
           <div className="flex items-center gap-2">
@@ -172,12 +253,13 @@ function IntentionHint({ intention }: { intention: { text: string; capturedAt: s
 }
 
 /* ── Pre-cycle / no-config state ──────────────────────────────────────────── */
-function NoStakeState({ hasConfig, weeklyAmount, currency }: { hasConfig: boolean; weeklyAmount: number | null; currency: 'GBP' | 'USD' }) {
+function NoStakeState({ hasConfig, weeklyAmount, currency, seed }: { hasConfig: boolean; weeklyAmount: number | null; currency: 'GBP' | 'USD'; seed: number }) {
   const sym = currency === 'GBP' ? '£' : '$'
   return (
     <div className="flex-1 flex flex-col items-center justify-center px-6 text-center gap-4">
-      <div className="w-14 h-14 rounded-2xl glass-arcade panel-cyan flex items-center justify-center">
-        <Shield className="w-7 h-7 text-neon-cyan" />
+      {/* Signature LivingForm seed — the plant before it has anything to grow from */}
+      <div className="w-full max-w-[280px] h-[240px] -mb-2">
+        <LivingForm daysKept={0} daysForfeited={0} state="asleep" seed={seed} />
       </div>
       {hasConfig ? (
         <>
@@ -318,6 +400,7 @@ export function DailyLoopScreen() {
           hasConfig={!!state?.config.hasConfig}
           weeklyAmount={state?.config.weeklyAmount ?? null}
           currency={currency}
+          seed={livingSeed}
         />
       ) : phase === 'evening-review' ? (
         <div className="flex-1 min-h-0 flex flex-col">
@@ -367,6 +450,7 @@ export function DailyLoopScreen() {
             />
           </div>
           <div className="shrink-0 px-4 pb-6">
+            <DailyPushPrompt />
             {state?.today.suggestedIntention && (
               <IntentionHint intention={state.today.suggestedIntention} />
             )}

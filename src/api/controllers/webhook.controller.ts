@@ -8,6 +8,7 @@ import promptService from '../../services/prompt.service';
 import messagingService from '../../services/messaging.service';
 import paymentService from '../../services/payment.service';
 import insightService from '../../services/insight.service';
+import callbackService from '../../services/callback.service';
 import { logUsage } from '../../services/usage.service';
 import { serverAnalytics } from '../../lib/analytics';
 import { handleMissedCall as handleMissedCallComms, handleDroppedCall } from '../../services/communication.service';
@@ -25,6 +26,35 @@ import { sendSuccess } from '../../utils/response';
 import logger from '../../utils/logger';
 import { config } from '../../config';
 
+/**
+ * Verify a Retell webhook signature. Retell's scheme (NOT a generic HMAC):
+ *   header  X-Retell-Signature: "v={unix_ms},d={hex_hmac}"
+ *   digest  HMAC-SHA256( rawBody + timestamp ), keyed by the API key
+ *   freshness: timestamp within 5 minutes
+ * The signed payload is the RAW request bytes (req.rawBody, captured in app.ts) —
+ * re-serialising req.body changes formatting and never matches. Our
+ * RETELL_WEBHOOK_SECRET is set to the API key, which is the correct secret.
+ * Returns null on success, or an error reason string to 401 with.
+ */
+function verifyRetellSignature(req: Request): string | null {
+  const secret = config.retell.webhookSecret || config.retell.apiKey;
+  if (!secret) return null; // no secret configured → skip verification
+  const header = req.headers['x-retell-signature'] as string | undefined;
+  const rawBody: Buffer | undefined = (req as any).rawBody;
+  const parsed = header?.match(/v=(\d+),d=([a-f0-9]+)/i);
+  if (!header || !parsed || !rawBody) return 'Missing or malformed Retell signature';
+  const [, ts, digest] = parsed;
+  if (Math.abs(Date.now() - Number(ts)) > 5 * 60 * 1000) return 'Stale Retell signature';
+  const expected = crypto
+    .createHmac('sha256', secret)
+    .update(Buffer.concat([rawBody, Buffer.from(ts)]))
+    .digest('hex');
+  const a = Buffer.from(digest);
+  const b = Buffer.from(expected);
+  if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return 'Invalid Retell signature';
+  return null;
+}
+
 class WebhookController {
   /**
    * Handle Retell AI webhook events
@@ -36,24 +66,9 @@ class WebhookController {
     next: NextFunction
   ): Promise<void> {
     try {
-      // Verify Retell webhook signature
-      const secret = process.env.RETELL_WEBHOOK_SECRET
-      if (secret) {
-        const signature = req.headers['x-retell-signature'] as string
-        const timestamp = req.headers['x-retell-timestamp'] as string
-        if (!signature || !timestamp) {
-          res.status(401).send('Missing Retell signature headers')
-          return
-        }
-        const expected = crypto
-          .createHmac('sha256', secret)
-          .update(`${timestamp}.${JSON.stringify(req.body)}`)
-          .digest('hex')
-        if (!crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expected))) {
-          res.status(401).send('Invalid Retell signature')
-          return
-        }
-      }
+      // Verify Retell webhook signature (see verifyRetellSignature).
+      const sigError = verifyRetellSignature(req);
+      if (sigError) { res.status(401).send(sigError); return; }
 
       const { event, call } = req.body;
 
@@ -125,6 +140,10 @@ class WebhookController {
               dbCallType,
               dbUserId,
             ).catch((err) => logger.error('Insight extraction error:', err));
+
+            // Keep Ivy's word: if the user asked to be called back, schedule it.
+            callbackService.detectAndSchedule(dbUserId, call.transcript)
+              .catch((err) => logger.error('Callback detection error:', err));
           }
 
           // Clear any pending circle catch-up — Ivy covered it in this call
@@ -416,24 +435,9 @@ class WebhookController {
    */
   async handleRetellInbound(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      // Verify Retell signature (reuses RETELL_WEBHOOK_SECRET)
-      const secret = config.retell.webhookSecret;
-      if (secret) {
-        const signature = req.headers['x-retell-signature'] as string;
-        const timestamp = req.headers['x-retell-timestamp'] as string;
-        if (!signature || !timestamp) {
-          res.status(401).send('Missing Retell signature headers');
-          return;
-        }
-        const expected = crypto
-          .createHmac('sha256', secret)
-          .update(`${timestamp}.${JSON.stringify(req.body)}`)
-          .digest('hex');
-        if (!crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expected))) {
-          res.status(401).send('Invalid Retell signature');
-          return;
-        }
-      }
+      // Verify Retell signature (see verifyRetellSignature).
+      const sigError = verifyRetellSignature(req);
+      if (sigError) { res.status(401).send(sigError); return; }
 
       const fromNumber: string = req.body.from_number ?? '';
       const retellCallId: string = req.body.call_id ?? '';
@@ -478,7 +482,14 @@ class WebhookController {
       res.json({
         agent_id: agentId,
         override_llm_config: { general_prompt: systemPrompt },
-        retell_llm_dynamic_variables: flattenContext({ ...ctx, call_type: callType.toLowerCase() }),
+        // The agent's general_prompt is bound to {{system_prompt}} (see
+        // /retell-bind-prompt), so inject our composed prompt as a dynamic var too
+        // — this is the path that actually applies (override_llm_config is not
+        // reliably honoured). flattenContext also exposes user_name/streak/etc.
+        retell_llm_dynamic_variables: {
+          ...flattenContext({ ...ctx, call_type: callType.toLowerCase() }),
+          system_prompt: systemPrompt,
+        },
         metadata: { callId: dbCall.id, userId: user.id, callType },
       });
     } catch (error) {

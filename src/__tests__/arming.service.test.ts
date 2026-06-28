@@ -31,7 +31,7 @@ jest.mock('../utils/prisma', () => ({
   default: {
     user: { findUnique: jest.fn(), findMany: jest.fn(), update: jest.fn() },
     workout: { findFirst: jest.fn(), findUnique: jest.fn(), update: jest.fn() },
-    stakeCycle: { findMany: jest.fn() },
+    stakeCycle: { findMany: jest.fn(), count: jest.fn() },
     pushSubscription: { count: jest.fn() },
     voiceNote: { create: jest.fn() },
   },
@@ -58,6 +58,7 @@ jest.mock('../services/call.service', () => ({
 
 jest.mock('../services/stake.service', () => ({
   openStakeCycle: jest.fn().mockResolvedValue({ cycleId: 'cycle-1' }),
+  openFoundationCycle: jest.fn().mockResolvedValue({ cycleId: 'foundation-1' }),
   settleStakeCycle: jest.fn().mockResolvedValue({ status: 'SETTLED' }),
   linkWorkoutToCycle: jest.fn().mockResolvedValue(undefined),
 }))
@@ -98,6 +99,7 @@ const mockSendPush = sendPushToUser as jest.MockedFunction<typeof sendPushToUser
 const mockSendSMS = messagingService.sendSMSMessage as jest.MockedFunction<typeof messagingService.sendSMSMessage>
 const mockScheduleCall = callService.scheduleCall as jest.MockedFunction<typeof callService.scheduleCall>
 const mockOpenCycle = stakeService.openStakeCycle as jest.MockedFunction<typeof stakeService.openStakeCycle>
+const mockOpenFoundation = stakeService.openFoundationCycle as jest.MockedFunction<typeof stakeService.openFoundationCycle>
 const mockSettleCycle = stakeService.settleStakeCycle as jest.MockedFunction<typeof stakeService.settleStakeCycle>
 
 const MOCK_USER_BASE = {
@@ -393,11 +395,13 @@ describe('runArmingForStage', () => {
 // A14 — openStakeCyclesForActiveUsers
 // ---------------------------------------------------------------------------
 describe('openStakeCyclesForActiveUsers', () => {
-  it('A14: calls openStakeCycle for each eligible user', async () => {
+  it('A14: calls openStakeCycle for each eligible RETURNING user (prior cycle exists)', async () => {
     ;(mockPrisma.user.findMany as jest.Mock).mockResolvedValue([
       { id: 'user-a' },
       { id: 'user-b' },
     ])
+    // Both have a prior cycle → normal full-price weekly open (not Foundation Run).
+    ;(mockPrisma.stakeCycle.count as jest.Mock).mockResolvedValue(1)
     mockOpenCycle.mockResolvedValue({
       cycleId: 'cycle-1',
       paymentIntentId: 'pi_1',
@@ -412,10 +416,22 @@ describe('openStakeCyclesForActiveUsers', () => {
     expect(mockOpenCycle).toHaveBeenCalledTimes(2)
     expect(mockOpenCycle).toHaveBeenCalledWith('user-a')
     expect(mockOpenCycle).toHaveBeenCalledWith('user-b')
+    expect(mockOpenFoundation).not.toHaveBeenCalled()
+  })
+
+  it('A14a: a first-time user (no prior cycle) gets a Foundation Run, not a normal cycle', async () => {
+    ;(mockPrisma.user.findMany as jest.Mock).mockResolvedValue([{ id: 'user-new' }])
+    ;(mockPrisma.stakeCycle.count as jest.Mock).mockResolvedValue(0)
+
+    await openStakeCyclesForActiveUsers()
+
+    expect(mockOpenFoundation).toHaveBeenCalledWith('user-new')
+    expect(mockOpenCycle).not.toHaveBeenCalled()
   })
 
   it('A14b: skips users with existing open cycles gracefully (no throw)', async () => {
     ;(mockPrisma.user.findMany as jest.Mock).mockResolvedValue([{ id: 'user-a' }])
+    ;(mockPrisma.stakeCycle.count as jest.Mock).mockResolvedValue(1)
     mockOpenCycle.mockRejectedValue(new Error('already has an open stake cycle'))
 
     // Should not throw

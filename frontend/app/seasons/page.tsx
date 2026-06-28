@@ -1,7 +1,8 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Target, Plus, Sparkles } from 'lucide-react'
+import Link from 'next/link'
+import { Target, Plus, Sparkles, ArrowLeft } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { seasonsApi } from '@/lib/api'
 import type { Season, Sprint } from '@/lib/types'
@@ -80,14 +81,23 @@ export default function SeasonsPage() {
   const activeSeason = seasons.find(s => s.status === 'ACTIVE')
 
   return (
-    <div className="max-w-3xl mx-auto px-4 py-8">
-      <div className="flex items-center justify-between mb-8">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Seasons</h1>
-          <p className="text-muted-foreground text-sm mt-1">12-week transformation arcs · 3 sprints each</p>
+    <div className="max-w-3xl mx-auto px-4 pt-safe-t py-8">
+      {/* ── Nav ── */}
+      <div className="flex items-center gap-3 mb-6">
+        <Link href="/home">
+          <button
+            className="w-9 h-9 rounded-xl bg-ink-700/80 border border-ink-600 flex items-center justify-center hover:bg-ink-700 transition-colors"
+            aria-label="Back"
+          >
+            <ArrowLeft className="w-4 h-4 text-ink-200" />
+          </button>
+        </Link>
+        <div className="flex-1 min-w-0">
+          <h1 className="text-2xl font-bold tracking-tight leading-tight">Seasons</h1>
+          <p className="text-muted-foreground text-sm mt-0.5">12-week transformation arcs · 3 sprints each</p>
         </div>
         {!activeSeason && (
-          <Button size="sm" onClick={() => setShowForm(true)}>
+          <Button size="sm" onClick={() => setShowForm(true)} className="shrink-0">
             <Plus className="w-4 h-4 mr-1.5" /> New Season
           </Button>
         )}

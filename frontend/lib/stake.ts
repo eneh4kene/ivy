@@ -56,12 +56,18 @@ export function clearDeferredStakeGate(): void {
  *
  *  1. stakeApi.saveConfig(...) — makes the user eligible for the weekly
  *     openStakeCycle cron. Validation errors propagate to the caller.
- *  2. paymentsApi.createCheckoutSession('PRO') — subscription checkout also
- *     saves a reusable card. Already-subscribed users have a card on file, so a
- *     missing URL or a thrown checkout error is treated as "card already saved".
+ *  2. paymentsApi.createCheckoutSession('PRO') — subscription checkout, which
+ *     saves a reusable card. The backend returns `alreadySubscribed: true` when a
+ *     card is already on file (re-configuring a stake), or a Checkout `url` for a
+ *     new card.
  *
  * Returns `{ redirected: true }` when the browser is being sent to Stripe
  * Checkout (the caller should stop and let navigation happen).
+ *
+ * IMPORTANT: this NEVER fakes success. If checkout can't be started and the user
+ * has no card on file, it throws — the caller must surface the error rather than
+ * march the user onto the home screen with no subscription (the old silent-catch
+ * bug that left new users with a dead app and no stake).
  */
 export async function activateStake(state: StakeSetupState): Promise<{ redirected: boolean }> {
   await stakeApi.saveConfig({
@@ -73,15 +79,17 @@ export async function activateStake(state: StakeSetupState): Promise<{ redirecte
     armingWindowEnd: state.armingWindowEnd,
   })
 
-  try {
-    const { url } = await paymentsApi.createCheckoutSession('PRO')
-    if (url && typeof window !== 'undefined') {
-      window.location.href = url
-      return { redirected: true }
-    }
-  } catch {
-    // Already subscribed (or checkout unavailable) — a reusable card is on file.
+  // A thrown error here propagates to the caller (no silent swallow).
+  const res = await paymentsApi.createCheckoutSession('PRO')
+
+  // Card already on file — nothing to redirect to; the stake arms off-session.
+  if (res?.alreadySubscribed) return { redirected: false }
+
+  if (res?.url && typeof window !== 'undefined') {
+    window.location.href = res.url
+    return { redirected: true }
   }
 
-  return { redirected: false }
+  // No URL and not already subscribed → checkout genuinely failed.
+  throw new Error("We couldn't start checkout, so your stake isn't active yet. Please try again.")
 }

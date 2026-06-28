@@ -10,10 +10,12 @@ import { dispatchPendingDonations } from './services/every-org.service';
 import callService from './services/call.service';
 import seasonService from './services/season.service';
 import coachService from './services/coach.service';
+import insightService from './services/insight.service';
 import { getServiceCostSummary } from './services/usage.service';
 import { sendTelegramAdmin } from './utils/telegram-admin';
 import {
   runArmingForStage,
+  runPreCommitReminders,
   openStakeCyclesForActiveUsers,
   settleExpiredStakeCycles,
 } from './services/arming.service';
@@ -130,6 +132,9 @@ cron.schedule('*/15 * * * *', async () => {
   await runArmingForStage('DEADLINE', now).catch((err) =>
     logger.error('Arming DEADLINE stage error:', err)
   );
+  await runPreCommitReminders(now).catch((err) =>
+    logger.error('Pre-commit reminder error:', err)
+  );
 });
 
 // ── StakeCycle open — every Monday at 00:05 UTC ───────────────────────────
@@ -176,6 +181,25 @@ cron.schedule('0 3 * * *', async () => {
     }
   } catch (err) {
     logger.error('Stuck call recovery error:', err);
+  }
+});
+
+// Every day at 3am UTC — distil that day's in-app chats into long-term memory
+// (one Haiku extraction per user with new chat → callMemory, the store calls read).
+cron.schedule('0 3 * * *', async () => {
+  try {
+    const rows = await prisma.message.findMany({
+      where: { channel: 'IN_APP', direction: 'INBOUND', memoryExtractedAt: null },
+      distinct: ['userId'],
+      select: { userId: true },
+    });
+    let memories = 0;
+    for (const { userId } of rows) {
+      memories += await insightService.extractChatMemory(userId).catch(() => 0);
+    }
+    logger.info(`Chat memory: ${rows.length} users processed, ${memories} memories written`);
+  } catch (err) {
+    logger.error('Chat memory extraction error:', err);
   }
 });
 

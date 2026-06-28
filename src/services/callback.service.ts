@@ -1,0 +1,123 @@
+/**
+ * Callback detection — keeps Ivy's word.
+ *
+ * When a user asks Ivy to "call me back in an hour" / "ring me after work", the
+ * agent agrees verbally but nothing in the pipeline acted on it (the post-call
+ * webhooks only logged status + insights). This reads the finished transcript
+ * with Haiku, and if the user EXPLICITLY requested a callback at a parseable
+ * time, schedules a RESCUE call so the promise is actually kept.
+ *
+ * Conservative by design: only fires on a clear user request, clamps the delay,
+ * and won't double-book near an existing scheduled call. The scheduleCall daily
+ * cap (5) is the final backstop against runaway scheduling.
+ */
+import Anthropic from '@anthropic-ai/sdk';
+import callService from './call.service';
+import prisma from '../utils/prisma';
+import logger from '../utils/logger';
+
+const MIN_DELAY_MIN = 5;        // ignore "call me right now" — that's what rescue is for
+const MAX_DELAY_MIN = 12 * 60;  // cap at 12h so a misparse can't book days out
+const DEDUPE_WINDOW_MIN = 20;   // don't add a callback within ±20m of an existing call
+
+class CallbackService {
+  private client: Anthropic | null = null;
+
+  constructor() {
+    if (process.env.ANTHROPIC_API_KEY) {
+      this.client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+    } else {
+      logger.warn('ANTHROPIC_API_KEY not set — callback detection disabled');
+    }
+  }
+
+  /**
+   * Inspect a completed call's transcript; schedule a callback if the user asked
+   * for one. Best-effort: never throws into the webhook (caller should .catch).
+   */
+  async detectAndSchedule(userId: string, transcript: string): Promise<void> {
+    if (!this.client || !transcript?.trim()) return;
+
+    const minutes = await this.extractCallbackDelay(transcript);
+    if (minutes == null) return;
+
+    const clamped = Math.min(Math.max(minutes, MIN_DELAY_MIN), MAX_DELAY_MIN);
+    const scheduledAt = new Date(Date.now() + clamped * 60 * 1000);
+
+    // Don't double-book: skip if a non-terminal call already sits near this slot.
+    const windowMs = DEDUPE_WINDOW_MIN * 60 * 1000;
+    const clash = await prisma.call.findFirst({
+      where: {
+        userId,
+        status: { in: ['SCHEDULED', 'IN_PROGRESS'] },
+        scheduledAt: {
+          gte: new Date(scheduledAt.getTime() - windowMs),
+          lte: new Date(scheduledAt.getTime() + windowMs),
+        },
+      },
+      select: { id: true },
+    });
+    if (clash) {
+      logger.info(`Callback for ${userId} skipped — existing call ${clash.id} near ${scheduledAt.toISOString()}`);
+      return;
+    }
+
+    try {
+      // Mark it as a callback so the prompt can have Ivy acknowledge she's
+      // returning the call the user asked for (naturally, not scripted).
+      const call = await callService.scheduleCall(userId, 'RESCUE', scheduledAt, {
+        is_callback: true,
+        callback_requested_minutes: clamped,
+      });
+      logger.info(`Callback honoured: ${call.id} for user ${userId} in ${clamped}m (${scheduledAt.toISOString()})`);
+    } catch (err) {
+      // Daily cap or no-phone etc. — log and move on; the promise just can't be kept.
+      logger.warn(`Callback schedule failed for ${userId}:`, err);
+    }
+  }
+
+  /**
+   * Ask Haiku whether the USER asked to be called back and after how many minutes.
+   * Returns minutes (number) or null if no clear request.
+   */
+  private async extractCallbackDelay(transcript: string): Promise<number | null> {
+    if (!this.client) return null;
+    try {
+      const response = await this.client.messages.create({
+        model: 'claude-haiku-4-5',
+        max_tokens: 80,
+        messages: [
+          {
+            role: 'user',
+            content:
+              'You read a phone call transcript between a fitness coach (Ivy/Agent/Assistant) ' +
+              'and a USER. Decide ONLY whether the USER explicitly asked to be called back later, ' +
+              'and if so, in how many minutes from the end of the call.\n' +
+              'Rules:\n' +
+              '- Only count a request made by the USER (not the agent offering).\n' +
+              '- "in an hour" = 60, "in half an hour" = 30, "later tonight" ≈ 180, ' +
+              '"tomorrow morning" ≈ 720, "in a couple hours" = 120.\n' +
+              '- If the user did NOT clearly ask for a callback, return minutes 0.\n' +
+              'Respond with STRICT JSON only: {"callback": boolean, "minutes": number}.\n\n' +
+              'Transcript:\n' + transcript.slice(0, 6000),
+          },
+        ],
+      });
+
+      const text = response.content
+        .map((b: any) => (b.type === 'text' ? b.text : ''))
+        .join('')
+        .trim();
+      const match = text.match(/\{[\s\S]*\}/);
+      if (!match) return null;
+      const parsed = JSON.parse(match[0]) as { callback?: boolean; minutes?: number };
+      if (!parsed.callback || !parsed.minutes || parsed.minutes <= 0) return null;
+      return Math.round(parsed.minutes);
+    } catch (err) {
+      logger.warn('Callback extraction failed:', err);
+      return null;
+    }
+  }
+}
+
+export default new CallbackService();

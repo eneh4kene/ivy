@@ -22,10 +22,12 @@ import { dispatchPendingDonations } from '../services/every-org.service';
 import callService from '../services/call.service';
 import seasonService from '../services/season.service';
 import coachService from '../services/coach.service';
+import insightService from '../services/insight.service';
 import { getServiceCostSummary } from '../services/usage.service';
 import { sendTelegramAdmin } from '../utils/telegram-admin';
 import {
   runArmingForStage,
+  runPreCommitReminders,
   openStakeCyclesForActiveUsers,
   settleExpiredStakeCycles,
 } from '../services/arming.service';
@@ -100,6 +102,38 @@ const dailyEveningCalls = inngest.createFunction(
   }
 );
 
+// Every day at 3am UTC — distil that day's in-app chats into long-term memory.
+// One Haiku extraction per user who has un-extracted chat messages → callMemory,
+// the same store calls read. Keeps chat-Ivy and call-Ivy on one shared memory.
+const dailyChatMemory = inngest.createFunction(
+  { id: 'daily-chat-memory', name: 'Daily chat memory extraction', triggers: { cron: '0 3 * * *' } },
+  async ({ step }) => {
+    const userIds = await step.run('find-users-with-new-chat', async () => {
+      const rows = await prisma.message.findMany({
+        where: { channel: 'IN_APP', direction: 'INBOUND', memoryExtractedAt: null },
+        distinct: ['userId'],
+        select: { userId: true },
+      });
+      return rows.map((r) => r.userId);
+    });
+
+    const memories = await step.run('extract-chat-memory', async () => {
+      let count = 0;
+      for (const id of userIds) {
+        try {
+          count += await insightService.extractChatMemory(id);
+        } catch (err) {
+          logger.warn(`Chat memory extraction failed for ${id}:`, err);
+        }
+      }
+      return count;
+    });
+
+    logger.info(`Chat memory: ${userIds.length} users processed, ${memories} memories written`);
+    return { users: userIds.length, memories };
+  }
+);
+
 // ── Arming loop — morning VN prompt + escalation ladder (Phase 3) ─────────
 //
 // Runs every 15 minutes; runArmingForStage() checks each user's arming window
@@ -123,6 +157,8 @@ const armingLoop = inngest.createFunction(
     await step.run('arming-reminder', () => runArmingForStage('REMINDER', now));
     await step.run('arming-final-notice', () => runArmingForStage('FINAL_NOTICE', now));
     await step.run('arming-deadline', () => runArmingForStage('DEADLINE', now));
+    // Keep-on-track nudge ~1h before each user's committed activity time.
+    await step.run('pre-commit-reminders', () => runPreCommitReminders(now));
     return { ok: true };
   }
 );
@@ -216,6 +252,7 @@ export const functions = [
   ponderScheduler,
   monthlyDonationDispatch,
   dailyEveningCalls,
+  dailyChatMemory,
   armingLoop,
   stakeCycleOpen,
   stakeCycleSettle,

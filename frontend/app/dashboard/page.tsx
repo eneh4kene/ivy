@@ -151,7 +151,7 @@ export default function DashboardPage() {
   return (
     <div className="p-6 sm:p-8 max-w-6xl mx-auto">
       {/* Header */}
-      <div className="flex items-start justify-between mb-8 animate-fade-in">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between mb-8 animate-fade-in pl-12 md:pl-0">
         <div>
           <div className="flex items-center gap-3 mb-1.5">
             <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">

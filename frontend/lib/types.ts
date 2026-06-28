@@ -403,3 +403,16 @@ export interface AccountabilityBuddy {
   createdAt: string
   updatedAt: string
 }
+
+// ─── Ivy chat ──────────────────────────────────────────────────────────────────
+
+export type ChatActionKind = 'call_now' | 'schedule' | 'just_text'
+
+export interface ChatMessage {
+  id: string
+  createdAt: string
+  direction: 'INBOUND' | 'OUTBOUND'
+  content: string
+  messageType?: string | null
+  metadata?: { actions?: ChatActionKind[] } | null
+}

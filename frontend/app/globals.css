@@ -433,6 +433,41 @@
   --glow-sage:  rgba(198,255,68,.28);
   --glow-ember: rgba(255,59,120,.30);
 
+  /* ── Re-resolve the semantic role tokens ──────────────────────────────────
+     These are declared in :root via var(--palette) indirection, which CSS
+     resolves at the :root declaration site — so overriding the palette above
+     does NOT reach them. Re-declaring them here (same indirection) forces them
+     to re-resolve against the neon palette. Without this, every token-based
+     screen keeps rendering the old gold theme. */
+  --background:       var(--ink-900);
+  --foreground:       var(--ink-50);
+  --card:             var(--ink-800);
+  --card-foreground:  var(--ink-50);
+  --popover:          var(--ink-800);
+  --popover-foreground: var(--ink-50);
+  --primary:          var(--gold-400);
+  --primary-foreground: 230 45% 4%;
+  --secondary:        var(--ink-700);
+  --secondary-foreground: var(--ink-200);
+  --muted:            var(--ink-700);
+  --muted-foreground: var(--ink-400);
+  --accent:           var(--ink-600);
+  --accent-foreground: var(--ink-200);
+  --destructive:      var(--ember-500);
+  --destructive-foreground: var(--ink-50);
+  --border:           var(--ink-600);
+  --input:            var(--ink-700);
+  --ring:             var(--gold-400);
+  /* Component aliases (also indirected in :root) */
+  --color-stake:      hsl(var(--ember-400));
+  --color-success:    hsl(var(--sage-400));
+  --color-commit:     hsl(var(--gold-400));
+  --color-social:     hsl(var(--periwinkle-400));
+  --color-text:       hsl(var(--ink-50));
+  --color-text-muted: hsl(var(--ink-400));
+  --color-surface:    hsl(var(--ink-800));
+  --color-border:     hsl(var(--ink-600));
+
   position: relative;
   isolation: isolate;
   color: hsl(var(--ink-50));

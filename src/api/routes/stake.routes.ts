@@ -7,9 +7,12 @@
  *   forfeitMode, dislikedCharityId (required iff SAVAGE), preferredCharityId /
  *   UserCharity (success charity), and armingWindowStart / armingWindowEnd (HH:MM).
  *
- *   Saving the config is what makes a user eligible for the Monday
- *   openStakeCyclesForActiveUsers cron — the cron itself handles cycle opening;
- *   this endpoint only persists the config.
+ *   Saving the config persists it AND, for an onboarded user with a card on
+ *   file and no open cycle, immediately opens the Foundation Run hold via the
+ *   idempotent userService.startDayZeroExperience (so the stake is actually held
+ *   during the 14-day trial, not just at the next Monday cron / first invoice).
+ *   The Monday openStakeCyclesForActiveUsers cron still opens subsequent weekly
+ *   cycles for everyone eligible.
  *
  * GET /api/stake/config
  *   Returns the current user's stake config fields.
@@ -190,6 +193,22 @@ router.post(
         `£${stakeWeeklyAmount}/wk, ${forfeitMode}, ` +
         `window ${armingWindowStart}→${armingWindowEnd}`,
       )
+
+      // Place the stake hold NOW — not weeks from now. Saving a config used to only
+      // make the user *eligible* for the Monday weekly-cron / first-invoice trigger.
+      // But the 14-day trial means no invoice is paid for two weeks, so the
+      // Foundation Run hold (the "£X on the line") never landed during the trial —
+      // the stake was configured but never actually held. Re-run the idempotent
+      // Day-Zero money half here: if the user is onboarded with a card on file and
+      // has no existing cycle, it opens the Foundation Run off-session auth hold
+      // immediately. Safely no-ops when there's no card yet. Fire-and-forget —
+      // failures (e.g. SCA) self-report via the in-app re-auth nudge inside
+      // openFoundationCycle, and must never block the config save.
+      import('../../services/user.service')
+        .then(({ default: userService }) => userService.startDayZeroExperience(userId))
+        .catch((err) =>
+          logger.warn(`Foundation Run trigger after stake-config save failed for ${userId}:`, err),
+        )
 
       res.status(200).json({
         success: true,

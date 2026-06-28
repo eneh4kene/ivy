@@ -26,6 +26,7 @@ import coachRoutes from './api/routes/coach.routes';
 import inviteRoutes from './api/routes/invite.routes';
 import voiceNotesRoutes from './api/controllers/voice-notes.controller';
 import stakeRoutes from './api/routes/stake.routes';
+import chatRoutes from './api/routes/chat.routes';
 
 // Inngest — durable cron/event backbone
 import { serve as inngestServe } from 'inngest/express';
@@ -63,8 +64,12 @@ app.use(cors({
   credentials: true,
 }));
 
-// Body parsing middleware
-app.use(express.json());
+// Body parsing middleware. Capture the raw body buffer so webhook handlers that
+// verify signatures over the exact bytes (Retell, Stripe) can re-hash it — JSON
+// re-serialisation changes formatting and breaks signature verification.
+app.use(express.json({
+  verify: (req: any, _res, buf) => { req.rawBody = buf; },
+}));
 app.use(express.urlencoded({ extended: true }));
 
 // Inngest endpoint — mounted BEFORE the /api rate limiter so Inngest Cloud's
@@ -131,6 +136,7 @@ app.use('/api/coach', coachRoutes);
 app.use('/api/invite', inviteRoutes);
 app.use('/api/voice-notes', voiceNotesRoutes);
 app.use('/api/stake', stakeRoutes);
+app.use('/api/chat', chatRoutes);
 app.use('/webhooks', webhookRoutes);
 
 // 404 handler

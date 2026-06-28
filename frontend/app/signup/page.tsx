@@ -92,7 +92,7 @@ function SignupForm() {
                   <Sparkles className="w-4 h-4 text-primary" />
                   <span className="text-xs font-medium text-primary uppercase tracking-wider">Free to start</span>
                 </div>
-                <h1 className="text-2xl font-bold tracking-tight mb-1.5">Create your account</h1>
+                <h1 className="text-xl font-bold tracking-tight mb-1.5 text-balance">Create your account</h1>
                 <p className="text-sm text-muted-foreground">Enter your details and we'll send you a sign-up link — no password needed</p>
                 {promoCode && (
                   <div className="mt-3 flex items-center gap-2 px-3 py-2 rounded-lg bg-primary/10 border border-primary/20">
@@ -155,24 +155,24 @@ function SignupForm() {
                     <button
                       type="button"
                       onClick={() => setRegion('GB')}
-                      className={`flex-1 flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg border text-sm font-medium transition-colors ${
+                      className={`flex-1 flex items-center justify-center gap-1.5 px-2 py-2.5 rounded-lg border text-sm font-medium whitespace-nowrap transition-colors ${
                         region === 'GB'
                           ? 'border-primary bg-primary/10 text-foreground'
                           : 'border-border bg-transparent text-muted-foreground hover:border-border/80'
                       }`}
                     >
-                      🇬🇧 United Kingdom
+                      <span aria-hidden>🇬🇧</span> United Kingdom
                     </button>
                     <button
                       type="button"
                       onClick={() => { setRegion('US'); setTcpaConsent(false) }}
-                      className={`flex-1 flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg border text-sm font-medium transition-colors ${
+                      className={`flex-1 flex items-center justify-center gap-1.5 px-2 py-2.5 rounded-lg border text-sm font-medium whitespace-nowrap transition-colors ${
                         region === 'US'
                           ? 'border-primary bg-primary/10 text-foreground'
                           : 'border-border bg-transparent text-muted-foreground hover:border-border/80'
                       }`}
                     >
-                      🇺🇸 United States
+                      <span aria-hidden>🇺🇸</span> United States
                     </button>
                   </div>
                 </div>

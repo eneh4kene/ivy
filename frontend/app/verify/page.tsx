@@ -47,7 +47,12 @@ function VerifyContent() {
         if (plan) {
           try {
             const session = await paymentsApi.createCheckoutSession(plan, promo ?? undefined)
-            window.location.href = session.url
+            if (session.url) {
+              window.location.href = session.url
+              return
+            }
+            // Already subscribed (card on file) — no checkout needed; continue.
+            router.push(authUser ? postLoginDestination(authUser) : '/onboard-consumer')
           } catch {
             router.push(promo ? `/pricing?promo=${promo}` : '/pricing')
           }

@@ -123,6 +123,110 @@ class CircleService {
     })
   }
 
+  // Evocative cohort names in the Living/Dawn voice — used when a brand-new
+  // circle has to be seeded for a user. Cycled deterministically by scope count
+  // so names stay readable and collisions are rare without a DB uniqueness rule.
+  private static readonly CIRCLE_NAME_POOL = [
+    'Dawn Runners',
+    'First Light',
+    'The Ember Club',
+    'Morning Company',
+    'The Steady Few',
+    'Daybreak Crew',
+    'The Long Game',
+    'Kindling',
+    'The Comeback',
+    'True North',
+  ]
+
+  private nextCircleName(scopeCount: number): string {
+    const pool = CircleService.CIRCLE_NAME_POOL
+    const base = pool[scopeCount % pool.length]
+    const round = Math.floor(scopeCount / pool.length)
+    return round === 0 ? base : `${base} ${round + 1}`
+  }
+
+  /**
+   * autoAssignToCircle — place a newly-onboarded user into a peer accountability
+   * circle. The circle (shared sessions, games, witnessed stakes) is core to the
+   * new-user experience and should be in place from Day Zero, independent of the
+   * user's paid/trial state.
+   *
+   * Matching: prefer an existing OPEN circle on the user's track within their
+   * company scope (B2C ⇒ companyId null / standalone), filling the fullest-but-
+   * not-full circle first so cohorts complete quickly. If none has room, seed a
+   * new circle with this user as the facilitator.
+   *
+   * Idempotent — if the user is already in an active circle, returns that one.
+   * Coaches are skipped (they don't sit in peer circles). Safe to call
+   * fire-and-forget; never block onboarding on it.
+   */
+  async autoAssignToCircle(
+    userId: string,
+  ): Promise<{ circleId: string; created: boolean } | null> {
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, track: true, companyId: true, subscriptionTier: true },
+    })
+    if (!user) throw new NotFoundError('User not found')
+
+    // Coaches don't belong to peer accountability circles.
+    if (user.subscriptionTier === 'COACH') return null
+
+    // Idempotent: already placed in an active circle?
+    const existing = await prisma.ivyCircleMember.findFirst({
+      where: { userId, isActive: true },
+      select: { circleId: true },
+    })
+    if (existing) return { circleId: existing.circleId, created: false }
+
+    const track = user.track || 'fitness'
+    const companyId = user.companyId ?? null
+
+    // Candidate open circles: same track + company scope, peer tier, active.
+    const candidates = await prisma.ivyCircle.findMany({
+      where: { isActive: true, track, companyId, tier: 'peer' },
+      select: {
+        id: true,
+        maxSize: true,
+        _count: { select: { members: { where: { isActive: true } } } },
+      },
+    })
+
+    // Fill the fullest-but-not-full circle first.
+    const open = candidates
+      .filter((c) => c._count.members < c.maxSize)
+      .sort((a, b) => b._count.members - a._count.members)
+
+    for (const c of open) {
+      try {
+        await this.addMember(c.id, userId, 'member')
+        logger.info(`Auto-assigned ${userId} to existing circle ${c.id} (track=${track})`)
+        return { circleId: c.id, created: false }
+      } catch (err) {
+        // Lost the last seat to a concurrent join — fall through to the next.
+        if (err instanceof BadRequestError) continue
+        throw err
+      }
+    }
+
+    // Nothing open in scope → seed a fresh circle; first member is the facilitator.
+    const scopeCount = await prisma.ivyCircle.count({
+      where: { companyId, tier: 'peer' },
+    })
+    const circle = await this.createCircle({
+      name: this.nextCircleName(scopeCount),
+      track,
+      tier: 'peer',
+      companyId: companyId ?? undefined,
+    })
+    await this.addMember(circle.id, userId, 'facilitator')
+    logger.info(
+      `Auto-assigned ${userId} to NEW circle ${circle.id} as facilitator (track=${track})`,
+    )
+    return { circleId: circle.id, created: true }
+  }
+
   async setSprintGoal(circleId: string, data: {
     sprintNumber: number
     pledge: string

@@ -680,8 +680,16 @@ model Message {
   whatsappId  String? @unique
 
   // Context
-  messageType String? // "reminder", "nudge", "rescue_response", "quick_reply"
+  messageType String? // "reminder", "nudge", "rescue_response", "quick_reply", "chat", "onboarding_handoff", "evening_checkin"
   relatedCallId String?
+
+  // Structured payload for in-app chat (e.g. action-button cards on Ivy messages,
+  // surfaced call-summary refs). Null for plain text / external-channel messages.
+  metadata Json?
+
+  // Set once a daily batch has distilled this IN_APP message into long-term memory
+  // (callMemory). Null = not yet processed; drives the chat-memory extraction job.
+  memoryExtractedAt DateTime?
 
   @@index([userId, createdAt])
   @@index([channel, status])
@@ -693,6 +701,7 @@ enum MessageChannel {
   WHATSAPP
   EMAIL
   TELEGRAM
+  IN_APP
 }
 
 enum MessageDirection {
@@ -1180,11 +1189,14 @@ model CallMemory {
 
   userId    String
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  callId    String
-  call      Call     @relation(fields: [callId], references: [id], onDelete: Cascade)
+  // Nullable: chat-derived memories have no originating call. Voice memories still
+  // link their Call; chat memories carry callId = null and source = 'chat'.
+  callId    String?
+  call      Call?    @relation(fields: [callId], references: [id], onDelete: Cascade)
 
   content   String   @db.Text  // memorable fact as Ivy observed it
   category  String             // motivation | life_event | personal_detail | struggle | breakthrough
+  source    String   @default("call") // call | chat — which channel this memory came from
 
   @@index([userId, createdAt])
   @@map("call_memories")

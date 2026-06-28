@@ -24,6 +24,8 @@ import type {
   ImpactStory,
   CreateSeasonInput,
   AccountabilityBuddy,
+  ChatMessage,
+  ChatActionKind,
 } from '../types'
 
 // Auth API
@@ -240,7 +242,7 @@ export const statsApi = {
 // Payments API
 export const paymentsApi = {
   createCheckoutSession: async (tier: string, promoCode?: string) => {
-    const response = await client.post<ApiResponse<{ sessionId: string; url: string }>>('/api/payments/checkout', { tier, promoCode })
+    const response = await client.post<ApiResponse<{ sessionId: string | null; url: string | null; alreadySubscribed?: boolean }>>('/api/payments/checkout', { tier, promoCode })
     return response.data.data!
   },
 
@@ -340,8 +342,17 @@ interface ConsistencyResult { rate: number; topPerformers: string[]; memberCount
 
 export const circlesApi = {
   getMy: async (): Promise<Circle[]> => {
-    const response = await client.get<ApiResponse<Circle[]>>('/api/circles/my')
-    return response.data.data ?? []
+    // The backend (/api/circles/my → getCirclesForUser) returns IvyCircleMember
+    // rows with the actual circle nested under `.circle` — NOT flat Circle objects.
+    // Unwrap to the flat Circle shape the UI consumes (name/size/maxSize/members).
+    // Tolerate either shape so we don't break if the endpoint is ever flattened.
+    const response = await client.get<ApiResponse<Array<Circle | { circle: Circle }>>>(
+      '/api/circles/my',
+    )
+    const rows = response.data.data ?? []
+    return rows
+      .map((row) => ('circle' in row && row.circle ? row.circle : (row as Circle)))
+      .filter(Boolean)
   },
   get: async (id: string): Promise<Circle> => {
     const response = await client.get<ApiResponse<Circle>>(`/api/circles/${id}`)
@@ -751,6 +762,33 @@ export const stakeApi = {
   },
 }
 
+// Ivy in-app chat API
+export const chatApi = {
+  /** Full IN_APP thread, oldest → newest. Marks Ivy messages read server-side. */
+  getThread: async (): Promise<ChatMessage[]> => {
+    const r = await client.get<ApiResponse<ChatMessage[]>>('/api/chat')
+    return r.data.data ?? []
+  },
+
+  /** Send a user message; resolves to Ivy's reply. */
+  send: async (content: string): Promise<ChatMessage> => {
+    const r = await client.post<ApiResponse<ChatMessage>>('/api/chat', { content })
+    return r.data.data!
+  },
+
+  /** Tap an Ivy action card (onboarding handoff). Returns Ivy's confirmation message. */
+  action: async (action: ChatActionKind, at?: string): Promise<ChatMessage> => {
+    const r = await client.post<ApiResponse<ChatMessage>>('/api/chat/action', { action, at })
+    return r.data.data!
+  },
+
+  /** Unread Ivy-message count for the nav badge. */
+  getUnreadCount: async (): Promise<number> => {
+    const r = await client.get<ApiResponse<{ count: number }>>('/api/chat/unread')
+    return r.data.data?.count ?? 0
+  },
+}
+
 // Push notifications API
 export const pushApi = {
   subscribe: async (subscription: any) => {
@@ -828,6 +866,7 @@ export const api = {
   coach: coachApi,
   coachMarketplace: coachMarketplaceApi,
   stake: stakeApi,
+  chat: chatApi,
 }
 
 export default api

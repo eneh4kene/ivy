@@ -4,43 +4,8 @@ import { BadRequestError, ConflictError, NotFoundError } from '../utils/errors';
 import logger from '../utils/logger';
 // IMPACT_WALLET_MONTHLY import removed in Phase 5: bundled wallet allocation retired (§8).
 import seasonService from './season.service';
-import callService from './call.service';
-import { fromZonedTime } from 'date-fns-tz';
-
-/**
- * computeOnboardingCallAt — pick a humane time for a brand-new user's single
- * Day-Zero onboarding call, in their own timezone.
- *
- * Preference order:
- *   1. Their chosen evening slot today, if it's still comfortably ahead.
- *   2. If that slot has passed but it's not yet late (<21:00 local), call shortly
- *      (they clearly just signed up and are active) — but never mid-workday,
- *      because we only reach this branch after the evening slot.
- *   3. Otherwise (late at night) tomorrow at the evening slot.
- *
- * Defaults to a 19:00 evening slot when the user hasn't set one.
- */
-function computeOnboardingCallAt(
-  timezone: string | null | undefined,
-  eveningCallTime: string | null | undefined,
-  now: Date = new Date(),
-): Date {
-  const tz = timezone || 'Europe/London';
-  const hhmm = eveningCallTime && /^\d{2}:\d{2}$/.test(eveningCallTime) ? eveningCallTime : '19:00';
-  const todayStr = now.toLocaleDateString('en-CA', { timeZone: tz });
-  const slotToday = fromZonedTime(`${todayStr}T${hhmm}:00`, tz);
-  const localHour = (() => {
-    const h = Number(now.toLocaleString('en-GB', { hour: '2-digit', hour12: false, timeZone: tz }));
-    return Number.isFinite(h) ? h % 24 : 12;
-  })();
-
-  // 1. Evening slot still ahead today (≥10 min buffer).
-  if (slotToday.getTime() > now.getTime() + 10 * 60 * 1000) return slotToday;
-  // 2. Slot passed but still a reasonable hour → call shortly.
-  if (localHour < 21) return new Date(now.getTime() + 10 * 60 * 1000);
-  // 3. Late night → tomorrow's evening slot (+24h; DST drift acceptable for beta).
-  return new Date(slotToday.getTime() + 24 * 60 * 60 * 1000);
-}
+import circleService from './circle.service';
+import chatService from './chat.service';
 
 class UserService {
   /**
@@ -261,33 +226,146 @@ class UserService {
       return user;
     }
 
+    // Make sure the home surfaces never 404 on a brand-new user: every onboarded
+    // member must have a Streak + Impact Wallet row. Idempotent (upsert), so it's
+    // safe even if createUser already seeded them. Non-blocking.
+    this.initializeUserResources(userId, fullUser?.subscriptionTier ?? 'FREE')
+      .catch((err) => logger.warn(`Failed to initialize resources for ${userId}:`, err));
+
     // Create Season 1 from the user's goal (non-blocking)
     if (fullUser?.goal) {
       seasonService.createSeason(userId, { goal: fullUser.goal, title: 'Season 1' })
         .catch((err) => logger.warn(`Failed to create Season 1 for ${userId}:`, err));
     }
 
-    // Day Zero: schedule ONE onboarding call at a humane hour — never the daily
-    // loop (morning VN + evening review), and never an auto-dial in the middle of
-    // someone's workday. We aim for the evening (when people are free), in the
-    // user's own timezone; if it's already late, we push to tomorrow. The normal
-    // loop takes over from the next day's scheduler. See docs/foundation-run-and-day-zero.md.
-    const canCall = fullUser?.phone && fullUser.subscriptionTier !== 'FREE';
-    if (canCall) {
-      (async () => {
-        try {
-          const at = computeOnboardingCallAt(fullUser.timezone, fullUser.eveningCallTime);
-          await callService.scheduleCall(userId, 'ONBOARDING', at);
-          logger.info(`Onboarding call scheduled for user ${userId} at ${at.toISOString()}`);
-        } catch (err) {
-          logger.warn(`Failed to schedule onboarding call for ${userId}:`, err);
-        }
-      })();
-    }
+    // Day Zero: kick off the new-user experience. The welcome half (circle +
+    // onboarding call) fires NOW — it needs no card, so Ivy is aware of and
+    // reaches out to the member during the free trial. The money half (the
+    // Foundation Run stake hold) waits inside for a card on file and is
+    // re-triggered by the subscription-created webhook. Idempotent + non-blocking.
+    this.startDayZeroExperience(userId)
+      .catch((err) => logger.warn(`Day-Zero experience failed for ${userId}:`, err));
 
     logger.info(`User onboarded: ${user.id}`);
 
     return user;
+  }
+
+  /**
+   * startDayZeroExperience — idempotently start everything a new member gets on
+   * Day Zero. Split into two halves by what each actually needs:
+   *
+   *   The WELCOME half (no card — fires the moment the user is onboarded, during
+   *   the free trial, so Ivy is aware of the member and reaches out):
+   *     • Circle        — autoAssignToCircle (idempotent by design)
+   *     • Welcome call  — one ONBOARDING call at a humane hour, if none exists
+   *
+   *   The MONEY half (needs a card on file — an off-session auth hold can't be
+   *   placed without one):
+   *     • Foundation Run— the flat-rate first stake cycle; opens once a card is on
+   *                       file. Skipped if a cycle already exists, or deferred to
+   *                       the Monday opener if too few days remain before reset.
+   *
+   * Called from two triggers — markUserAsOnboarded (welcome half) and the
+   * subscription-created webhook (re-runs to add the money half once the card
+   * lands). Every piece is independently idempotent, so both triggers firing
+   * never double-fires. Coaches are skipped. Fire-and-forget safe.
+   */
+  async startDayZeroExperience(userId: string): Promise<void> {
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true, firstName: true, isOnboarded: true, phone: true, timezone: true,
+        eveningCallTime: true, subscriptionTier: true, stakeWeeklyAmount: true,
+        stripeSubscriptionId: true,
+      },
+    });
+    if (!user) return;
+    if (user.subscriptionTier === 'COACH') return; // coaches have no peer circle / personal stake
+
+    // The welcome half needs only an onboarded user — NOT a card. This is the fix
+    // for the "dead home / Ivy doesn't know I exist" gap: the circle + call no
+    // longer wait behind Stripe checkout.
+    if (!user.isOnboarded) {
+      logger.info(`Day-Zero deferred for ${userId} (not onboarded yet)`);
+      return;
+    }
+
+    const hasCard = !!user.stripeSubscriptionId;
+
+    // ── WELCOME HALF (no card needed) ──────────────────────────────────────────
+
+    // 1) Circle — idempotent.
+    circleService.autoAssignToCircle(userId)
+      .then((res) => {
+        if (res) logger.info(`Circle assignment for ${userId}: ${res.circleId} (created=${res.created})`);
+      })
+      .catch((err) => logger.warn(`Failed to auto-assign circle for ${userId}:`, err));
+
+    // 2) Welcome handoff — instead of silently booking a call, Ivy MESSAGES the
+    // new member in chat the moment they're onboarded, offering agency: call now,
+    // pick a time, or just text. The action buttons (chat.service handleAction)
+    // drive the actual call scheduling / channel choice. Idempotent: skip if a
+    // handoff already exists. No phone required — text-preferred users are served
+    // entirely in chat. See docs/claude.md (Ivy chat + onboarding handoff).
+    try {
+      const existing = await prisma.message.findFirst({
+        where: { userId, channel: 'IN_APP', messageType: 'onboarding_handoff' },
+        select: { id: true },
+      });
+      if (!existing) {
+        const name = user.firstName ? ` ${user.firstName}` : '';
+        await chatService.postIvyMessage(
+          userId,
+          `Hey${name} — I'm Ivy, and I'm in your corner from here on. ` +
+            `Quickest way to start is a short intro call so I get how you work. ` +
+            `Want me to call you now, or pick a time? If you'd rather keep it to text, that's good too — I'll check in with you right here.`,
+          {
+            messageType: 'onboarding_handoff',
+            metadata: { actions: ['call_now', 'schedule', 'just_text'] },
+            notify: true,
+          },
+        );
+        logger.info(`Onboarding handoff message posted for user ${userId}`);
+      }
+    } catch (err) {
+      logger.warn(`Failed to post onboarding handoff for ${userId}:`, err);
+    }
+
+    // ── MONEY HALF (needs a card on file) ──────────────────────────────────────
+
+    // 3) Foundation Run — the flat-rate first stake cycle. Opening it places an
+    // off-session auth hold, which is impossible without a saved card, so this
+    // only runs once the subscription (incl. trial card) exists. The
+    // subscription-created webhook re-runs this method to reach here. No teeth on
+    // day one, ends the coming Sunday; deferred to the Monday opener if too few
+    // days remain (Sat/Sun signup). See docs/foundation-run-and-day-zero.md.
+    if (!hasCard) {
+      logger.info(`Foundation Run for ${userId} deferred until a card is on file (trial active)`);
+      return;
+    }
+
+    if (user.stakeWeeklyAmount != null) {
+      try {
+        const priorCycle = await prisma.stakeCycle.findFirst({
+          where: { userId, status: { not: 'FAILED' } },
+          select: { id: true },
+        });
+        if (!priorCycle) {
+          const { openFoundationCycle, computeFoundationWindow } = await import('./stake.service');
+          const tz = user.timezone || 'Europe/London';
+          const window = computeFoundationWindow(tz);
+          if (!window) {
+            logger.info(`Foundation Run for ${userId} deferred to Monday opener (too few days before reset)`);
+          } else {
+            await openFoundationCycle(userId, window);
+            logger.info(`Foundation Run opened for ${userId} (days=${window.daysInCycle})`);
+          }
+        }
+      } catch (err) {
+        logger.warn(`Failed to open Foundation Run for ${userId}:`, err);
+      }
+    }
   }
 
   /**
@@ -315,13 +393,16 @@ class UserService {
       update: {},  // never downgrade an existing wallet row
     });
 
-    // Create Streak record
-    await prisma.streak.create({
-      data: {
+    // Create Streak record (idempotent — onboarding re-runs this as a safety net,
+    // and create() would throw on the @unique userId).
+    await prisma.streak.upsert({
+      where: { userId },
+      create: {
         userId,
         currentStreak: 0,
         longestStreak: 0,
       },
+      update: {},  // never reset an existing streak
     });
 
     logger.info(`Initialized resources for user: ${userId}`);

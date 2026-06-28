@@ -9,7 +9,7 @@
  */
 import { inngest } from './client';
 import callService from '../services/call.service';
-import retellService from '../services/retell.service';
+import outboundCallService from '../services/outbound-call.service';
 import promptService, { buildPonderPrompt } from '../services/prompt.service';
 import briefService from '../services/brief.service';
 import { getTrackConfig } from '../config/tracks';
@@ -79,6 +79,14 @@ export async function initiateCallHandler({ event, step }: { event: any; step: S
           logger.warn(`Fresh context fetch failed for ${callId} — falling back to scheduled snapshot:`, err);
         }
 
+        // Callback markers only live in the scheduled snapshot (getUserContext
+        // doesn't know this call was requested by the user) — carry them over so
+        // Ivy can acknowledge she's calling back as promised.
+        if (contextData?.is_callback) {
+          ctx.is_callback = true;
+          ctx.callback_requested_minutes = contextData.callback_requested_minutes;
+        }
+
         const isB2B = ctx.subscription_tier === 'B2B';
         const agentId = getAgentId(callType, isB2B);
 
@@ -94,9 +102,12 @@ export async function initiateCallHandler({ event, step }: { event: any; step: S
         const fromNumber = (ctx.currency === 'USD' && config.twilio.phoneNumberUs)
           ? config.twilio.phoneNumberUs
           : config.twilio.phoneNumber;
+        if (!fromNumber) throw new Error('No Twilio from-number configured (TWILIO_PHONE_NUMBER)');
 
-        const retellCall = await retellService.initiateCall({
-          phoneNumber: phone,
+        // BYOC: register with Retell, then Twilio dials the user and bridges to
+        // Retell's SIP endpoint. No number needs to live in Retell.
+        const placed = await outboundCallService.placeCall({
+          toNumber: phone,
           fromNumber,
           agentId,
           variables: flattenContext({ ...ctx, call_type: callType.toLowerCase() }),
@@ -105,18 +116,21 @@ export async function initiateCallHandler({ event, step }: { event: any; step: S
         });
 
         // Update call record with Retell's call ID
-        if (retellCall?.call_id) {
+        if (placed.retellCallId) {
           await callService.updateCallStatus(callId, 'IN_PROGRESS', {
-            retellCallId: retellCall.call_id,
+            retellCallId: placed.retellCallId,
           });
         }
 
-        logger.info(`Retell call initiated: ${retellCall?.call_id ?? 'simulated'}`);
+        logger.info(`Outbound call placed: retell=${placed.retellCallId} twilio=${placed.twilioSid}`);
 
-        return { success: true, callId, retellCallId: retellCall?.call_id };
+        return { success: true, callId, retellCallId: placed.retellCallId, twilioSid: placed.twilioSid };
       } catch (error) {
-        logger.error(`Call ${callId} failed to initiate:`, error);
-        await callService.updateCallStatus(callId, 'FAILED', { outcome: 'error' });
+        const reason = error instanceof Error ? error.message : String(error);
+        logger.error(`Call ${callId} failed to initiate — ${reason}`);
+        // Store the concrete cause (e.g. "Retell 402: Payment Required …") so the
+        // failure is diagnosable from the call row, not just a generic 'error'.
+        await callService.updateCallStatus(callId, 'FAILED', { outcome: `error: ${reason}`.slice(0, 500) });
         throw error;
       }
     });

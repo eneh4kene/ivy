@@ -34,6 +34,7 @@ const foundationFlat = 7
 
 export function ExpressConfirmStep({ onActivated, onCustomise, onDefer }: ExpressConfirmStepProps) {
   const [busy, setBusy] = useState<null | 'default' | 'min'>(null)
+  const [error, setError] = useState<string | null>(null)
 
   // Smart defaults — Middle mode forfeits to a vetted house charity, so we leave
   // the success charity unset (the backend default handles it). The user can pick
@@ -43,16 +44,18 @@ export function ExpressConfirmStep({ onActivated, onCustomise, onDefer }: Expres
 
   const handleActivate = async (which: 'default' | 'min') => {
     if (busy) return
+    setError(null)
     setBusy(which)
     try {
       const { redirected } = await activateStake(which === 'min' ? minState : defaults)
       if (redirected) return  // navigating to Stripe Checkout — let it unload
-    } catch {
+      onActivated()
+    } catch (err: any) {
+      // Never silently pretend success — the stake isn't active, so say so.
+      setError(err?.message || "Something went wrong activating your stake. Please try again.")
+    } finally {
       setBusy(null)
-      return
     }
-    setBusy(null)
-    onActivated()
   }
 
   const dailyDefault = dailySlice(defaults.weeklyAmount)
@@ -117,6 +120,14 @@ export function ExpressConfirmStep({ onActivated, onCustomise, onDefer }: Expres
           You get <span className="text-sage-400 font-medium">1 grace skip</span> a week.
         </p>
       </div>
+
+      {/* Activation error — the stake is NOT active; make that unmistakable */}
+      {error && (
+        <div className="flex items-start gap-2.5 rounded-xl px-4 py-3 bg-ember-400/10 border border-ember-400/30">
+          <AlertTriangle className="w-4 h-4 text-ember-400 shrink-0 mt-0.5" />
+          <p className="text-xs text-ember-200 leading-relaxed">{error}</p>
+        </div>
+      )}
 
       {/* Primary CTA */}
       <button

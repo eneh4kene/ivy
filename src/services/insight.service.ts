@@ -38,6 +38,20 @@ export interface InferredProfile {
   contact_pattern_note: string | null;       // e.g. "tends not to answer before 8am"
 }
 
+// Lean extractor for in-app chat: only durable, memorable facts — no behavioural
+// scoring (chat is async and noisier than a focused call). Output is small to keep
+// the daily batch cheap. Feeds the SAME long-term store calls read (callMemory).
+const CHAT_MEMORY_SYSTEM = `You read a recent text chat between a user and their accountability coach, Ivy, and extract only durable facts worth remembering long-term — the kind Ivy should still know weeks from now.
+
+Capture: lasting motivations and "why"s, real life events (job, move, injury, relationship, milestone), stable personal details (training history, schedule constraints, preferences), recurring struggles, and genuine breakthroughs.
+
+Ignore: small talk, one-off logistics, today-only details, anything transient.
+
+Return ONLY raw JSON (no markdown, no prose) in this exact shape:
+{ "memorable_moments": [ { "content": "<fact in Ivy's voice, e.g. 'Training around a chronic knee issue — avoids heavy squats'>", "category": "motivation" } ] }
+category is one of: motivation | life_event | personal_detail | struggle | breakthrough.
+If nothing is worth remembering, return { "memorable_moments": [] }.`;
+
 const EXTRACTION_SYSTEM = `You analyse accountability coaching call transcripts and extract structured behavioural insights. Your output helps a voice AI named Ivy adapt her approach and remember each user across calls.
 
 Extract these signals from the transcript:
@@ -194,6 +208,75 @@ class InsightService {
       );
     } catch (err) {
       logger.error(`Insight extraction failed for call ${callId}:`, err);
+    }
+  }
+
+  /**
+   * Distil a user's un-extracted in-app chat into long-term memory.
+   *
+   * This is the chat→memory half of "one Ivy, one memory": calls are extracted at
+   * call-end (extractCallInsights); chat is extracted by a once-daily batch (the
+   * Inngest `daily-chat-memory` job) that calls this per user. Memorable facts are
+   * written to the SAME callMemory store calls read (source='chat', callId=null),
+   * so anything said in chat surfaces on the next call — and vice versa.
+   *
+   * Cost: at most ONE Haiku call per user per day they chatted. Users with too
+   * little new signal are skipped (no LLM call) and left to accumulate. Returns
+   * the number of memories written.
+   */
+  async extractChatMemory(userId: string): Promise<number> {
+    if (!this.client) return 0;
+
+    const msgs = await prisma.message.findMany({
+      where: { userId, channel: 'IN_APP', memoryExtractedAt: null },
+      orderBy: { createdAt: 'asc' },
+      select: { id: true, direction: true, content: true },
+    });
+    if (msgs.length === 0) return 0;
+
+    // Need real back-and-forth before it's worth a model call. Below threshold we
+    // return WITHOUT marking, so the messages accumulate for a later run (no cost).
+    const inboundCount = msgs.filter((m) => m.direction === 'INBOUND').length;
+    if (inboundCount < 2) return 0;
+
+    const transcript = msgs
+      .map((m) => `${m.direction === 'INBOUND' ? 'User' : 'Ivy'}: ${m.content}`)
+      .join('\n');
+
+    try {
+      const response = await this.client.messages.create({
+        model: 'claude-haiku-4-5',
+        max_tokens: 500,
+        system: [{ type: 'text', text: CHAT_MEMORY_SYSTEM, cache_control: { type: 'ephemeral' } }] as any,
+        messages: [{ role: 'user', content: `Chat:\n${transcript}` }],
+      });
+
+      const raw = response.content[0]?.type === 'text' ? response.content[0].text.trim() : null;
+      const moments: CallInsights['memorable_moments'] = raw ? (JSON.parse(raw).memorable_moments ?? []) : [];
+
+      if (moments.length) {
+        await prisma.callMemory.createMany({
+          data: moments.map((m) => ({
+            userId,
+            callId: null,
+            source: 'chat',
+            content: m.content,
+            category: m.category,
+          })),
+        });
+      }
+
+      // Mark processed regardless of yield so we never re-extract the same window.
+      await prisma.message.updateMany({
+        where: { id: { in: msgs.map((m) => m.id) } },
+        data: { memoryExtractedAt: new Date() },
+      });
+
+      logger.info(`Chat memory extracted for ${userId} (messages: ${msgs.length}, memories: ${moments.length})`);
+      return moments.length;
+    } catch (err) {
+      logger.error(`Chat memory extraction failed for ${userId}:`, err);
+      return 0;
     }
   }
 
