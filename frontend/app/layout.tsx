@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next"
 import { Lora, Instrument_Sans, DM_Mono } from "next/font/google"
 import "./globals.css"
 import { PostHogProvider } from "@/lib/analytics/posthog"
+import { ServiceWorkerRegister } from "@/components/pwa/ServiceWorkerRegister"
 
 /* ── Fonts ──────────────────────────────────────────────────────────────── */
 const lora = Lora({
@@ -83,6 +84,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <meta name="msapplication-tap-highlight"      content="no" />
       </head>
       <body className="font-sans bg-background text-foreground">
+        <ServiceWorkerRegister />
         <PostHogProvider>{children}</PostHogProvider>
       </body>
     </html>
