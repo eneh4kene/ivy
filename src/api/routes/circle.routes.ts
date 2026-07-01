@@ -21,9 +21,15 @@ router.get('/my', async (req: AuthRequest, res: Response, next: NextFunction): P
   } catch (err) { next(err) }
 })
 
-// GET /api/circles/:id
-router.get('/:id', async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+// GET /api/circles/:id — members only (a circle's roster is not public to
+// every authenticated user). 404 rather than 403 so we don't confirm a circle
+// exists to non-members.
+router.get('/:id', async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
   try {
+    const isMember = await circleService.isActiveMember(req.params.id, req.user!.id)
+    if (!isMember) {
+      res.status(404).json({ success: false, error: 'Circle not found' }); return
+    }
     const circle = await circleService.getCircle(req.params.id)
     res.json({ success: true, data: circle })
   } catch (err) { next(err) }

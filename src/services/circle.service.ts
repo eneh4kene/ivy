@@ -53,7 +53,9 @@ class CircleService {
           include: {
             user: {
               select: {
-                id: true, firstName: true, lastName: true,
+                // First name only — last names are PII we never surface to
+                // circle peers (who may be strangers). See getCirclesForUser.
+                id: true, firstName: true,
                 track: true, streaks: true,
               },
             },
@@ -65,6 +67,14 @@ class CircleService {
     })
     if (!circle) throw new NotFoundError('Circle not found')
     return circle
+  }
+
+  async isActiveMember(circleId: string, userId: string): Promise<boolean> {
+    const member = await prisma.ivyCircleMember.findUnique({
+      where: { circleId_userId: { circleId, userId } },
+      select: { isActive: true },
+    })
+    return !!member?.isActive
   }
 
   async getCirclesForUser(userId: string) {
