@@ -526,11 +526,29 @@ class PromptService {
       this.memoryBlock(ctx, callType),
       this.behaviouralAdapter(ctx),
       brief ?? this.resolveFlow(callType, ctx),
+      this.gameStanding(ctx),
       this.standingRules(ctx),
       this.safetyRules(),
     ].filter(Boolean);
 
     return sections.join('\n\n');
+  }
+
+  // ── Circle game standing ─────────────────────────────────────────────────────
+  // Ground-truth game state, injected on EVERY path (outbound, inbound Retell,
+  // chat) — deterministic and free (the fields are already fetched into ctx by
+  // getUserContext; the state summary is server-distilled in circle-game.service).
+  // Lives outside the flow/brief slot so it survives when a Haiku brief replaces
+  // the flow. On outbound it complements the brief (which handles tone) by giving
+  // the model the exact standing so it can't invent scores.
+  private gameStanding(ctx: Record<string, any>): string {
+    if (!ctx.circle_game_name) return '';
+    return [
+      `CIRCLE GAME — ${ctx.circle_game_name}`,
+      `Standing: ${ctx.circle_game_state_summary}`,
+      ctx.circle_game_ivy_instruction ? `How to weave it in: ${ctx.circle_game_ivy_instruction}` : '',
+      `Reference it naturally only if it fits — one aside, not a lecture. Never invent scores or standings; use only the standing above.`,
+    ].filter(Boolean).join('\n');
   }
 
   // ── Flow resolution ──────────────────────────────────────────────────────────
