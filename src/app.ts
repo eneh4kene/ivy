@@ -35,6 +35,11 @@ import { functions as inngestFunctions } from './inngest/functions';
 
 const app: Application = express();
 
+// Behind Fly's proxy (exactly one hop): trust it so req.ip is the real client
+// IP from X-Forwarded-For, not the proxy address. Without this every request
+// shares one IP and the per-IP rate limiters throttle the whole user base.
+app.set('trust proxy', 1);
+
 // Security middleware
 app.use(helmet());
 app.use(cors({

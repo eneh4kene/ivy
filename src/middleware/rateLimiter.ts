@@ -10,10 +10,13 @@ export const apiLimiter = rateLimit({
   legacyHeaders: false,
 });
 
-// Stricter rate limiter for auth endpoints
+// Stricter rate limiter for auth endpoints. A single signup consumes 2-3
+// requests (magic-link + verify), and a coach onboarding clients on shared
+// venue WiFi presents one NAT IP for the whole group — 5/window locked out
+// everyone after the second signup. 30/15min still caps email-send abuse.
 export const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: process.env.NODE_ENV === 'development' ? 100 : 5, // Higher limit in dev
+  max: process.env.NODE_ENV === 'development' ? 100 : 30, // Higher limit in dev
   message: 'Too many authentication attempts, please try again later',
   standardHeaders: true,
   legacyHeaders: false,

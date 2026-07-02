@@ -644,11 +644,7 @@ class CoachService {
 
     const clientList = clients.map((c) => `${c.firstName} ${c.lastName} (id: ${c.id})`).join('\n');
 
-    let Anthropic: any;
-    try {
-      Anthropic = (await import('@anthropic-ai/sdk')).default;
-    } catch { return; }
-
+    const Anthropic = (await import('@anthropic-ai/sdk')).default;
     const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
     let text = '[]';
@@ -662,10 +658,21 @@ class CoachService {
         }],
       });
       text = msg.content[0].type === 'text' ? msg.content[0].text.trim() : '[]';
-    } catch { return; }
+    } catch (err) {
+      logger.error(`Ponder: programme-update extraction failed for coach ${coachId} — updates from this call were NOT applied`, err);
+      return;
+    }
+
+    // Models sometimes wrap JSON in ``` fences despite instructions.
+    const jsonText = text.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '');
 
     let updates: Array<{ clientId: string; area: string; instruction: string }> = [];
-    try { updates = JSON.parse(text); } catch { return; }
+    try {
+      updates = JSON.parse(jsonText);
+    } catch {
+      logger.error(`Ponder: could not parse programme updates for coach ${coachId} — raw model output: ${text.slice(0, 300)}`);
+      return;
+    }
     if (!Array.isArray(updates) || updates.length === 0) return;
 
     for (const update of updates) {

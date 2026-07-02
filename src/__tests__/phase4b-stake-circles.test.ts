@@ -139,6 +139,7 @@ const BASE_COLLECTIVE_GAME = {
 const OPEN_STAKE_CYCLE = {
   id: 'cycle-001',
   stakeAmount: 14, // £14/week → £2/day base slice
+  daysInCycle: 7, // schema default; prod rows always carry it
   status: 'AUTHORIZED',
 }
 

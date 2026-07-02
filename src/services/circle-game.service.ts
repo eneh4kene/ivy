@@ -389,52 +389,63 @@ class CircleGameService {
    * GUARDRAIL: only the holder's OWN workout is touched.  No other user's slice changes.
    * Money never moves between users — only the holder's own at-risk amount increases.
    */
-  private async elevateHolderSlice(userId: string, multiplier: number): Promise<void> {
-    if (multiplier <= 1) return; // no-op for multiplier ≤ 1
-
-    // Find the user's most-recent open stake cycle
+  /**
+   * Shared lookup for the baton-stake mechanic: the user's open cycle, their
+   * base daily slice, and today's PENDING workout in that cycle.
+   *
+   * Base slice mirrors linkWorkoutToCycle: stakeAmount / daysInCycle (NOT /7 —
+   * Foundation Runs are often shorter, and slices must sum to the hold).
+   */
+  private async findTodaysPendingSlice(userId: string): Promise<{
+    cycleId: string
+    baseSlice: number
+    workoutId: string
+  } | null> {
     const cycle = await prisma.stakeCycle.findFirst({
       where: { userId, status: 'AUTHORIZED' },
-      select: { id: true, stakeAmount: true },
+      select: { id: true, stakeAmount: true, daysInCycle: true },
       orderBy: { periodStart: 'desc' },
     });
-    if (!cycle) {
-      logger.info(`baton-stake: ${userId} has no open stake cycle — slice elevation skipped`);
-      return;
-    }
+    if (!cycle) return null;
 
-    // Base daily slice = weekly stake / 7
-    const baseSlice = Math.round((Number(cycle.stakeAmount) / 7) * 100) / 100;
-    const elevatedSlice = Math.round(baseSlice * multiplier * 100) / 100;
+    const baseSlice = Math.round((Number(cycle.stakeAmount) / cycle.daysInCycle) * 100) / 100;
 
-    // Find today's PENDING workout in this cycle
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const tomorrow = new Date(today.getTime() + 24 * 60 * 60 * 1000);
 
-    const workout = await (prisma.workout as any).findFirst({
+    const workout = await prisma.workout.findFirst({
       where: {
         userId,
         stakeCycleId: cycle.id,
         sliceOutcome: 'PENDING',
         plannedDate: { gte: today, lt: tomorrow },
       },
-      select: { id: true, stakeSliceAmount: true },
+      select: { id: true },
     });
+    if (!workout) return null;
 
-    if (!workout) {
-      logger.info(`baton-stake: no PENDING workout today for ${userId} in cycle ${cycle.id} — elevation skipped`);
+    return { cycleId: cycle.id, baseSlice, workoutId: workout.id };
+  }
+
+  private async elevateHolderSlice(userId: string, multiplier: number): Promise<void> {
+    if (multiplier <= 1) return; // no-op for multiplier ≤ 1
+
+    const target = await this.findTodaysPendingSlice(userId);
+    if (!target) {
+      logger.info(`baton-stake: no open cycle or PENDING workout today for ${userId} — elevation skipped`);
       return;
     }
 
-    await (prisma.workout as any).update({
-      where: { id: workout.id },
+    const elevatedSlice = Math.round(target.baseSlice * multiplier * 100) / 100;
+    await prisma.workout.update({
+      where: { id: target.workoutId },
       data: { stakeSliceAmount: elevatedSlice },
     });
 
     logger.info(
-      `baton-stake: elevated ${userId}'s slice from ${baseSlice} → ${elevatedSlice} ` +
-      `(×${multiplier}) for workout ${workout.id}`
+      `baton-stake: elevated ${userId}'s slice from ${target.baseSlice} → ${elevatedSlice} ` +
+      `(×${multiplier}) for workout ${target.workoutId}`
     );
   }
 
@@ -448,38 +459,16 @@ class CircleGameService {
    * GUARDRAIL: only the holder's OWN workout is touched.
    */
   private async restoreBaseSlice(userId: string): Promise<void> {
-    const cycle = await prisma.stakeCycle.findFirst({
-      where: { userId, status: 'AUTHORIZED' },
-      select: { id: true, stakeAmount: true },
-      orderBy: { periodStart: 'desc' },
-    });
-    if (!cycle) return;
+    const target = await this.findTodaysPendingSlice(userId);
+    if (!target) return;
 
-    const baseSlice = Math.round((Number(cycle.stakeAmount) / 7) * 100) / 100;
-
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const tomorrow = new Date(today.getTime() + 24 * 60 * 60 * 1000);
-
-    const workout = await (prisma.workout as any).findFirst({
-      where: {
-        userId,
-        stakeCycleId: cycle.id,
-        sliceOutcome: 'PENDING',
-        plannedDate: { gte: today, lt: tomorrow },
-      },
-      select: { id: true },
-    });
-
-    if (!workout) return;
-
-    await (prisma.workout as any).update({
-      where: { id: workout.id },
-      data: { stakeSliceAmount: baseSlice },
+    await prisma.workout.update({
+      where: { id: target.workoutId },
+      data: { stakeSliceAmount: target.baseSlice },
     });
 
     logger.info(
-      `baton-stake: restored ${userId}'s slice to base ${baseSlice} after successful pass (workout ${workout.id})`
+      `baton-stake: restored ${userId}'s slice to base ${target.baseSlice} after successful pass (workout ${target.workoutId})`
     );
   }
 
@@ -559,14 +548,14 @@ class CircleGameService {
     if (!game.sprintId) return;
 
     // Find the sprint to get the circle's sprint number
-    const sprint = await (prisma.sprint as any).findUnique({
+    const sprint = await prisma.sprint.findUnique({
       where: { id: game.sprintId },
       select: { id: true, seasonId: true, number: true },
     });
     if (!sprint) return;
 
     // Find the circle's sprint goal for this sprint number
-    const sprintGoal = await (prisma.circleSprintGoal as any).findFirst({
+    const sprintGoal = await prisma.circleSprintGoal.findFirst({
       where: {
         circleId: game.circleId,
         sprintNumber: sprint.number,
@@ -577,7 +566,7 @@ class CircleGameService {
 
     if (!sprintGoal) return;
 
-    await (prisma.circleSprintGoal as any).update({
+    await prisma.circleSprintGoal.update({
       where: { id: sprintGoal.id },
       data: { collectiveGoalHitAt: new Date() },
     });
