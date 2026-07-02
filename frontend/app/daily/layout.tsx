@@ -9,5 +9,5 @@
 import { ProtectedRoute } from '@/components/auth/protected-route'
 
 export default function DailyLayout({ children }: { children: React.ReactNode }) {
-  return <ProtectedRoute><div className="theme-arcade min-h-[100dvh]">{children}</div></ProtectedRoute>
+  return <ProtectedRoute><div className="theme-vine min-h-[100dvh]">{children}</div></ProtectedRoute>
 }

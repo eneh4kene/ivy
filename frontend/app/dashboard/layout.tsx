@@ -10,7 +10,7 @@ export default function DashboardLayout({
 }) {
   return (
     <ProtectedRoute>
-      <div className="theme-arcade flex h-screen bg-background overflow-hidden">
+      <div className="theme-vine flex h-screen bg-background overflow-hidden">
         {/* Desktop sidebar container */}
         <div className="hidden md:block w-60 flex-shrink-0">
           <Sidebar />

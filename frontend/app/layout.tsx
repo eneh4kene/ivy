@@ -1,15 +1,16 @@
 import type { Metadata, Viewport } from "next"
-import { Lora, Instrument_Sans, DM_Mono } from "next/font/google"
+import { Newsreader, Instrument_Sans, DM_Mono } from "next/font/google"
 import "./globals.css"
 import { PostHogProvider } from "@/lib/analytics/posthog"
 import { ServiceWorkerRegister } from "@/components/pwa/ServiceWorkerRegister"
 
 /* ── Fonts ──────────────────────────────────────────────────────────────── */
-const lora = Lora({
+// Display voice of the Living Vine language — an italic-forward serif.
+const newsreader = Newsreader({
   subsets: ["latin"],
-  variable: "--font-lora",
+  variable: "--font-newsreader",
   display: "swap",
-  weight: ["400", "500", "600"],
+  weight: ["300", "400", "500"],
   style: ["normal", "italic"],
 })
 
@@ -73,7 +74,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html
       lang="en"
-      className={`dark ${lora.variable} ${instrumentSans.variable} ${dmMono.variable}`}
+      className={`dark ${newsreader.variable} ${instrumentSans.variable} ${dmMono.variable}`}
     >
       <head>
         <meta name="mobile-web-app-capable"           content="yes" />

@@ -22,9 +22,18 @@ const ACTION_LABELS: Record<ChatActionKind, string> = {
 }
 
 function IvyAvatar() {
+  // A single lit leaf — Ivy's presence in the thread.
   return (
-    <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-gold-400/15 text-[11px] font-semibold text-gold-300 ring-1 ring-gold-400/30">
-      I
+    <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-gold-400/12 ring-1 ring-gold-400/30 glow-sm-gold">
+      <svg width="13" height="13" viewBox="0 0 24 24" aria-hidden>
+        <path
+          d="M4 20 C 4 10, 10 4, 20 4 C 20 14, 14 20, 4 20 Z"
+          fill="hsl(var(--gold-400) / 0.35)"
+          stroke="hsl(var(--gold-400))"
+          strokeWidth="1.6"
+        />
+        <path d="M4 20 C 9 15, 13 11, 18 6" fill="none" stroke="hsl(var(--gold-300))" strokeWidth="1.1" opacity="0.9" />
+      </svg>
     </span>
   )
 }
@@ -245,11 +254,37 @@ function Bubble({
 
 function EmptyState({ firstName }: { firstName?: string }) {
   return (
-    <div className="flex flex-col items-center gap-2 px-6 pt-16 text-center">
-      <IvyAvatar />
-      <p className="mt-2 text-sm leading-relaxed text-ink-400">
-        {firstName ? `Hey ${firstName}.` : 'Hey.'} This is your line to me — plan your day, log a win, or
-        ask for a push, any time. Your evening check-in stays the main event.
+    <div className="flex flex-col items-center gap-1 px-8 pt-14 text-center">
+      {/* a young sprout — the conversation hasn't grown yet */}
+      <svg width="72" height="88" viewBox="0 0 72 88" aria-hidden className="opacity-90">
+        <defs>
+          <radialGradient id="chatSoil" cx="50%" cy="0%">
+            <stop offset="0%" stopColor="hsl(var(--gold-400))" stopOpacity="0.25" />
+            <stop offset="100%" stopColor="hsl(var(--gold-400))" stopOpacity="0" />
+          </radialGradient>
+        </defs>
+        <ellipse cx="36" cy="80" rx="26" ry="5" fill="url(#chatSoil)" />
+        <path d="M36 80 C 38 62, 33 52, 36 38" fill="none" stroke="hsl(var(--sage-400))" strokeWidth="2.4" strokeLinecap="round" />
+        <path
+          d="M36 48 C 26 46, 20 38, 21 29 C 30 31, 35 38, 36 48 Z"
+          fill="hsl(var(--gold-400) / 0.2)"
+          stroke="hsl(var(--gold-400))"
+          strokeWidth="1.3"
+        />
+        <path
+          d="M36 38 C 45 36, 50 29, 49 21 C 41 23, 37 29, 36 38 Z"
+          fill="hsl(var(--gold-400) / 0.28)"
+          stroke="hsl(var(--gold-300))"
+          strokeWidth="1.3"
+        />
+        <circle cx="36" cy="34" r="2" fill="hsl(var(--gold-100))" />
+      </svg>
+      <p className="font-display text-[16px] text-sage-300">
+        {firstName ? `Hey ${firstName} — I'm here.` : "Hey — I'm here."}
+      </p>
+      <p className="mt-1 max-w-[260px] text-[12.5px] leading-relaxed text-ink-400">
+        Plan your day, log a win, or ask for a push — any time. Your evening check-in stays the main
+        event.
       </p>
     </div>
   )

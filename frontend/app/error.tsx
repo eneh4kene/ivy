@@ -48,7 +48,7 @@ export default function Error({
   )
 
   return (
-    <div className="theme-arcade min-h-[100dvh] bg-background flex items-center justify-center p-6">
+    <div className="theme-vine min-h-[100dvh] bg-background flex items-center justify-center p-6">
       <div className="w-full max-w-sm text-center">
         <div className="mx-auto w-14 h-14 rounded-2xl bg-ember-400/10 border border-ember-400/25 flex items-center justify-center mb-5">
           <span className="text-2xl">⚠️</span>

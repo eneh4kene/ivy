@@ -24,5 +24,5 @@ export default function CoachLayout({ children }: { children: React.ReactNode })
     return null
   }
 
-  return <div className="theme-arcade min-h-[100dvh]">{children}</div>
+  return <div className="theme-vine min-h-[100dvh]">{children}</div>
 }

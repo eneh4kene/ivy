@@ -6,7 +6,7 @@
  *
  * Rendered once via ConsumerShell so every consumer surface shares the same
  * chrome (previously each route was a standalone full-screen with no nav, which
- * is why actions ended up dumped mid-page). Uses theme-arcade tokens and respects
+ * is why actions ended up dumped mid-page). Uses theme-vine tokens and respects
  * the iOS home-indicator safe area.
  */
 

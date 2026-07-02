@@ -61,7 +61,7 @@ export default function CoachProfilePage({ params }: { params: Promise<{ id: str
 
   if (loading) {
     return (
-      <div className="theme-arcade min-h-dvh mesh-bg flex items-center justify-center">
+      <div className="theme-vine min-h-dvh mesh-bg flex items-center justify-center">
         <span className="w-6 h-6 rounded-full border-2 border-ink-600 border-t-gold-400 animate-spin" />
       </div>
     )
@@ -69,7 +69,7 @@ export default function CoachProfilePage({ params }: { params: Promise<{ id: str
 
   if (notFound || !coach) {
     return (
-      <div className="theme-arcade min-h-dvh mesh-bg flex items-center justify-center px-6 text-center">
+      <div className="theme-vine min-h-dvh mesh-bg flex items-center justify-center px-6 text-center">
         <div>
           <p className="text-ink-400 mb-4">Coach not found.</p>
           <Link href="/coaches" className="text-gold-400 text-sm hover:text-gold-300">← Back to marketplace</Link>
@@ -83,7 +83,7 @@ export default function CoachProfilePage({ params }: { params: Promise<{ id: str
   const about = coach.programmeNotes || ''
 
   return (
-    <div className="theme-arcade min-h-dvh mesh-bg-subtle pb-32">
+    <div className="theme-vine min-h-dvh mesh-bg-subtle pb-32">
       <div className="max-w-lg mx-auto">
 
         {/* ── Sticky nav ── */}

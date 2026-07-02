@@ -104,7 +104,7 @@ export default function CoachMarketplacePage() {
   }, [searchQuery, coaches])
 
   return (
-    <div className="theme-arcade min-h-dvh mesh-bg-subtle pb-safe-b">
+    <div className="theme-vine min-h-dvh mesh-bg-subtle pb-safe-b">
       <div className="max-w-lg mx-auto px-4">
 
         {/* ── Nav ── */}

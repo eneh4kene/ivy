@@ -6,7 +6,7 @@ import { Logo } from '@/components/brand/Logo'
 
 export default function CheckoutCancelPage() {
   return (
-    <div className="theme-arcade min-h-screen bg-background flex items-center justify-center p-6">
+    <div className="theme-vine min-h-screen bg-background flex items-center justify-center p-6">
       <div className="w-full max-w-sm text-center animate-fade-in">
         <div className="flex justify-center mb-6">
           <Logo size={56} />

@@ -2,7 +2,7 @@
 
 export default function OfflinePage() {
   return (
-    <div className="theme-arcade min-h-screen bg-black flex items-center justify-center px-4">
+    <div className="theme-vine min-h-screen bg-black flex items-center justify-center px-4">
       <div className="text-center max-w-sm">
         <div className="w-16 h-16 rounded-2xl bg-sage-400/10 border border-sage-400/20 flex items-center justify-center mx-auto mb-6">
           <span className="text-2xl font-bold text-sage-400">ivy</span>

@@ -532,3 +532,155 @@
 @keyframes arcade-pulse-cyan { 0%,100% { box-shadow: 0 0 0 0 rgba(39,232,255,.5); } 50% { box-shadow: 0 0 0 8px rgba(39,232,255,0); } }
 @keyframes arcade-pulse-lime { 0%,100% { box-shadow: 0 0 0 0 rgba(198,255,68,.5); } 50% { box-shadow: 0 0 0 8px rgba(198,255,68,0); } }
 @keyframes arcade-pulse-mag  { 0%,100% { box-shadow: 0 0 0 0 rgba(255,59,120,.6); } 50% { box-shadow: 0 0 0 10px rgba(255,59,120,0); } }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   .theme-vine — the Living Vine language (approved direction, July 2026).
+   Bioluminescent ivy in dark water: abyssal blue-green inks, one lumen-teal
+   accent, coral only for money-at-risk, Newsreader italic as the voice.
+   Same scoped-token mechanism as .theme-arcade: override the palette, then
+   re-declare the role tokens so they re-resolve here. Applied to consumer-PWA
+   + coach roots; marketing/admin follow when they migrate.
+   ═══════════════════════════════════════════════════════════════════════════ */
+.theme-vine {
+  /* Accent → lumen (bioluminescent teal). Keeps the historical --gold-* names
+     so every token-built screen flips without component edits. */
+  --gold-500: 168 78% 48%;
+  --gold-400: 166 85% 61%;   /* #46f0c8 */
+  --gold-300: 165 90% 81%;   /* #9ffbe4 */
+  --gold-100: 165 67% 92%;
+  /* Success → soft lumen */
+  --sage-500: 172 66% 45%;
+  --sage-400: 172 66% 50%;   /* #2dd4bf */
+  --sage-300: 170 70% 68%;
+  --sage-100: 168 60% 90%;
+  /* Money at risk → warm coral (the ONLY warm note in the language) */
+  --ember-500: 8 82% 60%;
+  --ember-400: 6 100% 71%;   /* #ff7a6b */
+  /* Social → ice cyan, quiet */
+  --periwinkle-500: 192 55% 58%;
+  --periwinkle-400: 192 65% 70%;
+  /* Ink → abyss (blue-green near-blacks, never neutral grey) */
+  --ink-900: 202 75% 2%;     /* #010507 */
+  --ink-800: 201 73% 9%;     /* card #061a26 */
+  --ink-700: 200 60% 13%;
+  --ink-600: 190 40% 17%;
+  --ink-400: 169 20% 52%;    /* mist #6b9d94 */
+  --ink-200: 168 30% 76%;
+  --ink-50:  165 67% 90%;    /* ice #d7f7ef */
+  /* Glow atmosphere */
+  --glow-gold:  rgba(70,240,200,.22);
+  --glow-sage:  rgba(45,212,191,.18);
+  --glow-ember: rgba(255,122,107,.2);
+
+  /* Re-resolve role tokens against the vine palette (var() indirection in
+     :root resolves at declaration site — must be re-declared here). */
+  --background:       var(--ink-900);
+  --foreground:       var(--ink-50);
+  --card:             var(--ink-800);
+  --card-foreground:  var(--ink-50);
+  --popover:          var(--ink-800);
+  --popover-foreground: var(--ink-50);
+  --primary:          var(--gold-400);
+  --primary-foreground: 202 75% 3%;
+  --secondary:        var(--ink-700);
+  --secondary-foreground: var(--ink-200);
+  --muted:            var(--ink-700);
+  --muted-foreground: var(--ink-400);
+  --accent:           var(--ink-600);
+  --accent-foreground: var(--ink-200);
+  --destructive:      var(--ember-500);
+  --destructive-foreground: var(--ink-50);
+  --border:           var(--ink-600);
+  --input:            var(--ink-700);
+  --ring:             var(--gold-400);
+  --color-stake:      hsl(var(--ember-400));
+  --color-success:    hsl(var(--sage-400));
+  --color-commit:     hsl(var(--gold-400));
+  --color-social:     hsl(var(--periwinkle-400));
+  --color-text:       hsl(var(--ink-50));
+  --color-text-muted: hsl(var(--ink-400));
+  --color-surface:    hsl(var(--ink-800));
+  --color-border:     hsl(var(--ink-600));
+
+  position: relative;
+  isolation: isolate;
+  color: hsl(var(--ink-50));
+  background:
+    radial-gradient(ellipse 120% 55% at 50% -8%, rgba(45,122,140,.20), transparent 60%),
+    radial-gradient(ellipse 90% 42% at 50% 42%, rgba(70,240,200,.05), transparent 65%),
+    linear-gradient(180deg, #041219 0%, #02090d 34%, #010507 100%);
+}
+/* Drifting plankton — tiny fixed lights instead of the arcade grid */
+.theme-vine::before {
+  content: ""; position: fixed; inset: 0; z-index: 0; pointer-events: none;
+  background-image:
+    radial-gradient(circle 1.2px at 12% 16%, rgba(70,240,200,.4) 99%, transparent),
+    radial-gradient(circle 1px   at 84% 11%, rgba(70,240,200,.26) 99%, transparent),
+    radial-gradient(circle 1.4px at 72% 30%, rgba(70,240,200,.38) 99%, transparent),
+    radial-gradient(circle 1px   at 20% 38%, rgba(70,240,200,.24) 99%, transparent),
+    radial-gradient(circle 1.2px at 54% 8%,  rgba(70,240,200,.3) 99%, transparent),
+    radial-gradient(circle 1px   at 90% 46%, rgba(70,240,200,.2) 99%, transparent);
+  -webkit-mask-image: radial-gradient(ellipse 95% 70% at 50% 22%, #000 30%, transparent 85%);
+          mask-image: radial-gradient(ellipse 95% 70% at 50% 22%, #000 30%, transparent 85%);
+}
+.theme-vine > * { position: relative; z-index: 1; }
+
+/* The voice: Newsreader italic for display type */
+.theme-vine h1, .theme-vine h2, .theme-vine h3, .theme-vine .font-display {
+  font-family: 'Newsreader', 'Lora', Georgia, serif;
+  font-style: italic;
+  font-weight: 400;
+  letter-spacing: 0.005em;
+}
+
+/* Surfaces → deep-water strata (soft gradient, lumen hairline) */
+.theme-vine .surface,
+.theme-vine .surface-raised {
+  background: linear-gradient(165deg, rgba(8,34,48,.55), rgba(4,18,25,.78));
+  border: 1px solid rgba(70,240,200,.09);
+  backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+}
+.theme-vine .glass,
+.theme-vine .glass-gold,
+.theme-vine .glass-sage {
+  background: linear-gradient(165deg, rgba(8,34,48,.45), rgba(4,18,25,.7));
+  backdrop-filter: blur(14px) saturate(130%); -webkit-backdrop-filter: blur(14px) saturate(130%);
+  border: 1px solid rgba(70,240,200,.09);
+}
+.theme-vine .glass-gold { border-color: rgba(70,240,200,.24); box-shadow: 0 0 44px rgba(70,240,200,.06), inset 0 1px 0 rgba(215,247,239,.05); }
+.theme-vine .glass-sage { border-color: rgba(45,212,191,.22); box-shadow: 0 0 34px rgba(45,212,191,.06); }
+
+/* Mesh backgrounds → transparent (the vine water shows through) */
+.theme-vine .mesh-bg,
+.theme-vine .mesh-bg-subtle { background: transparent; }
+
+/* Gradient text → luminous ice with soft halo */
+.theme-vine .text-gradient-gold {
+  background: none; -webkit-text-fill-color: currentColor;
+  color: hsl(var(--gold-300)); text-shadow: 0 0 12px rgba(70,240,200,.45);
+}
+.theme-vine .text-gradient-sage {
+  background: none; -webkit-text-fill-color: currentColor;
+  color: hsl(var(--sage-300)); text-shadow: 0 0 12px rgba(45,212,191,.4);
+}
+
+.theme-vine .border-gradient-gold::before {
+  background: linear-gradient(135deg, rgba(70,240,200,.45), rgba(70,240,200,.08), rgba(70,240,200,.45));
+}
+
+/* Status pulses → slow bioluminescent breathing */
+.theme-vine .pulse-gold  { animation: vine-pulse-lumen 3s cubic-bezier(0.4,0,0.6,1) infinite; }
+.theme-vine .pulse-sage  { animation: vine-pulse-lumen 3s cubic-bezier(0.4,0,0.6,1) infinite; }
+.theme-vine .pulse-ember { animation: vine-pulse-coral 2s cubic-bezier(0.4,0,0.6,1) infinite; }
+
+@keyframes vine-pulse-lumen { 0%,100% { box-shadow: 0 0 0 0 rgba(70,240,200,.4); } 50% { box-shadow: 0 0 0 9px rgba(70,240,200,0); } }
+@keyframes vine-pulse-coral { 0%,100% { box-shadow: 0 0 0 0 rgba(255,122,107,.45); } 50% { box-shadow: 0 0 0 9px rgba(255,122,107,0); } }
+
+/* Organism motion — the vine breathes, leaves ignite, a bud pulses */
+@keyframes vine-breathe { 0%,100% { transform: scale(1); } 50% { transform: scale(1.012); } }
+@keyframes leaf-ignite {
+  0% { opacity: 0; transform: scale(.6); filter: brightness(2.2); }
+  60% { opacity: 1; transform: scale(1.06); }
+  100% { opacity: 1; transform: scale(1); filter: brightness(1); }
+}
+@keyframes bud-pulse { 0%,100% { opacity: .55; } 50% { opacity: .95; } }
