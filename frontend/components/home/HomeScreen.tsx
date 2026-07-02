@@ -16,6 +16,7 @@ import { Flame, Users, Target, Heart, ArrowRight, Shield, ChevronRight, Mic, Pho
 import { useStakeGate } from '@/hooks/useStakeGate'
 import { StakeReNudge } from '@/components/stake-setup/StakeReNudge'
 import { InstallPrompt } from '@/components/pwa/InstallPrompt'
+import { IvyVine } from '@/components/living/IvyVine'
 import {
   stakeApi,
   statsApi,
@@ -84,6 +85,37 @@ function SectionHead({ label, href }: { label: string; href?: string }) {
           View <ChevronRight className="w-3 h-3" />
         </Link>
       )}
+    </div>
+  )
+}
+
+// ─── The vine hero — the living organism grown from this cycle ────────────────
+
+const KEPT_STATUSES: StakeDayStatus[] = ['armed', 'complete', 'grace']
+
+function VineHero({ state }: { state: StakeState }) {
+  const week = state.week ?? []
+  const keptCount = week.filter((d) => KEPT_STATUSES.includes(d.status)).length
+  const today = week.find((d) => d.isToday)
+  const todayKept = today ? KEPT_STATUSES.includes(today.status) : false
+
+  const name =
+    keptCount === 0
+      ? 'Your ivy is waiting for its first leaf'
+      : `Your ivy is ${['one', 'two', 'three', 'four', 'five', 'six', 'seven'][keptCount - 1] ?? keptCount} ${keptCount === 1 ? 'leaf' : 'leaves'} strong`
+  const stateLine = todayKept
+    ? "tonight's leaf is lit"
+    : 'miss tonight & a leaf falls'
+
+  return (
+    <div className="relative -mx-4 -mt-2">
+      <IvyVine days={week} className="mx-auto h-64 w-auto" />
+      <div className="text-center mt-1">
+        <p className="font-display text-[15px] text-sage-300">{name}</p>
+        <p className="mt-1.5 font-mono text-[9px] uppercase tracking-[0.26em] text-ink-400/80">
+          {stateLine}
+        </p>
+      </div>
     </div>
   )
 }
@@ -608,6 +640,9 @@ export function HomeScreen() {
           </div>
         ) : (
           <>
+            {/* The organism — your ivy, grown from this cycle's real days */}
+            {state && state.cycle && <VineHero state={state} />}
+
             {/* Ivy reached out — onboarding handoff / evening check-in / replies */}
             {ivyUnread > 0 && <IvyMessageCard count={ivyUnread} />}
 

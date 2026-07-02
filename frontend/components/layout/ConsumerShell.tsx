@@ -14,7 +14,7 @@ import { BottomNav } from '@/components/layout/BottomNav'
 export function ConsumerShell({ children }: { children: React.ReactNode }) {
   return (
     <ProtectedRoute>
-      <div className="theme-arcade min-h-[100dvh]">
+      <div className="theme-vine min-h-[100dvh]">
         {children}
         <BottomNav />
       </div>

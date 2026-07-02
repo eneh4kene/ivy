@@ -90,7 +90,7 @@ const config: Config = {
       },
       fontFamily: {
         sans:    ["Instrument Sans", "DM Sans", "system-ui", "sans-serif"],
-        display: ["Lora", "Georgia", "serif"],
+        display: ["Newsreader", "Lora", "Georgia", "serif"],
         mono:    ["DM Mono", "Fira Mono", "monospace"],
       },
       fontSize: {

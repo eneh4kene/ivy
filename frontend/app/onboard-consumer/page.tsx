@@ -4,7 +4,7 @@ import { ConsumerOnboardingScreen } from '@/components/onboarding-consumer/Consu
 
 export default function ConsumerOnboardingPage() {
   return (
-    <div className="theme-arcade min-h-[100dvh]">
+    <div className="theme-vine min-h-[100dvh]">
       <ConsumerOnboardingScreen />
     </div>
   )
