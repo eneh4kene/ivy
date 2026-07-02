@@ -291,7 +291,16 @@ class WebhookController {
         }
         try {
           const stripe = new Stripe(config.stripe.secretKey, { apiVersion: '2023-10-16' });
-          event = stripe.webhooks.constructEvent(req.body, sig, config.stripe.webhookSecret);
+          // Stripe signs the RAW request bytes. express.json has already parsed
+          // req.body, so verify against req.rawBody (captured in app.ts) —
+          // constructEvent on the parsed object rejects every event.
+          const rawBody: Buffer | undefined = (req as any).rawBody;
+          if (!rawBody) {
+            logger.error('Stripe webhook: req.rawBody missing — json verify hook not capturing');
+            res.status(400).send('Raw body unavailable for signature verification');
+            return;
+          }
+          event = stripe.webhooks.constructEvent(rawBody, sig, config.stripe.webhookSecret);
         } catch (err) {
           logger.error('Stripe webhook signature verification failed:', err);
           res.status(400).send('Webhook signature verification failed');

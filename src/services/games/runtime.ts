@@ -40,6 +40,17 @@ export async function createSpecGame(opts: {
   memberIds: string[];
 }) {
   const spec = parseSpec(opts.spec); // pin/validate shape at creation
+
+  // The LLM referee is not wired yet (runSpecEvent only logs pending
+  // adjudications), so a game that depends on it would sit stuck forever.
+  // Refuse loudly at creation instead of stalling silently mid-game.
+  if (spec.engine !== 'deterministic') {
+    throw new Error(
+      `Game "${spec.name}" needs the LLM referee (engine: ${spec.engine}), which isn't live yet. ` +
+      'Rephrase the game so outcomes are decided by counts, streaks, or timers alone.'
+    );
+  }
+
   const state = initState(spec, opts.memberIds);
   const game = await prisma.circleGame.create({
     data: {

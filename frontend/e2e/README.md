@@ -27,12 +27,12 @@ which fails on any uncaught error, unexpected console error, or ≥400 `/api` re
 cd frontend
 npx playwright install chromium          # first time only
 
-eval "$(bash e2e/bootstrap.sh)"          # exports E2E_VERIFY_URL, E2E_USER_ID, ...
 npm run test:e2e                         # mobile + desktop projects
 npx playwright show-report               # HTML report + traces
 
-bash e2e/teardown.sh "$E2E_USER_ID" "$E2E_USER_EMAIL"   # hard-delete the test user
-# or sweep leftovers:
+# Provisioning is automatic: magic-link tokens are single-use, so each worker
+# bootstraps its OWN disposable user (fixtures/auth.ts runs bootstrap.sh) and
+# tears it down when the worker exits. To sweep any leftovers:
 bash e2e/teardown.sh --all
 ```
 

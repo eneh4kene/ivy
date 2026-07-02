@@ -135,7 +135,7 @@ export interface ArmingUser {
 async function loadArmingUser(userId: string): Promise<ArmingUser | null> {
   // Cast to any to select the Phase 3 fields before `prisma generate` is re-run.
   // Once the migration is applied and `prisma generate` runs, remove the cast.
-  return (prisma.user as any).findUnique({
+  return prisma.user.findUnique({
     where: { id: userId },
     select: {
       id: true,
@@ -211,7 +211,7 @@ async function ensureChaseCap(
     // New calendar month — reset the counter.
     // Cast to any: chaseCallsThisMonth / chaseCapMonthStart are Phase 3 schema fields;
     // the Prisma client types will include them after `prisma generate` post-migration.
-    await (prisma.user as any).update({
+    await prisma.user.update({
       where: { id: userId },
       data: {
         chaseCallsThisMonth: 0,
@@ -518,7 +518,7 @@ async function maybeDispatchChaseCall(
 
     // Increment the monthly counter.
     // Cast to any: Phase 3 schema fields pending `prisma generate`.
-    await (prisma.user as any).update({
+    await prisma.user.update({
       where: { id: userId },
       data: {
         chaseCallsThisMonth: { increment: 1 },

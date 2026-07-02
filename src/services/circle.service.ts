@@ -78,7 +78,7 @@ class CircleService {
   }
 
   async getCirclesForUser(userId: string) {
-    return prisma.ivyCircleMember.findMany({
+    const rows = await prisma.ivyCircleMember.findMany({
       where: { userId, isActive: true },
       include: {
         circle: {
@@ -94,6 +94,12 @@ class CircleService {
         },
       },
     })
+    // The stored `size` counter drifts (cascade deletes never decrement it), so
+    // report the live active-member count — the members are already loaded.
+    return rows.map((row) => ({
+      ...row,
+      circle: { ...row.circle, size: row.circle.members.length },
+    }))
   }
 
   async addMember(circleId: string, userId: string, role: 'member' | 'facilitator' = 'member') {
@@ -114,10 +120,7 @@ class CircleService {
       update: { isActive: true, role },
     })
 
-    await prisma.ivyCircle.update({
-      where: { id: circleId },
-      data: { size: { increment: 1 } },
-    })
+    await this.syncCircleSize(circleId)
 
     return member
   }
@@ -127,10 +130,20 @@ class CircleService {
       where: { circleId_userId: { circleId, userId } },
       data: { isActive: false },
     })
-    await prisma.ivyCircle.update({
-      where: { id: circleId },
-      data: { size: { decrement: 1 } },
+    await this.syncCircleSize(circleId)
+  }
+
+  /**
+   * Recompute `size` from the live active-member count instead of
+   * incrementing/decrementing. Deltas drift: reactivating a member via upsert
+   * double-counted, and hard-deleting a user cascades the membership row away
+   * without ever decrementing — prod circles showed size 14 with 2 members.
+   */
+  private async syncCircleSize(circleId: string): Promise<void> {
+    const count = await prisma.ivyCircleMember.count({
+      where: { circleId, isActive: true },
     })
+    await prisma.ivyCircle.update({ where: { id: circleId }, data: { size: count } })
   }
 
   // Evocative cohort names in the Living/Dawn voice — used when a brand-new
@@ -364,7 +377,7 @@ class CircleService {
    * getCircleStakeStatuses() to see opted-in members' stake status.
    */
   async setShareStakeWithCircle(circleId: string, userId: string, share: boolean): Promise<void> {
-    await (prisma.ivyCircleMember as any).update({
+    await prisma.ivyCircleMember.update({
       where: { circleId_userId: { circleId, userId } },
       data: { shareStakeWithCircle: share },
     })
@@ -389,7 +402,7 @@ class CircleService {
    *   'private'  — member has not opted in (shareStakeWithCircle = false)
    */
   async getCircleStakeStatuses(circleId: string): Promise<WitnessedStakeStatus[]> {
-    const members = await (prisma.ivyCircleMember as any).findMany({
+    const members = await prisma.ivyCircleMember.findMany({
       where: { circleId, isActive: true },
       select: {
         userId: true,
@@ -437,7 +450,7 @@ class CircleService {
       }
 
       // Find today's workout in this cycle
-      const workout = await (prisma.workout as any).findFirst({
+      const workout = await prisma.workout.findFirst({
         where: {
           userId: member.userId,
           stakeCycleId: cycle.id,
@@ -504,7 +517,7 @@ class CircleService {
       throw new NotFoundError(`Charity ${charityId} not found or inactive`)
     }
 
-    const goal = await (prisma.circleSprintGoal as any).findUnique({
+    const goal = await prisma.circleSprintGoal.findUnique({
       where: { circleId_sprintNumber: { circleId, sprintNumber } },
       select: { id: true },
     })
@@ -515,7 +528,7 @@ class CircleService {
       )
     }
 
-    await (prisma.circleSprintGoal as any).update({
+    await prisma.circleSprintGoal.update({
       where: { circleId_sprintNumber: { circleId, sprintNumber } },
       data: { collectiveCharityGoalId: charityId },
     })
@@ -535,7 +548,7 @@ class CircleService {
     charityName: string
     goalHitAt: Date | null
   } | null> {
-    const goal = await (prisma.circleSprintGoal as any).findUnique({
+    const goal = await prisma.circleSprintGoal.findUnique({
       where: { circleId_sprintNumber: { circleId, sprintNumber } },
       select: {
         collectiveCharityGoalId: true,
