@@ -11,7 +11,7 @@ import { compileGame, validateSpec } from './games/compiler';
 export const GAME_TEMPLATES = {
   relay: {
     name: 'Baton Relay',
-    description: 'One member holds the baton. Complete your workout to pass it to the next person. Drop it and the group loses a life.',
+    description: 'One member holds the baton. Keep your day to pass it to the next person. Drop it and the group loses a life.',
     defaultRules: {
       turn_order: [],        // userId array; populated from circle members at game start
       window_hours: 24,      // how long the holder has before the baton drops
@@ -23,17 +23,17 @@ export const GAME_TEMPLATES = {
       // GUARDRAIL: money always moves within the same user's own stake.  No inter-user transfer.
       baton_stake_multiplier: 1, // default 1 = no elevation; set >1 to enable baton-stake
     },
-    defaultInstruction: `You're running a baton relay for the circle. {holder_name} currently holds the baton. When they log a workout, pass it to {next_name} and tell the group. If they miss their window, announce the drop, deduct a life, and pass to {next_name} anyway. The group has {lives} lives left. Keep it light and competitive — celebrate passes, commiserate drops, and remind the current holder their window closes at {deadline}.`,
+    defaultInstruction: `You're running a baton relay for the circle. {holder_name} currently holds the baton. When they keep their day, pass it to {next_name} and tell the group. If they miss their window, announce the drop, deduct a life, and pass to {next_name} anyway. The group has {lives} lives left. Keep it light and competitive — celebrate passes, commiserate drops, and remind the current holder their window closes at {deadline}.`,
   },
   points_race: {
     name: 'Points Race',
-    description: 'Every completed workout earns points. First to the target wins.',
+    description: 'Every kept day earns points. First to the target wins.',
     defaultRules: {
       points_per_workout: 1,
       bonus_streak: 3,       // consecutive days to trigger bonus point
       target: 20,
     },
-    defaultInstruction: `This is a points race — {target} points wins. Each completed workout earns 1 point; a {bonus_streak}-day streak earns a bonus. Current standings: {scores_summary}. Mention the leader briefly when relevant. Congratulate someone who scores. If someone hasn't moved in 3+ days, note it warmly — "you're only {gap} points behind, still very catchable."`,
+    defaultInstruction: `This is a points race — {target} points wins. Each kept day earns 1 point; a {bonus_streak}-day streak earns a bonus. Current standings: {scores_summary}. Mention the leader briefly when relevant. Congratulate someone who scores. If someone hasn't moved in 3+ days, note it warmly — "you're only {gap} points behind, still very catchable."`,
   },
   collective: {
     name: 'Group Challenge',
@@ -42,7 +42,7 @@ export const GAME_TEMPLATES = {
       target: 30,            // total workouts needed
       deadline_days: 28,
     },
-    defaultInstruction: `The group is chasing a collective target of {target} workouts in {deadline_days} days. You're at {total} so far — {remaining} to go. Celebrate each contribution. If the pace is behind, note it without pressure: "you need {daily_rate} workouts a day to hit it — still doable." When you hit the target, make it a moment.`,
+    defaultInstruction: `The group is chasing a collective target of {target} kept days in {deadline_days} days. You're at {total} so far — {remaining} to go. Celebrate each contribution. If the pace is behind, note it without pressure: "you need {daily_rate} kept days a day to hit it — still doable." When you hit the target, make it a moment.`,
   },
   custom: {
     name: 'Custom Game',

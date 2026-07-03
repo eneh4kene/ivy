@@ -747,6 +747,40 @@ export async function settleStakeCycle(cycleId: string): Promise<SettleStakeCycl
     },
   })
 
+  // ── The settlement voice ────────────────────────────────────────────────
+  // The week's money just moved — the single most emotionally-charged moment
+  // in the product. Tell the user the story in chat the second it happens;
+  // the vine on home tells it visually. Fire-and-forget: a chat failure must
+  // never fail a settlement.
+  ;(async () => {
+    const s = currency === 'GBP' ? '£' : '$'
+    const keptDays = cycle.daysInCycle - toForfeit.length
+    const graceNote = graceAppliedTo.length > 0
+      ? ` Your grace day covered one miss — no charge for it.`
+      : ''
+    let story: string
+    if (captureAmount === 0) {
+      story =
+        `Your week just settled. ${keptDays} of ${cycle.daysInCycle} days kept — a clean run. ` +
+        `Your ${s}${totalAuthorised} is back where it belongs, all of it.${graceNote} ` +
+        `That's ${keptDays} ${keptDays === 1 ? 'leaf' : 'leaves'} on the vine. New cycle opens Monday.`
+    } else {
+      const charity = await prisma.charity.findUnique({
+        where: { id: forfeitCharityId },
+        select: { name: true },
+      })
+      story =
+        `Your week just settled. ${keptDays} of ${cycle.daysInCycle} days kept — ${s}${releaseAmount} back where it belongs. ` +
+        `The ${toForfeit.length} missed ${toForfeit.length === 1 ? 'day' : 'days'} sent ${s}${captureAmount} to ${charity?.name ?? 'charity'} — real money, doing real good, just not the way you wanted.${graceNote} ` +
+        `New cycle opens Monday. Fresh vine.`
+    }
+    const { default: chatService } = await import('./chat.service')
+    await chatService.postIvyMessage(cycle.userId, story, {
+      messageType: 'settlement',
+      notify: true,
+    })
+  })().catch((err) => logger.warn(`StakeCycle ${cycleId}: settlement chat message failed`, err))
+
   logger.info(
     `StakeCycle ${cycleId} settled | status=SETTLED | ` +
     `captured=${updatedCycle.capturedAmount} | charity=${forfeitCharityId} | ` +
