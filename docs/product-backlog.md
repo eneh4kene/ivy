@@ -1,0 +1,94 @@
+# Product Backlog — parked decisions & ideas
+
+Decisions made, deliberately parked, with the reasoning attached — so nothing good
+gets forgotten and nothing parked gets rebuilt from scratch or re-litigated cold.
+Last updated: 3 July 2026.
+
+Rule of thumb for unparking anything here: **the consumer beta must first prove
+retention** (users still opening cycles in week 4). Almost everything below gets
+better — or gets designed better — with that data in hand.
+
+---
+
+## LOCKED DESIGNS (decided; build when their trigger fires)
+
+### 1. Phase 6 — corporate donation per kept-day  ★ the B2B money layer
+**Decision (3 Jul 2026): companies donate £X per employee kept-day. NOT stake top-ups.**
+- Why not top-ups: company cash in a refundable personal hold = benefit-in-kind tax
+  mess, "whose money forfeited?" accounting, and it dilutes loss aversion (the teeth
+  work because it's *your* money).
+- Why per-kept-day donations: employee's stake stays 100% theirs; company money only
+  moves forward to charity (clean CSR spend, no refunds); completes the success side
+  of the emotional loop ("you kept your money AND your company funded nets because
+  you showed up").
+- The pitch it unlocks: **"Your wellness budget only spends when employees actually
+  follow through."** Spend metered by verified behaviour.
+- Plumbing already anticipates it: `successCharityId`, `Donation.source` flags,
+  `setCollectiveCharityGoal` (dormant, unrouted), prompt guardrails that say
+  "Phase 6 not funded — don't claim it."
+- **Trigger to build: first real company conversation.**
+
+### 2. Coach marketplace with track matching
+Today: browse-only, alphabetical, no `specialties` column, no connect endpoint —
+deliberately thin. The invite link is the real acquisition channel (coach = distribution).
+- When built: add `specialties`/tracks to CoachProfile, match on user track + style +
+  price, add a connect/booking action (the chat coach-escalation nudge then gets a
+  real landing).
+- **Trigger: more than a handful of coaches AND consumers arriving without one.**
+
+### 3. Retell WebRTC in-app calls (complement, never replacement)
+Scheduled evening calls stay real phone rings — Ivy interrupting your evening IS the
+ritual; in-app requires the user to show up, which inverts the accountability.
+But user-initiated moments ("Call me now" from chat, rescue) suit WebRTC: instant,
+no telephony cost, and immune to Twilio outages. Decided 3 Jul when evaluating
+"do we need Twilio at all" — answer: yes, keep BYOC Twilio (UK caller-ID trust,
+SMS OTP, nudge SMS are all Twilio); WebRTC is an addition.
+- **Trigger: post-beta, or the next Twilio outage — whichever first.**
+
+---
+
+## THE ALIVE/VIRAL QUEUE (founder-endorsed direction, sequenced after beta data)
+
+4. **Season garden** — each settled week becomes a permanent plant; your history is a
+   growing garden (the collection loop; Forest proved the mechanic, ours has real
+   money + charity in it).
+5. **Shareable season vine card** — season close mints a generative image: your vine,
+   leaves = days kept, "£61 kept · £9 to malaria nets". The viral object; people
+   share organisms, not dashboards.
+6. **Proactive pattern texts** — 1-2/week, pattern-triggered, never scheduled spam:
+   "It's Tuesday — you've missed the last three Tuesdays. What's different today?"
+   The memory pipeline already has the data; needs a trigger job + taste.
+7. **Witness feature** — user nominates one friend (not a user) who receives the
+   weekly vine report by SMS. Deeper accountability + organic distribution to
+   non-users.
+
+---
+
+## SMALL REFINEMENTS (batch into any nearby work)
+
+8. **Late-night retry rule** — missed-call retry is a flat +15min; after ~21:30 it
+   should roll to next-morning text instead. Check beta data first: may not matter.
+9. **Checkout-success stale copy** — says "set your weekly stake" but it's already
+   set by then.
+10. **Circle avatar colours** — still yellow/purple, off the vine language.
+11. **Stake-setup + onboarding polish, coach dashboard restyle** — last surfaces in
+    the design-constitution migration queue.
+12. **/donations null-hardening** — page throws on `null.length` if an API ever
+    returns null (real API returns arrays; only bites with mocks so far).
+13. **Pause-protocol automation** — Ivy currently captures injury/illness dates on
+    record for MANUAL founder review + manual cycle void (stake-smoke script).
+    If beta shows it's frequent: add a real pause mechanic.
+
+---
+
+## EXPLICITLY NOT DOING (so it stays decided)
+
+- **Native app rebuild** — the "modern feel" problem was design language, not
+  platform; solved by the Living Vine system. If store presence/haptics ever matter:
+  Capacitor-wrap the existing app (~days), don't rebuild (~months).
+- **Company stake top-ups** — see #1.
+- **B2B sales motion before consumer retention is proven** — the B2B skeleton
+  (Company model, companyId scoping, wellness themes in prompts, legacy wizard)
+  stays parked; don't restyle the B2B wizard until a company is actually signing.
+- **Retell-managed phone numbers** — US-only; a +1 caller ID would tank UK pickup
+  rates, and Retell does no SMS. BYOC Twilio stays.
