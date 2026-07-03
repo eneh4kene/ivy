@@ -20,6 +20,16 @@ import {
 } from 'lucide-react'
 import { IVY_PRICE, STAKE_MIN_WEEKLY, CURRENCY_SYMBOL, type Currency } from '@/lib/pricing'
 import { Logo } from '@/components/brand/Logo'
+import { IvyVine, type VineDay } from '@/components/living/IvyVine'
+
+// The hero plant — an illustrative week, four days kept, tonight budding.
+const DEMO_WEEK: VineDay[] = [
+  { label: 'M', status: 'complete', isToday: false },
+  { label: 'T', status: 'complete', isToday: false },
+  { label: 'W', status: 'complete', isToday: false },
+  { label: 'T', status: 'armed', isToday: false },
+  { label: 'F', status: 'upcoming', isToday: true },
+]
 
 // ── The daily loop ────────────────────────────────────────────────────────────
 const LOOP = [
@@ -43,9 +53,9 @@ const LOOP = [
   },
   {
     icon: Moon,
-    color: 'text-periwinkle-400',
-    bg: 'bg-periwinkle-400/10',
-    ring: 'border-periwinkle-400/20',
+    color: 'text-gold-400',
+    bg: 'bg-gold-400/10',
+    ring: 'border-gold-400/20',
     time: 'Evening',
     title: 'Settle the score',
     desc: 'Ivy calls you back, plays your morning words, and you settle honestly. Followed through? The money\'s yours. Missed? That slice forfeits.',
@@ -70,8 +80,8 @@ const PILLARS = [
   },
   {
     icon: Users,
-    color: 'text-periwinkle-400',
-    bg: 'bg-periwinkle-400/10',
+    color: 'text-gold-400',
+    bg: 'bg-gold-400/10',
     title: 'Ivy Circles',
     desc: '5–8 person cohorts, live baton games, witnessed stakes. Accountability with company.',
   },
@@ -84,8 +94,8 @@ const PILLARS = [
   },
   {
     icon: Phone,
-    color: 'text-sage-400',
-    bg: 'bg-sage-400/10',
+    color: 'text-gold-400',
+    bg: 'bg-gold-400/10',
     title: 'Evening review call',
     desc: 'Ivy calls you. Not a notification you swipe away — a conversation that closes the loop.',
   },
@@ -105,7 +115,7 @@ export default function LandingPage() {
   const minStake = STAKE_MIN_WEEKLY[currency]
 
   return (
-    <div className="min-h-screen mesh-bg overflow-hidden">
+    <div className="theme-vine min-h-screen overflow-hidden">
       {/* Nav */}
       <nav className="fixed top-0 left-0 right-0 z-50 border-b border-ink-700/60 bg-ink-900/80 backdrop-blur-xl safe-top">
         <div className="max-w-5xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between">
@@ -129,43 +139,58 @@ export default function LandingPage() {
         </div>
       </nav>
 
-      {/* Hero */}
-      <section className="relative pt-32 pb-20 px-4">
+      {/* Hero — the vine IS the pitch */}
+      <section className="relative pt-24 sm:pt-28 pb-16 px-4">
         <div
-          className="pointer-events-none absolute top-10 left-1/2 -translate-x-1/2 w-[36rem] h-[36rem] rounded-full opacity-40"
-          style={{ background: 'radial-gradient(circle, rgba(204,163,72,0.12) 0%, transparent 70%)' }}
+          className="pointer-events-none absolute top-10 left-1/2 -translate-x-1/2 w-[36rem] h-[36rem] rounded-full opacity-50"
+          style={{ background: 'radial-gradient(circle, rgba(70,240,200,0.1) 0%, transparent 70%)' }}
         />
-        <div className="max-w-3xl mx-auto text-center relative">
-          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-gold-400/[0.08] border border-gold-400/20 mb-8">
-            <span className="w-1.5 h-1.5 rounded-full bg-gold-400 pulse-gold" />
-            <span className="text-xs font-semibold text-gold-400 uppercase tracking-wider">A commitment device, not another habit app</span>
+        <div className="max-w-5xl mx-auto relative grid lg:grid-cols-[1fr_minmax(300px,380px)] gap-2 lg:gap-10 items-center">
+          <div className="text-center lg:text-left order-2 lg:order-1">
+            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-gold-400/[0.08] border border-gold-400/20 mb-7">
+              <span className="w-1.5 h-1.5 rounded-full bg-gold-400 pulse-gold" />
+              <span className="font-mono text-[11px] font-medium text-gold-400 uppercase tracking-[0.18em]">A commitment device, not another habit app</span>
+            </div>
+
+            <h1 className="font-display text-5xl sm:text-6xl text-ink-50 tracking-tight leading-[1.06] mb-6">
+              Your commitment,<br />
+              <em className="text-gradient-gold">kept alive.</em>
+            </h1>
+
+            <p className="text-lg text-ink-300 max-w-xl mx-auto lg:mx-0 mb-6 leading-relaxed">
+              You stake your own money on showing up. Every day you keep, your ivy grows a leaf.
+              Ivy calls you each evening to settle — follow through and keep your money, miss and
+              that day&apos;s slice goes to charity.
+            </p>
+
+            <p className="inline-block font-mono text-[11px] uppercase tracking-[0.24em] text-ink-400 border border-ink-600/70 rounded-lg px-3.5 py-2 mb-9">
+              Miss a day <span className="text-ember-400">&amp; a leaf falls · −{sym}2.33</span>
+            </p>
+
+            <div className="flex flex-col sm:flex-row gap-3 justify-center lg:justify-start">
+              <Link href="/signup">
+                <button className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-7 py-4 rounded-2xl font-semibold text-ink-900 bg-gold-400 hover:bg-gold-300 transition-all glow-gold active:scale-[0.98]">
+                  Start 14-day free trial <ArrowRight className="w-4 h-4" />
+                </button>
+              </Link>
+              <Link href="/pricing">
+                <button className="w-full sm:w-auto px-7 py-4 rounded-2xl font-semibold text-ink-100 border border-ink-600 hover:border-ink-500 hover:bg-ink-800/60 transition-all">
+                  See the plan
+                </button>
+              </Link>
+            </div>
+
+            <p className="text-xs text-ink-400 mt-5">
+              No card required to start · Real system from day one
+            </p>
           </div>
 
-          <h1 className="font-display text-5xl sm:text-6xl text-ink-50 tracking-tight leading-[1.05] mb-6">
-            Put your money where<br />
-            your <em className="text-gradient-gold not-italic">commitment</em> is.
-          </h1>
-
-          <p className="text-lg text-ink-300 max-w-xl mx-auto mb-10 leading-relaxed">
-            You stake your own money on showing up. Arm it each morning with your voice. Ivy calls you each evening to settle. Follow through and keep it — miss and it&apos;s gone. That&apos;s why it works.
-          </p>
-
-          <div className="flex flex-col sm:flex-row gap-3 justify-center">
-            <Link href="/signup">
-              <button className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-7 py-4 rounded-2xl font-semibold text-ink-900 bg-gold-400 hover:bg-gold-300 transition-all glow-gold active:scale-[0.98]">
-                Start 14-day free trial <ArrowRight className="w-4 h-4" />
-              </button>
-            </Link>
-            <Link href="/pricing">
-              <button className="w-full sm:w-auto px-7 py-4 rounded-2xl font-semibold text-ink-100 border border-ink-600 hover:border-ink-500 hover:bg-ink-800/60 transition-all">
-                See the plan
-              </button>
-            </Link>
+          <div className="order-1 lg:order-2 relative">
+            <IvyVine days={DEMO_WEEK} className="mx-auto h-64 sm:h-80 w-auto" />
+            <p className="text-center font-display text-[15px] text-sage-300 -mt-2">
+              Four days kept. Tonight&apos;s leaf is budding.
+            </p>
           </div>
-
-          <p className="text-xs text-ink-400 mt-5">
-            No card required to start · Real system from day one
-          </p>
         </div>
       </section>
 
