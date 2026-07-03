@@ -96,25 +96,39 @@ const KEPT_STATUSES: StakeDayStatus[] = ['armed', 'complete', 'grace']
 function VineHero({ state }: { state: StakeState }) {
   const week = state.week ?? []
   const keptCount = week.filter((d) => KEPT_STATUSES.includes(d.status)).length
+  const forfeitedCount = week.filter((d) => d.status === 'forfeited').length
+  const lived = keptCount + forfeitedCount
+  const integrity = lived > 0 ? Math.round((keptCount / lived) * 100) : 100
   const today = week.find((d) => d.isToday)
   const todayKept = today ? KEPT_STATUSES.includes(today.status) : false
-
-  const name =
-    keptCount === 0
-      ? 'Your ivy is waiting for its first leaf'
-      : `Your ivy is ${['one', 'two', 'three', 'four', 'five', 'six', 'seven'][keptCount - 1] ?? keptCount} ${keptCount === 1 ? 'leaf' : 'leaves'} strong`
-  const stateLine = todayKept
-    ? "tonight's leaf is lit"
-    : 'miss tonight & a leaf falls'
+  const s = sym(state.cycle?.currency ?? state.config.currency)
+  const slice = state.cycle?.dailySlice
 
   return (
-    <div className="relative -mx-4 -mt-2">
-      <IvyVine days={week} className="mx-auto h-64 w-auto" />
-      <div className="text-center mt-1">
-        <p className="font-display text-[15px] text-sage-300">{name}</p>
-        <p className="mt-1.5 font-mono text-[9px] uppercase tracking-[0.26em] text-ink-400/80">
-          {stateLine}
-        </p>
+    <div className="relative -mt-2">
+      <div className="relative">
+        {/* HUD readouts — the machine watching the organism */}
+        <div className="absolute left-1 top-2 font-mono text-[8.5px] uppercase tracking-[0.22em] text-ink-400/80">
+          Ivy-01
+          <span className="block mt-1 font-medium text-sage-400">
+            {keptCount} {keptCount === 1 ? 'leaf' : 'leaves'}
+          </span>
+        </div>
+        <div className="absolute right-1 top-2 text-right font-mono text-[8.5px] uppercase tracking-[0.22em] text-ink-400/80">
+          Integrity
+          <span className="block mt-1 font-medium text-sage-400">{integrity}%</span>
+        </div>
+        <IvyVine days={week} className="mx-auto h-60 w-auto" />
+      </div>
+
+      {/* Terminal statusline — blunt consequence, blinking cursor */}
+      <div className="mt-2 rounded-xl border border-gold-400/20 bg-gold-400/[0.045] px-3.5 py-2.5 font-mono text-[11px] tracking-[0.04em] text-sage-300">
+        {todayKept ? (
+          <>&gt; tonight&apos;s leaf is lit{slice != null && <span className="text-gold-300"> · {s}{slice} protected</span>}</>
+        ) : (
+          <>&gt; miss tonight and a leaf falls{slice != null && <span className="text-ember-400"> · −{s}{slice}</span>}</>
+        )}{' '}
+        <span className="cursor-blink inline-block h-[11px] w-[6px] translate-y-[1.5px] bg-gold-400" />
       </div>
     </div>
   )
@@ -199,77 +213,81 @@ function TodayStakeCard({ state, hasCard }: { state: StakeState; hasCard: boolea
   }
 
   const isArmed = today.isArmed
-  const daysDecided = cycle.daysCompleted + cycle.daysForfeited
+  const week = state.week ?? []
 
+  // The console voice: NOT ARMED burns amber (attention), coral is reserved
+  // for money actually leaving. See docs/design-constitution.md.
   return (
-    <Link href="/daily">
-      <div
-        className={`relative rounded-2xl p-4 overflow-hidden border transition-all active:scale-[0.99] ${
-          isArmed
-            ? 'border-gold-400/30 bg-gold-400/05 glow-sm-gold'
-            : 'border-ember-400/30 bg-ember-400/04 glow-ember'
-        }`}
-      >
-        <div
-          className="pointer-events-none absolute -top-8 -right-8 w-32 h-32 rounded-full opacity-30"
-          style={{
-            background: isArmed
-              ? 'radial-gradient(circle, rgba(204,163,72,0.18) 0%, transparent 70%)'
-              : 'radial-gradient(circle, rgba(210,90,46,0.18) 0%, transparent 70%)',
-          }}
-        />
+    <div>
+      <p className="mb-2 flex items-center gap-2 font-mono text-[8.5px] uppercase tracking-[0.3em] text-ink-400">
+        Stake console · {cycle.isFoundation ? 'Foundation Run' : 'Week cycle'}
+        <span className="h-px flex-1 bg-gold-400/10" />
+      </p>
 
-        <div className="relative flex items-start gap-3">
-          <div
-            className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
-              isArmed ? 'bg-gold-400/12' : 'bg-ember-400/12'
-            }`}
-          >
-            {isArmed ? <Shield className="w-5 h-5 text-gold-400" /> : <Mic className="w-5 h-5 text-ember-400" />}
-          </div>
-
-          <div className="flex-1 min-w-0">
-            <p className={`text-sm font-semibold ${isArmed ? 'text-gold-300' : 'text-ember-400'}`}>
-              {isArmed ? 'Armed for today' : 'Not armed yet'}
+      <div className="overflow-hidden rounded-2xl border border-gold-400/20 bg-gradient-to-br from-[#082230]/60 to-[#04121a]/80 shadow-[0_0_44px_rgba(70,240,200,0.05)] transition-all active:scale-[0.99]">
+        <Link href="/daily" className="flex items-stretch">
+          <div className="flex-1 px-4 py-3.5">
+            <p
+              className={`font-mono text-[13px] font-semibold tracking-[0.18em] ${
+                isArmed
+                  ? 'text-gold-300 [text-shadow:0_0_12px_rgba(70,240,200,0.4)]'
+                  : 'text-[#ffb03a] [text-shadow:0_0_12px_rgba(255,176,58,0.35)]'
+              }`}
+            >
+              {isArmed ? 'ARMED' : 'NOT ARMED'}
             </p>
-            <p className="text-xs text-ink-400 mt-0.5">
-              {isArmed
-                ? `${s}${cycle.dailySlice} protected today`
-                : `Record your voice note${today.armingWindowEnd ? ` by ${today.armingWindowEnd}` : ''} or today's ${s}${cycle.dailySlice} goes${config.forfeitDestination ? ` to ${config.forfeitDestination}` : ' to charity'}`}
+            <p className="mt-1.5 text-xs leading-relaxed text-ink-400">
+              {isArmed ? (
+                <>Today&apos;s <b className="font-medium text-ink-50">{s}{cycle.dailySlice}</b> is protected. The vine grows at dawn.</>
+              ) : (
+                <>
+                  Voice note{today.armingWindowEnd ? <> by <b className="font-medium text-ink-50">{today.armingWindowEnd}</b></> : null} — or {s}{cycle.dailySlice} of your {s}{cycle.weeklyAmount} goes
+                  {config.forfeitDestination ? ` to ${config.forfeitDestination}` : ' to charity'}.
+                </>
+              )}
             </p>
           </div>
+          <div className="flex w-[96px] shrink-0 flex-col items-center justify-center gap-1.5 border-l border-gold-400/15 bg-gradient-to-b from-gold-400/15 to-gold-400/5 text-gold-300">
+            <span className="font-mono text-[13px] font-semibold tracking-[0.08em] [text-shadow:0_0_14px_rgba(70,240,200,0.6)]">
+              {isArmed ? '[✓]' : '[ARM]'}
+            </span>
+            <span className="font-mono text-[7.5px] uppercase tracking-[0.2em] text-ink-400">
+              {isArmed ? 'Locked in' : 'Hold to rec'}
+            </span>
+          </div>
+        </Link>
 
-          <ArrowRight className={`w-4 h-4 shrink-0 mt-0.5 ${isArmed ? 'text-gold-400' : 'text-ember-400'}`} />
-        </div>
-
-        {/* Cycle bar */}
-        <div className="relative mt-3.5 pt-3.5 border-t border-ink-700/60">
-          <div className="flex items-center justify-between text-xs mb-1.5">
-            <span className="text-ink-400">{cycle.isFoundation ? 'Your first run' : 'Week cycle'}</span>
-            <span className="text-ink-400 font-mono tabular-nums">{cycle.daysCompleted}/{cycle.daysInCycle} days done</span>
-          </div>
-          <div className="h-1.5 rounded-full bg-ink-700 overflow-hidden flex gap-0.5">
-            {[...Array(cycle.daysInCycle)].map((_, i) => {
-              const forfeited = i < cycle.daysForfeited
-              const done = !forfeited && i < daysDecided
-              const armed = i === daysDecided && isArmed
-              return (
-                <div
-                  key={i}
-                  className={`flex-1 rounded-full transition-all ${
-                    forfeited ? 'bg-ember-500' : done ? 'bg-sage-400' : armed ? 'bg-gold-400 pulse-gold' : 'bg-ink-700'
-                  }`}
-                />
-              )
-            })}
-          </div>
-          <div className="flex items-center justify-between mt-1.5">
-            <span className="text-2xs text-ink-600 font-mono">{s}{cycle.amountSafe} safe</span>
-            <span className="text-2xs text-ink-600 font-mono">{s}{cycle.amountAtRisk} at risk</span>
-          </div>
+        {/* Week as lives */}
+        <div className="flex items-center gap-1.5 border-t border-gold-400/10 px-4 py-3">
+          <span className="mr-1.5 font-mono text-[8.5px] uppercase tracking-[0.24em] text-ink-400">Week</span>
+          {week.map((d, i) => {
+            const kept = KEPT_STATUSES.includes(d.status)
+            const forfeited = d.status === 'forfeited'
+            const isTodayCell = d.isToday && !kept && !forfeited
+            return (
+              <span
+                key={d.date + i}
+                className={`flex h-7 w-7 items-center justify-center rounded-lg border font-mono text-[8px] ${
+                  kept
+                    ? 'border-gold-400 bg-gold-400/15 text-gold-100 shadow-[0_0_10px_rgba(70,240,200,0.25),inset_0_0_6px_rgba(70,240,200,0.18)]'
+                    : forfeited
+                      ? 'border-ember-500/50 text-ember-400/80'
+                      : isTodayCell
+                        ? 'border-dashed border-[#ffb03a]/60 text-[#ffb03a]'
+                        : 'border-gold-400/12 text-ink-600'
+                }`}
+              >
+                {d.label}
+              </span>
+            )
+          })}
+          <span className="ml-auto text-right font-mono text-2xs leading-tight text-ink-600">
+            {s}{cycle.amountSafe} safe
+            <span className="block text-ember-400/70">{s}{cycle.amountAtRisk} at risk</span>
+          </span>
         </div>
       </div>
-    </Link>
+    </div>
   )
 }
 
@@ -606,12 +624,13 @@ export function HomeScreen() {
             </h1>
           </div>
           <div className="flex items-center gap-3">
-            <div className="flex items-center gap-1.5">
-              <Flame className="w-3.5 h-3.5 text-ember-400" />
-              <span className="font-mono text-sm font-medium text-ink-200 tabular-nums">
-                {streak.current}
+            <div className="text-right">
+              <span className="font-mono text-lg font-semibold tabular-nums text-gold-400 [text-shadow:0_0_14px_rgba(70,240,200,0.5)]">
+                {String(streak.current).padStart(2, '0')}
               </span>
-              <span className="text-2xs text-ink-600">days</span>
+              <span className="block -mt-0.5 font-mono text-[8px] uppercase tracking-[0.2em] text-ink-400">
+                day run
+              </span>
             </div>
             <Link
               href="/settings"
@@ -652,8 +671,9 @@ export function HomeScreen() {
             {/* Upcoming call — Ivy reaching out (welcome call / daily check-ins) */}
             {nextCall && <NextCallCard call={nextCall} />}
 
-            {/* Streak / week dots */}
-            <StreakWeekCard streak={streak} week={state?.week ?? []} />
+            {/* Streak / week dots — only when there's no active cycle (the
+                stake console above carries the week-as-lives row otherwise) */}
+            {!state?.cycle && <StreakWeekCard streak={streak} week={state?.week ?? []} />}
 
             {/* Circle */}
             <SectionHead label="Your circle" href="/circles" />

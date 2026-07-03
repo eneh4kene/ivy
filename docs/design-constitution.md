@@ -23,7 +23,8 @@ One accent. Coral appears ONLY when money is at risk. No gold anywhere.
 | Lumen bright | `#9ffbe4` | `--gold-300` |
 | Ice (primary text) | `#d7f7ef` | `--ink-50` |
 | Mist (muted text) | `#6b9d94` | `--ink-400` |
-| Coral (money at risk, ONLY) | `#ff7a6b` | `--ember-400` |
+| Coral (money leaving, ONLY) | `#ff7a6b` | `--ember-400` |
+| Amber (attention: unarmed / awaiting action) | `#ffb03a` | inline (console states) |
 
 Backgrounds are never flat: the page is a vertical dive (`#041219 → #02090d → #010507`)
 with a cool glow at the top horizon and faint plankton motes (`.theme-vine::before`).
@@ -60,6 +61,13 @@ with a cool glow at the top horizon and faint plankton motes (`.theme-vine::befo
   forfeited = coral-dimmed, upcoming = faint outline.
 - **The organism** (`components/living/IvyVine.tsx`) is data-truthful: it only draws
   lived days from `StakeState.week`. Never render a fake healthy plant.
+- **The console layer** (the A+B blend, chosen over pure A): money mechanics speak
+  like machinery *around* the living organism. HUD readouts flank the vine
+  (`IVY-01 · N LEAVES` / `INTEGRITY %`); a terminal statusline states the
+  consequence with a blinking cursor (`> miss tonight and a leaf falls · −£2.33 ▮`);
+  the stake card is a console: state word in mono caps (ARMED lumen / NOT ARMED
+  amber), an `[ARM] HOLD TO REC` key rail, the week as square lives. Serif = the
+  plant speaks; mono = the machine speaks; never blended in one phrase.
 - **Buttons**: primary = lumen fill, dark text. Risk actions = coral outline. Round.
 - **Bottom nav**: 4 points (Home · Ivy · Circle · Impact), mono caps labels, active =
   lit dot with halo.
