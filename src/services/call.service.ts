@@ -461,6 +461,20 @@ class CallService {
       ? differenceInDays(now, new Date(streak.lastWorkoutDate))
       : null;
 
+    // ── Sustained-struggle signal (drives the coach-escalation nudge) ─────────
+    // Fires only on a real pattern: the user's last TWO settled cycles each
+    // forfeited half or more of their days. One bad week never triggers it.
+    const recentSettled = await prisma.stakeCycle.findMany({
+      where: { userId, status: 'SETTLED' },
+      orderBy: { periodEnd: 'desc' },
+      take: 2,
+      select: { daysForfeited: true, daysInCycle: true },
+    }).catch(() => [] as { daysForfeited: number; daysInCycle: number }[]);
+    const struggle_signal =
+      recentSettled.length === 2 &&
+      recentSettled.every((c) => c.daysInCycle > 0 && c.daysForfeited / c.daysInCycle >= 0.5);
+
+
     const days_since_last_interaction = user?.lastCallAt
       ? differenceInDays(now, new Date(user.lastCallAt))
       : null;
@@ -537,6 +551,10 @@ class CallService {
       day_of_week: now.toLocaleDateString('en-US', { weekday: 'long' }),
       days_since_workout,
       previous_streak: streak?.longestStreak ?? 0,
+
+      // Sustained struggle → coach escalation (prompt.service coachEscalation).
+      struggle_signal,             // true only when the last 2 settled cycles each forfeited ≥50% of days
+      has_coach: !!(user as any)?.coachId, // coach_name arrives via getCoachContextForClient below
 
       // Flags
       is_first_call: completedCallCount === 0,
