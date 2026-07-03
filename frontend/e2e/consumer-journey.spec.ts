@@ -13,7 +13,14 @@ import { expect, type Page } from './fixtures/guards'
  *
  * Token is single-use and the steps are inherently sequential, so this is one
  * ordered test rather than many.
+ *
+ * Service workers are BLOCKED here: once the PWA worker claims the page
+ * mid-journey, its fetches stop firing Playwright's page request events, so
+ * waitForApiIdle sees "idle" instantly and the tour navigates away while data
+ * is still loading (every XHR aborts, surfaces get measured as skeletons).
+ * SW behaviour has its own dedicated coverage in pwa.spec.ts.
  */
+test.use({ serviceWorkers: 'block' })
 
 type PageReport = { label: string; items: string[] }
 
