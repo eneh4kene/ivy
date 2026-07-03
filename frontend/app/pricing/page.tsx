@@ -43,8 +43,8 @@ const CORE_FEATURES = [
   },
   {
     icon: Users,
-    color: 'text-periwinkle-400',
-    bg: 'bg-periwinkle-400/10',
+    color: 'text-gold-400',
+    bg: 'bg-gold-400/10',
     label: 'Ivy Circles',
     desc: '5–8 person accountability cohort. Live baton games. Witnessed stakes. Social teeth.',
   },
@@ -64,8 +64,8 @@ const CORE_FEATURES = [
   },
   {
     icon: Sparkles,
-    color: 'text-periwinkle-400',
-    bg: 'bg-periwinkle-400/10',
+    color: 'text-gold-400',
+    bg: 'bg-gold-400/10',
     label: 'Season Close',
     desc: "A ceremonial end-of-arc review — your arc, your impact story, Ivy's plan for next season.",
   },
@@ -83,8 +83,8 @@ const OPT_IN_FEATURES = [
   {
     id: 'circles',
     icon: Users,
-    color: 'text-periwinkle-400',
-    bg: 'bg-periwinkle-400/10',
+    color: 'text-gold-400',
+    bg: 'bg-gold-400/10',
     label: 'Circles & games',
     desc: 'Join a 5–8 person cohort. Play the baton, points races, and collective games. The social layer.',
     note: 'Free, opt-in',
@@ -187,7 +187,7 @@ export default function PricingPage() {
   ]
 
   return (
-    <div className="min-h-screen mesh-bg">
+    <div className="theme-vine min-h-screen">
       {/* Nav */}
       <nav className="sticky top-0 z-40 border-b border-ink-700/60 bg-ink-900/80 backdrop-blur-xl safe-top">
         <div className="max-w-2xl mx-auto px-4 h-14 flex items-center justify-between">

@@ -71,11 +71,21 @@ class PhoneVerifyService {
       return;
     }
 
-    await client.messages.create({
-      to: newPhone,
-      from: config.twilio.phoneNumber!,
-      body: `Your Ivy verification code is ${code}. It expires in 5 minutes. If you didn't request this, ignore it.`,
-    });
+    try {
+      await client.messages.create({
+        to: newPhone,
+        from: config.twilio.phoneNumber!,
+        body: `Your Ivy verification code is ${code}. It expires in 5 minutes. If you didn't request this, ignore it.`,
+      });
+    } catch (err: any) {
+      // Surface a human message instead of a bare 500 — Twilio being down or
+      // misconfigured (e.g. rotated auth token) is an operational fault, not
+      // the user's. Keep the full error in logs for diagnosis.
+      logger.error(`Phone OTP send failed for user ${userId} (Twilio ${err?.status ?? ''} ${err?.code ?? ''}): ${err?.message}`);
+      throw new BadRequestError(
+        "We couldn't send the text message just now — please try again in a few minutes."
+      );
+    }
 
     logger.info(`Phone OTP sent to ${newPhone} for user ${userId}`);
   }
