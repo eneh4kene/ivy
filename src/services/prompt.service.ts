@@ -16,13 +16,55 @@
 
 type FlowFn = (ctx: Record<string, any>) => string;
 
+// ── Track lexicon ──────────────────────────────────────────────────────────────
+// The brain must speak each track's language. "Sessions"/"trained" is gym
+// vocabulary — wrong for Sleep (nightly, no picking days) and off for Focus and
+// Balance. Every flow that names the unit of commitment reads from here.
+type TrackLexicon = {
+  noun: string;        // the singular unit: "session" / "deep-work block" / …
+  nounPlural: string;
+  missGap: (days: number) => string;  // the "haven't trained in N days" line
+  cadence: string;     // weekly-planning cadence instruction
+};
+
+const TRACK_LEXICON: Record<string, TrackLexicon> = {
+  fitness: {
+    noun: 'session',
+    nounPlural: 'sessions',
+    missGap: (d) => `They haven't trained in ${d} days — no judgment, focus forward.`,
+    cadence: 'Get commitment on at least 2-3 sessions — day + time + activity for each.',
+  },
+  focus: {
+    noun: 'deep-work block',
+    nounPlural: 'deep-work blocks',
+    missGap: (d) => `They haven't logged a deep-work block in ${d} days — no judgment, focus forward.`,
+    cadence: 'Lock which days get a block, when it starts, and what each block ships.',
+  },
+  sleep: {
+    noun: 'wind-down',
+    nounPlural: 'kept nights',
+    missGap: (d) => `The routine has slipped for ${d} nights — no judgment, focus forward.`,
+    cadence: 'Sleep is NIGHTLY — do not ask "which days". Confirm the lights-out time and what usually breaks it.',
+  },
+  balance: {
+    noun: 'commitment',
+    nounPlural: 'kept days',
+    missGap: (d) => `They've been off it for ${d} days — no judgment, focus forward.`,
+    cadence: 'Balance is daily — confirm the one non-negotiable and when it happens each day.',
+  },
+};
+
+const lex = (ctx: Record<string, any>): TrackLexicon =>
+  TRACK_LEXICON[String(ctx.track ?? '').toLowerCase()] ?? TRACK_LEXICON.fitness;
+
 const FLOWS: Record<string, FlowFn> = {
 
   morning_planning: (ctx) => {
+    const L = lex(ctx);
     const streak = ctx.current_streak > 1
       ? `They're on a ${ctx.current_streak}-day streak — acknowledge it briefly.`
       : ctx.days_since_workout != null && ctx.days_since_workout > 2
-        ? `They haven't trained in ${ctx.days_since_workout} days — no judgment, focus forward.`
+        ? L.missGap(ctx.days_since_workout)
         : '';
     const sprint = ctx.sprint_number && ctx.days_left_in_sprint != null
       ? `Sprint ${ctx.sprint_number}, ${ctx.days_left_in_sprint} day${ctx.days_left_in_sprint === 1 ? '' : 's'} left.`
@@ -37,7 +79,6 @@ const FLOWS: Record<string, FlowFn> = {
       ? `If they hesitate, remind them who they're doing this for: "${ctx.gift_frame}".`
       : '';
     const minimum = ctx.minimum_action ?? 'even a 10-minute version counts';
-    const track = ctx.track ?? 'session';
     const plan = ctx.todays_plan ?? 'none yet';
     // Stake framing: this is an opt-in morning call — arming is normally the async VN (§1c).
     // Remind them their stake is on the line; completing keeps their money safe.
@@ -54,7 +95,7 @@ const FLOWS: Record<string, FlowFn> = {
       `1. OPEN (15s): Warm and energised. ${streak} ${sprint}`.trim(),
       buddyLine ? `   ${buddyLine}` : '',
       '',
-      `2. PLAN: Lock in today's ${track} session — what, when, where. ${specificity}`,
+      `2. PLAN: Lock in today's ${L.noun} — what, when, where. ${specificity}`,
       `   If they already have a plan (${plan}), confirm it and tighten the detail.`,
       '',
       `3. HESITATION: Offer the minimum — "${minimum}". ${gift}`.trim(),
@@ -62,14 +103,16 @@ const FLOWS: Record<string, FlowFn> = {
       stakeLine ? `4. ${stakeLine}` : '',
       '',
       `5. CLOSE: Confirm the plan in one sentence. Send off with energy.`,
+      '',
+      `STREAK BREAK: If LAST NIGHT's context shows a miss that ended a real streak, open by naming it once, plainly — "The streak broke. It did its job — it got you this far. Today starts the next one." No guilt, no pep-talk, then straight into the plan. Never invent the streak number.`,
     ].filter(Boolean).join('\n');
   },
 
   morning_planning_calendar: (ctx) => {
+    const L = lex(ctx);
     const sprint = ctx.sprint_number && ctx.days_left_in_sprint != null
       ? `Sprint ${ctx.sprint_number} closes in ${ctx.days_left_in_sprint} day${ctx.days_left_in_sprint === 1 ? '' : 's'}.`
       : '';
-    const track = ctx.track ?? 'session';
     const specificity = ctx.probe_for_specificity
       ? 'Do NOT confirm the plan until you have a specific time AND location.'
       : 'At minimum, get a time.';
@@ -85,7 +128,7 @@ const FLOWS: Record<string, FlowFn> = {
       '',
       `FLOW:`,
       `1. Lead with calendar: "I looked at your day." Identify the best window or flag conflicts.`,
-      `2. Problem-solve if needed: alternative time, shorter version, still a ${track} session.`,
+      `2. Problem-solve if needed: alternative time, shorter version, still a real ${L.noun}.`,
       `3. Confirm: lock in time + activity. ${specificity}`,
       stakeLine ? `4. ${stakeLine}` : '',
       `5. CLOSE: "If anything shifts, you know where I am."`,
@@ -254,7 +297,7 @@ const FLOWS: Record<string, FlowFn> = {
       `   1st: Social proof: "Most people feeling like this still do something small."`,
       `   2nd: Streak: "${minimum} keeps your ${streak}-day streak alive."`,
       stakeLever ? `   3rd: ${stakeLever}` : '',
-      `   4th: Identity: "You've done ${ctx.total_workouts ?? '?'} sessions. You're someone who shows up."`,
+      `   4th: Identity: "You've done ${ctx.total_workouts ?? '?'} ${lex(ctx).nounPlural}. You're someone who shows up."`,
       gift ? `   5th: ${gift}` : '',
       `5. VERBAL COMMITMENT: "Say it out loud: 'I'm going to [minimum] by [time].'" Wait for it.`,
       `6. CLOSE: "Text me 'done' when it's done."`,
@@ -287,9 +330,10 @@ const FLOWS: Record<string, FlowFn> = {
   },
 
   weekly_planning: (ctx) => {
+    const L = lex(ctx);
     const specificity = ctx.probe_for_specificity
-      ? 'Get day + time + activity for each planned session.'
-      : 'Get commitment on at least 2-3 sessions.';
+      ? `${L.cadence} Do NOT confirm without specific times.`
+      : L.cadence;
     const sprint = ctx.sprint_number
       ? `Sprint ${ctx.sprint_number}, ${ctx.days_left_in_sprint ?? '?'} days left.`
       : '';
@@ -302,9 +346,9 @@ const FLOWS: Record<string, FlowFn> = {
       `Target: 3-5 minutes.`,
       '',
       `FLOW:`,
-      `1. OPEN: "${ctx.workouts_this_week} sessions this week." Good or needs work — name it specifically.`,
+      `1. OPEN: "${ctx.workouts_this_week} ${L.nounPlural} this week." Good or needs work — name it specifically.`,
       `2. WINS + LESSONS (1 min): What went well? What got in the way? One lesson max, forward-focused.`,
-      `3. PLAN NEXT WEEK (3 min): Which days? What specifically? ${specificity} ${sprint}`.trim(),
+      `3. PLAN NEXT WEEK (3 min): ${specificity} ${sprint}`.trim(),
       circleNote ? `4. CIRCLE: ${circleNote}` : '',
       `5. CLOSE: Summarise next week's commitments in one sentence.`,
     ].filter(Boolean).join('\n');
@@ -320,6 +364,16 @@ const FLOWS: Record<string, FlowFn> = {
       : '';
     const nextSprint = typeof ctx.sprint_number === 'number' ? ctx.sprint_number + 1 : '?';
 
+    // Impact story — the emotional close of every 4-week arc. Two honest shapes:
+    // forfeits went somewhere real, or a clean sprint kept everything. Only uses
+    // season-cumulative numbers that exist in ctx; never invents amounts.
+    const forfeited = ctx.stake_forfeited != null ? Number(ctx.stake_forfeited) : null;
+    const impactLine = forfeited != null && forfeited > 0 && ctx.forfeit_destination
+      ? `IMPACT STORY: "£${forfeited} of your stake has gone to ${ctx.forfeit_destination} so far this season. You didn't plan to fund them — but that money is real and it's doing real work. The best outcome is still them getting nothing from you next sprint." One beat, honestly told — consequence, not charity theatre.`
+      : forfeited === 0 || (ctx.stake_kept != null && (forfeited == null || forfeited === 0))
+        ? `IMPACT STORY: "Every pound you staked this season is still yours — nothing forfeited. The money never had to move because you did." Let that land as the win it is.`
+        : '';
+
     return [
       `THIS CALL: Sprint Close — Sprint ${sprintNum} complete.`,
       `Target: 4-6 minutes. Slightly ceremonial — not a standard weekly.`,
@@ -327,9 +381,10 @@ const FLOWS: Record<string, FlowFn> = {
       `FLOW:`,
       `1. Mark it: "Sprint ${sprintNum} is done." Let it land.`,
       `2. BRIEF REFLECTION: What did this sprint deliver? Hits, consistency, anything notable.`,
-      circleNote ? `3. CIRCLE: ${circleNote}` : '',
-      `4. NEXT SPRINT: "What's the focus for Sprint ${nextSprint}?" Get a specific intention — not just "keep going."`,
-      `5. CLOSE: "Good sprint." Clean and brief — the Season Close comes later.`,
+      impactLine ? `3. ${impactLine}` : '',
+      circleNote ? `4. CIRCLE: ${circleNote}` : '',
+      `5. NEXT SPRINT: "What's the focus for Sprint ${nextSprint}?" Get a specific intention — not just "keep going."`,
+      `6. CLOSE: "Good sprint." Clean and brief — the Season Close comes later.`,
       '',
       `Sprint close is NOT a Season Close. Don't go deep on transformation. That's Season Close territory.`,
     ].filter(Boolean).join('\n');
@@ -349,7 +404,7 @@ const FLOWS: Record<string, FlowFn> = {
       `Target: 12-15 minutes.`,
       '',
       `FLOW:`,
-      `1. OPEN: "${ctx.workouts_this_month} sessions this month." Name it — good or not.`,
+      `1. OPEN: "${ctx.workouts_this_month} ${lex(ctx).nounPlural} this month." Name it — good or not.`,
       '',
       `2. TRANSFORMATION CHECK (3 min): How do they feel — energy, mood, health confidence? Score 1-10.`,
       scoreNote ? `   Scores to reference: ${scoreNote}` : '',
@@ -451,7 +506,7 @@ const FLOWS: Record<string, FlowFn> = {
 
     // Build the stats line around stake outcomes, not donation totals
     const statsLine = (() => {
-      const parts: string[] = [`Total sessions: ${totalSessions}.`];
+      const parts: string[] = [`Total ${lex(ctx).nounPlural}: ${totalSessions}.`];
       if (stakeKept != null) parts.push(`Stake kept: £${stakeKept}.`);
       if (stakeForfeited != null && Number(stakeForfeited) > 0) parts.push(`Forfeited: £${stakeForfeited}.`);
       if (successCharity && stakeKept) parts.push(`${successCharity} benefited from your successful days.`);
@@ -527,6 +582,7 @@ class PromptService {
       this.behaviouralAdapter(ctx),
       brief ?? this.resolveFlow(callType, ctx),
       this.gameStanding(ctx),
+      this.pauseProtocol(),
       this.standingRules(ctx),
       this.safetyRules(),
     ].filter(Boolean);
@@ -711,6 +767,18 @@ class PromptService {
     return `HOW TO ADAPT TO THIS PERSON:\n${lines.join('\n')}`;
   }
 
+  // Injury, illness, bereavement, unavoidable travel — a real reason is not a
+  // motivation problem, and the nudge ladder must never be used against it.
+  private pauseProtocol(): string {
+    return [
+      `IF THEY'RE INJURED, ILL, OR GENUINELY OUT (emergency, unavoidable travel):`,
+      `- A real injury or illness is NOT avoidance. Do NOT negotiate a minimum against it. Say it plainly: "That's a real reason, not a miss."`,
+      `- One day out: their grace day exists for exactly this — mention it once.`,
+      `- Out for several days or more: "Don't white-knuckle a stake while you're down. Tell me the dates now and say it clearly so it's on record — the team reviews these and you won't lose money while you're genuinely out." Then repeat the dates back so they're captured.`,
+      `- When they're back: rebuild small. The first day back is the minimum version, never a comeback test.`,
+    ].join('\n');
+  }
+
   private standingRules(ctx: Record<string, any>): string {
     // Name the forfeit/impact destination where relevant; never name success charity as "where the money goes" on a success
     const forfeitCharityLine = ctx.forfeit_destination
@@ -750,11 +818,14 @@ class PromptService {
       `SCOPE:`,
       `You are not a therapist, doctor, nutritionist, or personal trainer. If asked for advice outside accountability: "That's beyond what I can help with. Talk to a [professional]. I'm here to make sure you do what you already know to do."`,
       '',
+      `BILLING & MONEY DISPUTES:`,
+      `You cannot see or change billing, refunds, subscriptions, or holds. If they dispute a charge or a forfeit: never argue the money, never promise a refund, never defend the system. "I can't touch billing myself — message support through the app and a human will review it, usually same day." Acknowledge the frustration once, genuinely, then return to the day. If they're angry, stay calm and let them be angry — don't match it, don't manage it away.`,
+      '',
       `CRISIS PROTOCOL — if the user mentions suicidal thoughts, self-harm, eating disorders, or severe distress:`,
       `1. "I'm really glad you told me that. That's bigger than what I can help with."`,
       `2. "Samaritans: 116 123 (24/7). Mind: 0300 123 3393."`,
       `3. "Can you reach out to someone today?"`,
-      `4. Stop all accountability. Do not continue with workout planning. "Let's pause the workout stuff. Take care of yourself first."`,
+      `4. Stop all accountability. Do not continue with any planning. "Let's put all of that aside. Take care of yourself first."`,
     ].join('\n');
   }
 
