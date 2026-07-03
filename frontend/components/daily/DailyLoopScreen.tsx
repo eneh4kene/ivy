@@ -8,7 +8,7 @@ import { useVisualViewport } from '@/hooks/useVisualViewport'
 import { StakeBar } from './StakeBar'
 import { VoiceRecorder } from './VoiceRecorder'
 import { EveningReview } from './EveningReview'
-import { LivingForm, hashSeed, type LivingState } from './LivingForm'
+import { IvyVine } from '@/components/living/IvyVine'
 import { stakeApi, statsApi, circlesApi, type StakeState } from '@/lib/api'
 import { useAuthStore } from '@/lib/store/auth.store'
 import { usePushNotifications } from '@/hooks/usePushNotifications'
@@ -19,10 +19,10 @@ import type { DailyLoopPhase, VoiceNote, StakeStatus } from './types'
 function CircleBadge({ name }: { name: string }) {
   return (
     <Link href="/circles">
-      <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl glass-arcade panel-cyan hover:bg-white/[0.06] transition-colors">
-        <Users className="w-3.5 h-3.5 text-neon-cyan" />
-        <span className="text-2xs font-bold text-neon-cyan uppercase tracking-wider">{name}</span>
-        <span className="neon-dot lime anim-breathe" />
+      <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl surface border-gold-400/25 hover:bg-ink-700/60 transition-colors">
+        <Users className="w-3.5 h-3.5 text-gold-300" />
+        <span className="text-2xs font-bold text-gold-300 uppercase tracking-wider">{name}</span>
+        <span className="w-1.5 h-1.5 rounded-full bg-sage-400 animate-pulse" />
       </div>
     </Link>
   )
@@ -33,8 +33,8 @@ function NavBar({ circleName }: { circleName: string | null }) {
   return (
     <div className="flex items-center justify-between px-4 pt-3 pb-1">
       <Link href="/home">
-        <button className="w-9 h-9 rounded-xl glass-arcade flex items-center justify-center hover:bg-white/[0.07] transition-colors">
-          <ArrowLeft className="w-4 h-4 text-white/80" />
+        <button className="w-9 h-9 rounded-xl surface flex items-center justify-center hover:bg-ink-700/60 transition-colors">
+          <ArrowLeft className="w-4 h-4 text-ink-200" />
         </button>
       </Link>
       {circleName && <CircleBadge name={circleName} />}
@@ -51,24 +51,22 @@ function DayHeader({ phase, name, streakDays }: { phase: DailyLoopPhase; name: s
 
   return (
     <div className="px-4 pt-2 pb-1">
-      <div className="flex items-baseline gap-3">
+      <div className="flex items-start gap-3">
         <div className="min-w-0">
-          <p className="text-2xs font-bold uppercase tracking-[0.22em] text-neon-cyan">{weekday}</p>
-          <h1 className="font-mono text-2xl font-semibold text-white tracking-tight uppercase mt-0.5">
-            {isEvening ? `Evening · ${name}` : isArmed ? `Armed · ${name}` : `Morning · ${name}`}
-          </h1>
-          <p className="text-sm text-white/45 mt-1">
-            {isEvening
-              ? 'Time to close out your day with Ivy'
-              : isArmed
-              ? `${dateLabel} · Evening reflection later`
-              : `${dateLabel} · Arm your day`}
+          <p className="font-mono text-2xs font-semibold uppercase tracking-[0.22em] text-ink-400">
+            {weekday} · {dateLabel} · {isEvening ? 'Settle the day' : isArmed ? 'Armed' : 'Arm your day'}
           </p>
+          <h1 className="font-display text-2xl text-ink-50 tracking-tight mt-0.5">
+            {isEvening ? `Evening, ${name}` : `Morning, ${name}`}
+          </h1>
         </div>
-        {/* COMBO ×N */}
-        <div className="ml-auto flex items-center gap-1.5 shrink-0 glass-arcade rounded-xl px-2.5 py-1.5">
-          <Flame className="w-3.5 h-3.5 text-neon-amber" />
-          <span className="font-mono text-sm font-bold text-neon-amber tabular-nums led">×{streakDays}</span>
+        <div className="ml-auto text-right shrink-0">
+          <span className="font-mono text-lg font-semibold tabular-nums text-gold-400 [text-shadow:0_0_14px_rgba(70,240,200,0.5)]">
+            {String(streakDays).padStart(2, '0')}
+          </span>
+          <span className="block -mt-0.5 font-mono text-[8px] uppercase tracking-[0.2em] text-ink-400">
+            day run
+          </span>
         </div>
       </div>
     </div>
@@ -76,7 +74,7 @@ function DayHeader({ phase, name, streakDays }: { phase: DailyLoopPhase; name: s
 }
 
 /* ── Armed confirmation card ──────────────────────────────────────────────── */
-/* ── Push opt-in (arcade-themed, daily screen) ────────────────────────────── */
+/* ── Push opt-in (daily screen) ───────────────────────────────────────────── */
 /**
  * The whole stake loop depends on the user arming each morning, and the morning
  * reminder ladder is push-first. Plenty of users never hit the stake-setup screen
@@ -85,7 +83,7 @@ function DayHeader({ phase, name, streakDays }: { phase: DailyLoopPhase; name: s
  * the page every reminder deep-links to — so future nudges actually land.
  *
  * Self-hides once notifications are on. Dismissible per-session so it's a nudge,
- * not a nag. Styled to match the arcade daily screen (not the dawn EnablePushCard).
+ * not a nag. Styled in the Living Vine language.
  */
 function DailyPushPrompt() {
   const { permission, isSubscribed, isLoading, subscribe } = usePushNotifications()
@@ -106,21 +104,21 @@ function DailyPushPrompt() {
   if (iosTab) {
     return (
       <div className="w-full max-w-sm mx-auto mb-4 animate-fade-in">
-        <div className="glass-arcade rounded-2xl p-4 space-y-2 relative">
+        <div className="surface rounded-2xl p-4 space-y-2 relative">
           <div className="flex items-center gap-2">
-            <BellRing className="w-3.5 h-3.5 text-neon-cyan" />
-            <span className="text-2xs font-bold uppercase tracking-widest text-neon-cyan">Get your morning reminder</span>
+            <BellRing className="w-3.5 h-3.5 text-gold-300" />
+            <span className="text-2xs font-bold uppercase tracking-widest text-gold-300">Get your morning reminder</span>
             <button
               onClick={() => setDismissed(true)}
-              className="ml-auto text-2xs text-white/35 hover:text-white/70 transition-colors uppercase tracking-wider"
+              className="ml-auto text-2xs text-ink-400 hover:text-ink-200 transition-colors uppercase tracking-wider"
               aria-label="Dismiss"
             >
               Later
             </button>
           </div>
-          <p className="text-2xs text-white/55 leading-relaxed">
-            On iPhone, add Ivy to your Home Screen: tap <Share className="w-3 h-3 inline text-neon-cyan" /> then
-            <span className="text-white/80 font-medium"> Add to Home Screen </span><Plus className="w-3 h-3 inline text-white/60" />, and open Ivy from there.
+          <p className="text-2xs text-ink-400 leading-relaxed">
+            On iPhone, add Ivy to your Home Screen: tap <Share className="w-3 h-3 inline text-gold-300" /> then
+            <span className="text-ink-200 font-medium"> Add to Home Screen </span><Plus className="w-3 h-3 inline text-ink-400" />, and open Ivy from there.
           </p>
         </div>
       </div>
@@ -132,20 +130,20 @@ function DailyPushPrompt() {
       <button
         onClick={subscribe}
         disabled={isLoading}
-        className="w-full glass-arcade rounded-2xl px-4 py-3 flex items-center gap-3 text-left hover:bg-white/[0.07] transition-colors active:scale-[0.98] disabled:opacity-60"
+        className="w-full surface rounded-2xl px-4 py-3 flex items-center gap-3 text-left hover:bg-ink-700/60 transition-colors active:scale-[0.98] disabled:opacity-60"
       >
-        <div className="w-8 h-8 rounded-xl bg-[#27e8ff]/12 border border-[#27e8ff]/25 flex items-center justify-center shrink-0">
+        <div className="w-8 h-8 rounded-xl bg-[#46f0c8]/12 border border-[#46f0c8]/25 flex items-center justify-center shrink-0">
           {isLoading
-            ? <span className="w-3.5 h-3.5 rounded-full border-2 border-neon-cyan/40 border-t-neon-cyan animate-spin" />
-            : <BellRing className="w-4 h-4 text-neon-cyan" />}
+            ? <span className="w-3.5 h-3.5 rounded-full border-2 border-gold-400/40 border-t-gold-400 animate-spin" />
+            : <BellRing className="w-4 h-4 text-gold-300" />}
         </div>
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-medium text-white/90">Turn on morning reminders</p>
-          <p className="text-2xs text-white/45 mt-0.5">So Ivy can nudge you to arm before your deadline</p>
+          <p className="text-sm font-medium text-ink-50">Turn on morning reminders</p>
+          <p className="text-2xs text-ink-400 mt-0.5">So Ivy can nudge you to arm before your deadline</p>
         </div>
         <span
           onClick={(e) => { e.stopPropagation(); setDismissed(true) }}
-          className="text-2xs text-white/30 hover:text-white/60 transition-colors uppercase tracking-wider shrink-0"
+          className="text-2xs text-ink-400 hover:text-ink-400 transition-colors uppercase tracking-wider shrink-0"
         >
           Later
         </span>
@@ -161,40 +159,40 @@ function ArmedCard({ vn, dailySlice, currency }: { vn: VoiceNote | null; dailySl
     <div className="px-4 flex-1 flex flex-col gap-4 animate-fade-in">
       <DailyPushPrompt />
       {vn && (
-        <div className="glass-arcade panel-cyan rounded-2xl p-4 space-y-2.5">
+        <div className="surface border-gold-400/25 rounded-2xl p-4 space-y-2.5">
           <div className="flex items-center gap-2">
-            <span className="neon-dot anim-breathe" />
-            <span className="text-2xs font-bold uppercase tracking-widest text-neon-cyan">This morning you said</span>
+            <span className="w-1.5 h-1.5 rounded-full bg-gold-400 animate-pulse" />
+            <span className="text-2xs font-bold uppercase tracking-widest text-gold-300">This morning you said</span>
             {vn.duration > 0 && (
-              <span className="text-2xs text-hud font-mono ml-auto led">
+              <span className="text-2xs text-ink-400 font-mono ml-auto">
                 {Math.floor(vn.duration / 60)}:{String(vn.duration % 60).padStart(2, '0')}
               </span>
             )}
           </div>
           {vn.transcript ? (
-            <p className="text-sm text-white/90 leading-relaxed italic">&ldquo;{vn.transcript}&rdquo;</p>
+            <p className="text-sm text-ink-50 leading-relaxed italic">&ldquo;{vn.transcript}&rdquo;</p>
           ) : (
-            <p className="text-sm text-white/45 leading-relaxed">Voice note recorded — transcript still processing.</p>
+            <p className="text-sm text-ink-400 leading-relaxed">Voice note recorded — transcript still processing.</p>
           )}
         </div>
       )}
 
-      <div className="glass-arcade rounded-2xl p-4 space-y-3">
-        <p className="text-xs font-bold uppercase tracking-widest text-hud">What&rsquo;s next</p>
+      <div className="surface rounded-2xl p-4 space-y-3">
+        <p className="text-xs font-bold uppercase tracking-widest text-ink-400">What&rsquo;s next</p>
         <div className="space-y-2.5">
           <div className="flex items-start gap-3">
-            <div className="w-6 h-6 rounded-full bg-[#c6ff44]/12 border border-[#c6ff44]/30 flex items-center justify-center shrink-0 mt-0.5">
-              <span className="text-2xs font-bold text-neon-lime">1</span>
+            <div className="w-6 h-6 rounded-full bg-[#2dd4bf]/12 border border-[#2dd4bf]/30 flex items-center justify-center shrink-0 mt-0.5">
+              <span className="text-2xs font-bold text-sage-300">1</span>
             </div>
-            <p className="text-sm text-white/80">
+            <p className="text-sm text-ink-200">
               Ivy has your commitment. Follow through and your {sym}{dailySlice} is safe.
             </p>
           </div>
           <div className="flex items-start gap-3">
-            <div className="w-6 h-6 rounded-full bg-white/5 border border-white/10 flex items-center justify-center shrink-0 mt-0.5">
-              <span className="text-2xs font-bold text-white/45">2</span>
+            <div className="w-6 h-6 rounded-full bg-ink-700/50 border border-ink-600 flex items-center justify-center shrink-0 mt-0.5">
+              <span className="text-2xs font-bold text-ink-400">2</span>
             </div>
-            <p className="text-sm text-white/45">
+            <p className="text-sm text-ink-400">
               This evening, Ivy reflects with you over a short check-in call.
             </p>
           </div>
@@ -203,13 +201,13 @@ function ArmedCard({ vn, dailySlice, currency }: { vn: VoiceNote | null; dailySl
 
       <div className="mt-auto pb-4 flex gap-3">
         <Link href="/circles" className="flex-1">
-          <button className="w-full flex items-center justify-center gap-2 py-3 rounded-2xl glass-arcade hover:bg-white/[0.07] transition-colors text-sm text-white/80">
-            <Users className="w-4 h-4 text-neon-cyan" /> Circle
+          <button className="w-full flex items-center justify-center gap-2 py-3 rounded-2xl surface hover:bg-ink-700/60 transition-colors text-sm text-ink-200">
+            <Users className="w-4 h-4 text-gold-300" /> Circle
           </button>
         </Link>
         <Link href="/home" className="flex-1">
-          <button className="w-full flex items-center justify-center gap-2 py-3 rounded-2xl glass-arcade hover:bg-white/[0.07] transition-colors text-sm text-white/80">
-            <BarChart2 className="w-4 h-4 text-neon-lime" /> Home
+          <button className="w-full flex items-center justify-center gap-2 py-3 rounded-2xl surface hover:bg-ink-700/60 transition-colors text-sm text-ink-200">
+            <BarChart2 className="w-4 h-4 text-sage-300" /> Home
           </button>
         </Link>
       </div>
@@ -233,57 +231,56 @@ function IntentionHint({ intention }: { intention: { text: string; capturedAt: s
 
   return (
     <div className="w-full max-w-sm mx-auto mb-5 animate-fade-in">
-      <div className="glass-arcade panel-cyan rounded-2xl p-4 space-y-1.5 relative">
+      <div className="surface border-gold-400/25 rounded-2xl p-4 space-y-1.5 relative">
         <div className="flex items-center gap-2">
-          <Sparkles className="w-3.5 h-3.5 text-neon-cyan" />
-          <span className="text-2xs font-bold uppercase tracking-widest text-neon-cyan">{lead}</span>
+          <Sparkles className="w-3.5 h-3.5 text-gold-300" />
+          <span className="text-2xs font-bold uppercase tracking-widest text-gold-300">{lead}</span>
           <button
             onClick={() => setDismissed(true)}
-            className="ml-auto text-2xs text-white/35 hover:text-white/70 transition-colors uppercase tracking-wider"
+            className="ml-auto text-2xs text-ink-400 hover:text-ink-200 transition-colors uppercase tracking-wider"
             aria-label="Dismiss hint"
           >
             Dismiss
           </button>
         </div>
-        <p className="text-sm text-white/90 leading-relaxed italic">&ldquo;{intention.text}&rdquo;</p>
-        <p className="text-2xs text-hud">Still the plan? Say it your way below.</p>
+        <p className="text-sm text-ink-50 leading-relaxed italic">&ldquo;{intention.text}&rdquo;</p>
+        <p className="text-2xs text-ink-400">Still the plan? Say it your way below.</p>
       </div>
     </div>
   )
 }
 
 /* ── Pre-cycle / no-config state ──────────────────────────────────────────── */
-function NoStakeState({ hasConfig, weeklyAmount, currency, seed }: { hasConfig: boolean; weeklyAmount: number | null; currency: 'GBP' | 'USD'; seed: number }) {
+function NoStakeState({ hasConfig, weeklyAmount, currency }: { hasConfig: boolean; weeklyAmount: number | null; currency: 'GBP' | 'USD' }) {
   const sym = currency === 'GBP' ? '£' : '$'
   return (
     <div className="flex-1 flex flex-col items-center justify-center px-6 text-center gap-4">
-      {/* Signature LivingForm seed — the plant before it has anything to grow from */}
-      <div className="w-full max-w-[280px] h-[240px] -mb-2">
-        <LivingForm daysKept={0} daysForfeited={0} state="asleep" seed={seed} />
+      {/* The sprout — a plant with nothing to grow from yet */}
+      <div className="w-full max-w-[240px] h-[200px] -mb-2 flex items-center justify-center">
+        <IvyVine days={[]} className="h-full w-auto opacity-80" />
       </div>
       {hasConfig ? (
         <>
-          <p className="font-mono text-xl font-semibold uppercase text-white tracking-tight">Setting up your first run</p>
-          <p className="text-sm text-white/50 max-w-xs leading-relaxed">
+          <p className="font-mono text-xl font-semibold uppercase text-ink-50 tracking-tight">Setting up your first run</p>
+          <p className="text-sm text-ink-400 max-w-xs leading-relaxed">
             {weeklyAmount != null
               ? `Your first run goes live right after payment clears — a flat starter stake, no teeth on day one. It steps up to your ${sym}${weeklyAmount}/week from next week. Check back shortly.`
               : 'Your first run goes live as soon as payment clears. Check back shortly.'}
           </p>
           <Link href="/home">
-            <button className="mt-2 px-5 py-3 rounded-2xl glass-arcade text-sm text-white/80 hover:bg-white/[0.07] transition-colors">
+            <button className="mt-2 px-5 py-3 rounded-2xl surface text-sm text-ink-200 hover:bg-ink-700/60 transition-colors">
               Back to home
             </button>
           </Link>
         </>
       ) : (
         <>
-          <p className="font-mono text-xl font-semibold uppercase text-white tracking-tight">Set up your stake first</p>
-          <p className="text-sm text-white/50 max-w-xs leading-relaxed">
+          <p className="font-mono text-xl font-semibold uppercase text-ink-50 tracking-tight">Set up your stake first</p>
+          <p className="text-sm text-ink-400 max-w-xs leading-relaxed">
             Put money on the line so your daily commitment has teeth. Takes a minute.
           </p>
           <Link href="/stake-setup">
-            <button className="relative overflow-hidden mt-2 px-6 py-3 rounded-2xl btn-arcade text-sm uppercase">
-              <span className="arcade-sheen" />
+            <button className="relative overflow-hidden mt-2 px-6 py-3 rounded-2xl bg-gold-400 text-ink-900 font-semibold text-sm uppercase">
               Set up my stake
             </button>
           </Link>
@@ -364,23 +361,17 @@ export function DailyLoopScreen() {
 
   const morningPrompt = `Morning. Your ${currency === 'GBP' ? '£' : '$'}${cycle?.dailySlice ?? ''} stake is live. What's the one thing you're taking on today — say it out loud.`
 
-  // ── LivingForm hero: geometry grown from real follow-through ──
-  // daysCompleted → living lime leaves; daysForfeited → magenta scars; the crown
-  // bloom is closed when unarmed, half-open when armed, and flares to your live
-  // voice while recording. Seed is stable per user so each plant is unique.
-  const livingSeed = hashSeed(authUser?.id ?? authUser?.email ?? 'ivy')
-  const livingState: LivingState =
-    phase === 'evening-review' ? 'bloom'
-    : phase === 'morning-armed' ? 'armed'
-    : recording ? 'speaking'
-    : 'asleep'
-  const livingPalette: 'dawn' | 'dusk' = phase === 'evening-review' ? 'dusk' : 'dawn'
-  const daysKept = cycle?.daysCompleted ?? 0
-  const daysForfeited = cycle?.daysForfeited ?? 0
+  // ── The vine hero — grown from the real week; glows brighter as you speak ──
+  const week = state?.week ?? []
+  const vineGlow = recording ? 1 + Math.min(micLevel, 1) * 0.65 : 1
+  const vineStyle = {
+    filter: `brightness(${vineGlow}) drop-shadow(0 0 ${Math.round(6 + micLevel * 22)}px rgba(70,240,200,${(0.15 + micLevel * 0.45).toFixed(2)}))`,
+    transition: 'filter 120ms linear',
+  }
 
   return (
     <div
-      className="flex flex-col arcade-screen relative overflow-hidden"
+      className="flex flex-col relative overflow-hidden"
       style={{ height: viewportH > 0 ? `${viewportH}px` : '100dvh' }}
     >
       {/* Fixed top chrome */}
@@ -393,27 +384,18 @@ export function DailyLoopScreen() {
       {/* Content zone */}
       {loading ? (
         <div className="flex-1 flex items-center justify-center">
-          <span className="w-6 h-6 rounded-full border-2 border-white/10 border-t-[#27e8ff] animate-spin" />
+          <span className="w-6 h-6 rounded-full border-2 border-ink-600 border-t-[#46f0c8] animate-spin" />
         </div>
       ) : !cycle ? (
         <NoStakeState
           hasConfig={!!state?.config.hasConfig}
           weeklyAmount={state?.config.weeklyAmount ?? null}
           currency={currency}
-          seed={livingSeed}
         />
       ) : phase === 'evening-review' ? (
         <div className="flex-1 min-h-0 flex flex-col">
-          <div className="relative shrink-0 h-[24vh] min-h-[150px]">
-            <LivingForm
-              className="absolute inset-0"
-              daysKept={daysKept}
-              daysForfeited={daysForfeited}
-              state={livingState}
-              palette={livingPalette}
-              seed={livingSeed}
-              detail={0.85}
-            />
+          <div className="relative shrink-0 h-[24vh] min-h-[150px] flex items-center justify-center">
+            <IvyVine days={week} className="h-full w-auto" />
           </div>
           <div className="flex-1 min-h-0">
             <EveningReview voiceNote={todayVN} isArmed={isArmed} />
@@ -421,15 +403,8 @@ export function DailyLoopScreen() {
         </div>
       ) : phase === 'morning-armed' ? (
         <div className="flex-1 min-h-0 flex flex-col">
-          <div className="relative shrink-0 h-[30vh] min-h-[180px]">
-            <LivingForm
-              className="absolute inset-0"
-              daysKept={daysKept}
-              daysForfeited={daysForfeited}
-              state="armed"
-              palette={livingPalette}
-              seed={livingSeed}
-            />
+          <div className="relative shrink-0 h-[30vh] min-h-[180px] flex items-center justify-center">
+            <IvyVine days={week} className="h-full w-auto" />
           </div>
           <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain">
             <ArmedCard vn={todayVN} dailySlice={cycle.dailySlice} currency={currency} />
@@ -437,17 +412,9 @@ export function DailyLoopScreen() {
         </div>
       ) : (
         <div className="flex-1 min-h-0 flex flex-col">
-          {/* Living hero — grows as you speak your intention */}
-          <div className="relative flex-1 min-h-0">
-            <LivingForm
-              className="absolute inset-0"
-              daysKept={daysKept}
-              daysForfeited={daysForfeited}
-              state={livingState}
-              intensity={micLevel}
-              palette={livingPalette}
-              seed={livingSeed}
-            />
+          {/* The vine — glows brighter as you speak your intention */}
+          <div className="relative flex-1 min-h-0 flex items-center justify-center" style={vineStyle}>
+            <IvyVine days={week} className="max-h-full w-auto" />
           </div>
           <div className="shrink-0 px-4 pb-6">
             <DailyPushPrompt />
