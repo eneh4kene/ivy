@@ -582,6 +582,7 @@ class PromptService {
       this.behaviouralAdapter(ctx),
       brief ?? this.resolveFlow(callType, ctx),
       this.gameStanding(ctx),
+      this.coachEscalation(callType, ctx),
       this.pauseProtocol(),
       this.standingRules(ctx),
       this.safetyRules(),
@@ -765,6 +766,29 @@ class PromptService {
 
     if (!lines.length) return '';
     return `HOW TO ADAPT TO THIS PERSON:\n${lines.join('\n')}`;
+  }
+
+  // ── Coach escalation ─────────────────────────────────────────────────────────
+  // Fires ONLY on a sustained pattern (struggle_signal: two settled cycles in a
+  // row each forfeiting ≥50% of days) and only on reflective call types — never
+  // on a routine morning/evening. AI accountability visibly failing → human
+  // accountability is the honest next step; said as care, once, never as sales.
+  private coachEscalation(callType: string, ctx: Record<string, any>): string {
+    if (!ctx.struggle_signal) return '';
+    const allowed = ['MONTHLY_CHECKIN', 'RESCUE', 'CHAT', 'EVENING_REVIEW'];
+    if (!allowed.includes(callType)) return '';
+
+    const route = ctx.has_coach
+      ? `They ALREADY have a coach${ctx.coach_name ? ` (${ctx.coach_name})` : ''}: "Talk to ${ctx.coach_name ?? 'your coach'} about this week — tell them what you just told me. That's exactly what they're there for."`
+      : `They have NO coach: "I can hold you accountable, but I can't build your programme or change your plan. A human coach can. There are coaches in the app — the Coaches section — worth a look. No pressure; the offer stands."`;
+
+    return [
+      `SUSTAINED STRUGGLE — ESCALATE WITH CARE (fires at most once per call):`,
+      `The pattern is real: their last two settled weeks each lost half or more of their days. Do not pretend the current approach is working.`,
+      `If (and only if) the conversation turns to how hard it's been, name the pattern once as an observation, not a verdict: "Can I say something? Two weeks in a row now, the same pattern."`,
+      `Then the honest escalation — ${route}`,
+      `RULES: one mention, maximum. Never open the call with it. Never frame it as an upsell or a failure. If they decline, drop it completely and go back to the smallest possible next step.`,
+    ].join('\n');
   }
 
   // Injury, illness, bereavement, unavoidable travel — a real reason is not a
