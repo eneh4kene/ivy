@@ -12,6 +12,63 @@ import { checkPhone } from '@/lib/phone'
 import type { UpdateProfileInput, AccountabilityBuddy } from '@/lib/types'
 import { User, Phone, Clock, Target, CreditCard, Trash2, Download, CheckCircle2, AlertCircle, ChevronRight, Users, Bell, BellOff, Heart, Loader2, ShieldCheck, MessageCircle } from 'lucide-react'
 import { usePushNotifications } from '@/hooks/usePushNotifications'
+import { usePwaInstall, IosInstallSheet } from '@/components/pwa/InstallPrompt'
+import { isIOSSafari, isStandalone } from '@/lib/pwa'
+
+/**
+ * Permanent install entry point — the ephemeral home banner can be muted by a
+ * dismissal cooldown or by Chrome withholding beforeinstallprompt after an
+ * uninstall, so Settings always offers a way in. Hidden only when the app is
+ * already running installed (standalone).
+ */
+function InstallAppCard() {
+  const { canPrompt, prompt } = usePwaInstall()
+  const [standalone, setStandalone] = useState(true) // assume hidden until client check
+  const [iosSheet, setIosSheet] = useState(false)
+  const [done, setDone] = useState(false)
+
+  useEffect(() => { setStandalone(isStandalone()) }, [])
+  if (standalone || done) return null
+
+  const install = async () => {
+    if (canPrompt) {
+      const outcome = await prompt()
+      if (outcome === 'accepted') setDone(true)
+      return
+    }
+    // No captured native prompt (iOS, or Chrome still cooling down after an
+    // uninstall) — show the manual add-to-home-screen path.
+    setIosSheet(true)
+  }
+
+  return (
+    <>
+      <button
+        onClick={install}
+        className="w-full surface border-gold-400/25 rounded-2xl px-5 py-4 flex items-center gap-4 text-left hover:bg-ink-700/40 transition-colors active:scale-[0.99]"
+      >
+        <div className="w-10 h-10 rounded-xl bg-gold-400/12 border border-gold-400/25 flex items-center justify-center shrink-0">
+          <Download className="w-5 h-5 text-gold-300" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="font-semibold text-ink-50">Install the app</p>
+          <p className="text-xs text-ink-400 mt-0.5">
+            Ivy on your Home Screen — faster, full-screen, and your morning reminders actually land.
+          </p>
+        </div>
+        <ChevronRight className="w-4 h-4 text-ink-500 shrink-0" />
+      </button>
+      {iosSheet && !isIOSSafari() && (
+        <div className="surface rounded-2xl px-5 py-4 text-sm text-ink-200">
+          In Chrome&apos;s menu (⋮) tap <span className="font-medium text-ink-50">Add to Home screen</span> →{' '}
+          <span className="font-medium text-ink-50">Install</span>. If you only just uninstalled Ivy, Chrome can take a
+          few minutes before it offers install again.
+        </div>
+      )}
+      {iosSheet && isIOSSafari() && <IosInstallSheet onClose={() => setIosSheet(false)} />}
+    </>
+  )
+}
 
 function SectionCard({ title, description, icon: Icon, children }: {
   title: string
@@ -255,6 +312,8 @@ export default function SettingsPage() {
       </div>
 
       <div className="space-y-4">
+        <InstallAppCard />
+
         {/* Profile */}
         <SectionCard title="Profile" description="Your personal information" icon={User}>
           <form onSubmit={handleProfileUpdate} className="space-y-4">

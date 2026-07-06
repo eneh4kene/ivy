@@ -1,6 +1,10 @@
 'use client'
 
 import { useEffect } from 'react'
+// Side-effect import: installs the app-wide beforeinstallprompt capture the
+// moment the root layout hydrates, so the install event is never missed no
+// matter which page the user lands on. See lib/pwa-install.ts.
+import '@/lib/pwa-install'
 
 /**
  * Registers the PWA service worker on the client.
