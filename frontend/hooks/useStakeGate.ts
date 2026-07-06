@@ -13,6 +13,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuthStore } from '@/lib/store/auth.store'
 import { needsStakeSetup, hasDeferredStakeGate } from '@/lib/stake'
+import { postLoginDestination } from '@/lib/auth-routing'
 
 export function useStakeGate() {
   const { user, fetchUser } = useAuthStore()
@@ -26,6 +27,14 @@ export function useStakeGate() {
   }, [fetchUser])
 
   useEffect(() => {
+    // Resume the journey: a half-onboarded user (e.g. installed the PWA
+    // mid-funnel — start_url is /home) belongs back in onboarding, not on a
+    // dead dashboard. postLoginDestination routes consumers / B2B / coaches
+    // to their correct next step.
+    if (user && !user.isOnboarded) {
+      router.replace(postLoginDestination(user))
+      return
+    }
     if (!needsStakeSetup(user)) { setShowNudge(false); return }
     if (hasDeferredStakeGate()) { setShowNudge(true); return }
     router.replace('/stake-setup')

@@ -52,21 +52,25 @@ function initials(name: string): string {
 
 // ─── Day dot ──────────────────────────────────────────────────────────────────
 
-const DAY_META: Record<StakeDayStatus, { bg: string; ring: string }> = {
-  armed:    { bg: 'bg-gold-400',  ring: 'ring-gold-400/30 pulse-gold' },
-  complete: { bg: 'bg-sage-400',  ring: '' },
-  forfeited:{ bg: 'bg-ember-500', ring: '' },
-  grace:    { bg: 'bg-ink-600',   ring: 'ring-gold-400/20' },
-  upcoming: { bg: 'bg-ink-700',   ring: '' },
-}
-
 function WeekDot({ day }: { day: StakeState['week'][number] }) {
-  const meta = DAY_META[day.status]
+  const kept = day.status === 'armed' || day.status === 'complete' || day.status === 'grace'
+  const forfeited = day.status === 'forfeited'
+  const isTodayCell = day.isToday && !kept && !forfeited
   return (
     <div className="flex flex-col items-center gap-1.5">
-      <div
-        className={`w-8 h-8 rounded-full ${meta.bg} ${day.isToday ? `ring-2 ${meta.ring}` : ''} transition-all`}
-      />
+      <span
+        className={`flex h-8 w-8 items-center justify-center rounded-lg border font-mono text-[9px] transition-all ${
+          kept
+            ? 'border-gold-400 bg-gold-400/15 text-gold-100 shadow-[0_0_10px_rgba(70,240,200,0.25),inset_0_0_6px_rgba(70,240,200,0.18)]'
+            : forfeited
+              ? 'border-ember-500/50 text-ember-400/80'
+              : isTodayCell
+                ? 'border-dashed border-[#ffb03a]/60 text-[#ffb03a]'
+                : 'border-gold-400/12 text-ink-600'
+        }`}
+      >
+        {day.label.slice(0, 1)}
+      </span>
       <span className={`text-2xs font-medium ${day.isToday ? 'text-ink-50' : 'text-ink-600'}`}>
         {day.label}
       </span>
@@ -94,7 +98,8 @@ function SectionHead({ label, href }: { label: string; href?: string }) {
 const KEPT_STATUSES: StakeDayStatus[] = ['armed', 'complete', 'grace']
 
 function VineHero({ state }: { state: StakeState }) {
-  const week = state.week ?? []
+  const hasCycle = !!state.cycle
+  const week = hasCycle ? state.week ?? [] : []
   const keptCount = week.filter((d) => KEPT_STATUSES.includes(d.status)).length
   const forfeitedCount = week.filter((d) => d.status === 'forfeited').length
   const lived = keptCount + forfeitedCount
@@ -111,19 +116,21 @@ function VineHero({ state }: { state: StakeState }) {
         <div className="absolute left-1 top-2 font-mono text-[8.5px] uppercase tracking-[0.22em] text-ink-400/80">
           Ivy-01
           <span className="block mt-1 font-medium text-sage-400">
-            {keptCount} {keptCount === 1 ? 'leaf' : 'leaves'}
+            {hasCycle ? `${keptCount} ${keptCount === 1 ? 'leaf' : 'leaves'}` : 'seedling'}
           </span>
         </div>
         <div className="absolute right-1 top-2 text-right font-mono text-[8.5px] uppercase tracking-[0.22em] text-ink-400/80">
           Integrity
-          <span className="block mt-1 font-medium text-sage-400">{integrity}%</span>
+          <span className="block mt-1 font-medium text-sage-400">{hasCycle ? `${integrity}%` : '—'}</span>
         </div>
-        <IvyVine days={week} className="mx-auto h-60 w-auto" />
+        <IvyVine days={week} className={`mx-auto w-auto ${hasCycle ? 'h-60' : 'h-48 opacity-90'}`} />
       </div>
 
       {/* Terminal statusline — blunt consequence, blinking cursor */}
       <div className="mt-2 rounded-xl border border-gold-400/20 bg-gold-400/[0.045] px-3.5 py-2.5 font-mono text-[11px] tracking-[0.04em] text-sage-300">
-        {todayKept ? (
+        {!hasCycle ? (
+          <>&gt; your ivy is waiting for its first leaf — plant the stake below</>
+        ) : todayKept ? (
           <>&gt; tonight&apos;s leaf is lit{slice != null && <span className="text-gold-300"> · {s}{slice} protected</span>}</>
         ) : (
           <>&gt; miss tonight and a leaf falls{slice != null && <span className="text-ember-400"> · −{s}{slice}</span>}</>
@@ -140,25 +147,35 @@ function TodayStakeCard({ state, hasCard }: { state: StakeState; hasCard: boolea
   const { config, cycle, today } = state
   const s = sym(cycle?.currency ?? config.currency)
 
-  // No stake configured yet → drive the user to set it up.
+  // No stake configured yet → drive the user to set it up (console voice).
   if (!config.hasConfig) {
     return (
-      <Link href="/stake-setup">
-        <div className="relative rounded-2xl p-4 overflow-hidden border border-gold-400/30 bg-gold-400/05 glow-sm-gold active:scale-[0.99] transition-all">
-          <div className="relative flex items-start gap-3">
-            <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 bg-gold-400/12">
-              <Shield className="w-5 h-5 text-gold-400" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-semibold text-gold-300">Set up your stake</p>
-              <p className="text-xs text-ink-400 mt-0.5">
-                Put money on the line so your commitment has teeth. Takes a minute.
+      <div>
+        <p className="mb-2 flex items-center gap-2 font-mono text-[8.5px] uppercase tracking-[0.3em] text-ink-400">
+          Stake console · Not planted
+          <span className="h-px flex-1 bg-gold-400/10" />
+        </p>
+        <Link href="/stake-setup" className="block">
+          <div className="flex items-stretch overflow-hidden rounded-2xl border border-gold-400/20 bg-gradient-to-br from-[#082230]/60 to-[#04121a]/80 shadow-[0_0_44px_rgba(70,240,200,0.05)] transition-all active:scale-[0.99]">
+            <div className="flex-1 px-4 py-3.5">
+              <p className="font-mono text-[13px] font-semibold tracking-[0.18em] text-[#ffb03a] [text-shadow:0_0_12px_rgba(255,176,58,0.35)]">
+                NO STAKE
+              </p>
+              <p className="mt-1.5 text-xs leading-relaxed text-ink-400">
+                Put money on the line so your commitment has teeth — each kept day grows a leaf. Takes a minute.
               </p>
             </div>
-            <ArrowRight className="w-4 h-4 shrink-0 mt-0.5 text-gold-400" />
+            <div className="flex w-[96px] shrink-0 flex-col items-center justify-center gap-1.5 border-l border-gold-400/15 bg-gradient-to-b from-gold-400/15 to-gold-400/5 text-gold-300">
+              <span className="font-mono text-[13px] font-semibold tracking-[0.08em] [text-shadow:0_0_14px_rgba(70,240,200,0.6)]">
+                [PLANT]
+              </span>
+              <span className="font-mono text-[7.5px] uppercase tracking-[0.2em] text-ink-400">
+                1 min setup
+              </span>
+            </div>
           </div>
-        </div>
-      </Link>
+        </Link>
+      </div>
     )
   }
 
@@ -168,47 +185,44 @@ function TodayStakeCard({ state, hasCard }: { state: StakeState; hasCard: boolea
   //    "Stake ready · cycle starts Monday" lie shown to card-less new users.)
   //  • Card on file → the cycle genuinely opens with the weekly cron.
   if (!cycle) {
-    if (!hasCard) {
-      return (
-        <Link href="/stake-setup">
-          <div className="relative rounded-2xl p-4 overflow-hidden border border-gold-400/30 bg-gold-400/05 glow-sm-gold active:scale-[0.99] transition-all">
-            <div className="relative flex items-start gap-3">
-              <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 bg-gold-400/12">
-                <Shield className="w-5 h-5 text-gold-400" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-semibold text-gold-300">Add a card to arm your stake</p>
-                <p className="text-xs text-ink-400 mt-0.5">
-                  {config.weeklyAmount != null
-                    ? `Your ${s}${config.weeklyAmount}/week stake activates the moment your card's on file. Nothing's charged today.`
-                    : "Your stake activates the moment your card's on file. Nothing's charged today."}
-                </p>
-              </div>
-              <ArrowRight className="w-4 h-4 shrink-0 mt-0.5 text-gold-400" />
+    const noCard = !hasCard
+    return (
+      <div>
+        <p className="mb-2 flex items-center gap-2 font-mono text-[8.5px] uppercase tracking-[0.3em] text-ink-400">
+          Stake console · {noCard ? 'Awaiting card' : 'Cycle pending'}
+          <span className="h-px flex-1 bg-gold-400/10" />
+        </p>
+        <Link href="/stake-setup" className="block">
+          <div className="flex items-stretch overflow-hidden rounded-2xl border border-gold-400/20 bg-gradient-to-br from-[#082230]/60 to-[#04121a]/80 shadow-[0_0_44px_rgba(70,240,200,0.05)] transition-all active:scale-[0.99]">
+            <div className="flex-1 px-4 py-3.5">
+              <p className={`font-mono text-[13px] font-semibold tracking-[0.18em] ${
+                noCard
+                  ? 'text-[#ffb03a] [text-shadow:0_0_12px_rgba(255,176,58,0.35)]'
+                  : 'text-gold-300 [text-shadow:0_0_12px_rgba(70,240,200,0.4)]'
+              }`}>
+                {noCard ? 'NOT ARMED' : 'STAKE READY'}
+              </p>
+              <p className="mt-1.5 text-xs leading-relaxed text-ink-400">
+                {noCard
+                  ? config.weeklyAmount != null
+                    ? <>Your <b className="font-medium text-ink-50">{s}{config.weeklyAmount}/week</b> stake goes live the moment your card&apos;s on file. Nothing&apos;s charged today.</>
+                    : <>Your stake goes live the moment your card&apos;s on file. Nothing&apos;s charged today.</>
+                  : config.weeklyAmount != null
+                    ? <><b className="font-medium text-ink-50">{s}{config.weeklyAmount}/week</b> on the line once your cycle opens Monday morning.</>
+                    : <>Your weekly cycle opens Monday morning.</>}
+              </p>
+            </div>
+            <div className="flex w-[96px] shrink-0 flex-col items-center justify-center gap-1.5 border-l border-gold-400/15 bg-gradient-to-b from-gold-400/15 to-gold-400/5 text-gold-300">
+              <span className="font-mono text-[13px] font-semibold tracking-[0.08em] [text-shadow:0_0_14px_rgba(70,240,200,0.6)]">
+                {noCard ? '[ARM]' : '[✓]'}
+              </span>
+              <span className="font-mono text-[7.5px] uppercase tracking-[0.2em] text-ink-400">
+                {noCard ? 'Add card' : 'Opens Mon'}
+              </span>
             </div>
           </div>
         </Link>
-      )
-    }
-    return (
-      <Link href="/stake-setup">
-        <div className="relative rounded-2xl p-4 overflow-hidden border border-ink-700/60 surface active:scale-[0.99] transition-all">
-          <div className="relative flex items-start gap-3">
-            <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 bg-ink-700/60">
-              <Shield className="w-5 h-5 text-ink-300" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-semibold text-ink-100">Stake ready · cycle starts Monday</p>
-              <p className="text-xs text-ink-400 mt-0.5">
-                {config.weeklyAmount != null
-                  ? `${s}${config.weeklyAmount}/week on the line once your cycle opens.`
-                  : 'Your weekly cycle opens Monday morning.'}
-              </p>
-            </div>
-            <ChevronRight className="w-4 h-4 shrink-0 mt-0.5 text-ink-500" />
-          </div>
-        </div>
-      </Link>
+      </div>
     )
   }
 
@@ -659,8 +673,9 @@ export function HomeScreen() {
           </div>
         ) : (
           <>
-            {/* The organism — your ivy, grown from this cycle's real days */}
-            {state && state.cycle && <VineHero state={state} />}
+            {/* The organism — your ivy, grown from this cycle's real days
+                (a seedling before the first stake is planted) */}
+            {state && <VineHero state={state} />}
 
             {/* Ivy reached out — onboarding handoff / evening check-in / replies */}
             {ivyUnread > 0 && <IvyMessageCard count={ivyUnread} />}
