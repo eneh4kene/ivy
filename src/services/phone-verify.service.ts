@@ -3,6 +3,7 @@ import twilio from 'twilio';
 import prisma from '../utils/prisma';
 import config from '../config';
 import logger from '../utils/logger';
+import { smsFrom } from '../utils/sms';
 import { BadRequestError } from '../utils/errors';
 
 const TTL_MS = 5 * 60 * 1000;    // 5 minutes
@@ -74,7 +75,7 @@ class PhoneVerifyService {
     try {
       await client.messages.create({
         to: newPhone,
-        from: config.twilio.phoneNumber!,
+        from: smsFrom(newPhone),
         body: `Your Ivy verification code is ${code}. It expires in 5 minutes. If you didn't request this, ignore it.`,
       });
     } catch (err: any) {
