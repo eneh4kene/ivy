@@ -35,7 +35,16 @@ the resulting rows in the prod DB and objects in Stripe.
 
 ## 🔴 BLOCKER — founder must fix before handing to beta users
 
-**Twilio credentials are invalid (HTTP 401 / error 20003).** Until fixed:
+**UPDATE 6 Jul 2026:** a NEW Twilio account ("Ivy API", upgraded, $20 balance) replaced the
+old one; its credentials are live on Fly and authenticate. The ONLY remaining step is
+**KYC verification in Trust Hub** (Console → Trust Hub → create/submit the customer
+profile — identity + address; founder-only). Twilio blocks ALL number purchases until
+approved. Once approved, Claude buys the number + wires webhooks + geo-permissions +
+sets `TWILIO_PHONE_NUMBER` automatically. A **UK (+44) number additionally needs the UK
+regulatory bundle** (address proof) — do that before coach handover so calls come from
++44, not +1. Original context below:
+
+**Twilio credentials were invalid (HTTP 401 / error 20003).** Until fixed:
 - **No outbound calls connect** (welcome, morning, evening, rescue, callbacks).
 - **SMS phone-verification fails**, which blocks onboarding for every real client
   (only the e2e fast-path skips it).
