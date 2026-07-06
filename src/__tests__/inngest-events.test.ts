@@ -103,7 +103,9 @@ describe('sendSmsHandler', () => {
   test('M1 — success marks SENT + logs usage', async () => {
     mockTwilioCreate.mockResolvedValue({ sid: 'SM1' });
     const res = await sendSmsHandler({ event, step: makeStep() });
-    expect(mockTwilioCreate).toHaveBeenCalledWith({ body: 'hi', from: '+1', to: '+44' });
+    // +44 destination with no +44 number owned → alphanumeric sender (US long
+    // codes can't SMS international destinations — Twilio 21612).
+    expect(mockTwilioCreate).toHaveBeenCalledWith({ body: 'hi', from: 'Ivy', to: '+44' });
     expect(prisma.message.update).toHaveBeenCalledWith({ where: { id: 'm1' }, data: { status: 'SENT' } });
     expect(logUsage).toHaveBeenCalledWith('twilio', 'sms', 1, 'u1', { messageId: 'm1', sid: 'SM1' });
     expect(res).toEqual({ success: true, sid: 'SM1' });

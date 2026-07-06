@@ -11,6 +11,7 @@ import prisma from '../utils/prisma';
 import axios from 'axios';
 import twilio from 'twilio';
 import { config } from '../config';
+import { smsFrom } from '../utils/sms';
 import logger from '../utils/logger';
 import { logUsage } from '../services/usage.service';
 
@@ -74,7 +75,7 @@ export async function sendSmsHandler({ event, step }: { event: any; step: StepLi
         const client = twilio(config.twilio.accountSid, config.twilio.authToken);
         const message = await client.messages.create({
           body: content,
-          from: config.twilio.phoneNumber,
+          from: smsFrom(phone),
           to: phone,
         });
 
