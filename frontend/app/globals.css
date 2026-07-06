@@ -82,8 +82,6 @@
 
   html {
     @apply scroll-smooth;
-    /* Prevent rubber-band zoom stealing the viewport on iOS */
-    overscroll-behavior-y: none;
   }
 
   body {
@@ -95,10 +93,18 @@
     -webkit-font-smoothing: antialiased;
     /* Full-height on mobile; avoids the iOS address-bar shrink */
     min-height: 100dvh;
-    overscroll-behavior: none;
     /* Mobile-PWA guard: never let a stray wide child create a horizontal
        scroll / shove fixed-width cards off the right edge. */
     overflow-x: hidden;
+  }
+
+  /* iOS ONLY: suppress rubber-band bounce stealing the viewport. Must NOT be
+     global — overscroll-behavior: none on body is precisely what disables
+     Android Chrome's native pull-to-refresh (in browser AND installed PWA).
+     iOS has no native pull-to-refresh for web, so nothing is lost there. */
+  @supports (-webkit-touch-callout: none) {
+    html { overscroll-behavior-y: none; }
+    body { overscroll-behavior: none; }
   }
 
   /* Display / heading font */
