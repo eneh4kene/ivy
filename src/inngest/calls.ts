@@ -93,7 +93,11 @@ export async function initiateCallHandler({ event, step }: { event: any; step: S
         // Generate a call-specific brief via Haiku — falls back to static flow if unavailable
         const isPonder = callType === 'COACH_PONDER';
         const trackConfig = isPonder ? null : getTrackConfig(ctx.track);
-        const brief = isPonder ? null : await briefService.generateCallBrief(callType, ctx, trackConfig!);
+        // Coach onboarding keeps its static partner-briefing flow — the Haiku
+        // director is tuned for consumer accountability calls and would drift
+        // this rare, high-stakes call back toward streak/stake talk.
+        const isCoachOnboarding = callType === 'ONBOARDING' && ctx.subscription_tier === 'COACH';
+        const brief = (isPonder || isCoachOnboarding) ? null : await briefService.generateCallBrief(callType, ctx, trackConfig!);
         const systemPrompt = isPonder
           ? buildPonderPrompt(ctx)
           : promptService.buildSystemPrompt(callType, ctx, isB2B, brief ?? undefined);

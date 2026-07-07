@@ -466,15 +466,58 @@ const FLOWS: Record<string, FlowFn> = {
       '',
       `4. FIRST SESSION (2 min): "Let's plan tomorrow." What, when, where. Get a specific commitment.`,
       '',
-      `5. STAKE + ARMING (2 min): ${stakeLine}`,
+      `5. HOW IT ALL WORKS — paint the daily rhythm as ONE picture, with the why (2 min):`,
+      `   "Here's the shape of a day with me. Each morning you record a short voice note — out loud, because saying it out loud is the commitment; typing is too easy to lie to. That arms your day. In the evening ${ctx.comm_preference === 'TEXTS' ? 'I check in with you right here in the app' : 'I call you'} and we settle it honestly — done, partial, or missed. Kept days grow your ivy a leaf. On Sunday the week settles: money you protected comes back, missed days go to charity. That's the whole machine — small, daily, real."`,
+      `   ${stakeLine}`,
       `   ${vnLine}`,
       successCharityLine ? `   ${successCharityLine}` : '',
       '',
-      `6. SCHEDULE (2 min): Evening call time? Which days? (Morning arming is async — they record a voice note, not a call.)`,
+      `6. SAVE MY NUMBER (15s): "One practical thing — save this number you're on right now. I'm the only one who'll ever call or text you from it. When it rings in the evening, that's your day calling to be closed."`,
       '',
-      `7. CLOSE with an open loop: name the SPECIFIC thing you'll be listening for tomorrow — "Tomorrow morning, drop your voice note about [their first session]. I'll be listening for whether you [their specific plan]." End with energy.`,
+      ctx.buddy_name ? '' : `7. A HUMAN WITNESS (30s): "Last thing — some people give me a human to answer to. A partner, a mate, your sister — someone who hears about it when you go quiet. Being witnessed changes what you do; it's the strongest lever I have. You can add them in Settings — worth doing today." Invite once, no pressure.`,
+      '',
+      `8. SCHEDULE (2 min): Evening ${ctx.comm_preference === 'TEXTS' ? 'check-in' : 'call'} time? Which days? (Morning arming is async — they record a voice note, not a call.)`,
+      '',
+      `9. CLOSE with an open loop: name the SPECIFIC thing you'll be listening for tomorrow — "Tomorrow morning, drop your voice note about [their first session]. I'll be listening for whether you [their specific plan]." End with energy.`,
       '',
       `IF THEY ASK TO START OVER ("start again", "from the beginning"): actually restart — greet them fresh, re-introduce yourself in different words, and walk the flow from the top. Do NOT just repeat your last paragraph.`,
+    ].filter(Boolean).join('\n');
+  },
+
+  // Coaches are partners, not clients: they bring their whole client book with
+  // them. Their first call must land as a professional briefing from a sharp
+  // new colleague — not a consumer pep talk. Reuses the ONBOARDING call type;
+  // resolveFlowKey branches here on subscription_tier === 'COACH'.
+  coach_onboarding: (ctx) => {
+    const name = ctx.user_name ?? 'Coach';
+    const brand = ctx.brand_name
+      ? `Their white-label brand is "${ctx.brand_name}" — acknowledge it: their clients will experience Ivy as part of ${ctx.brand_name}.`
+      : '';
+
+    return [
+      `THIS CALL: Coach Onboarding — first call with a COACH partner, not a client.`,
+      `Target: 8-10 minutes. Peer-to-peer, professional, warm. They are evaluating whether you'll make them look good to THEIR clients.`,
+      '',
+      `FLOW:`,
+      `1. WELCOME AS A COLLEAGUE (1 min): "Hey ${name} — I'm Ivy. I'm the one who'll be working your clients between your sessions. This call is me learning how you coach, and you learning what I'll do for you. Think of me as the assistant coach who never sleeps."`,
+      '',
+      `2. WHAT I DO FOR YOUR CLIENTS (2 min): the daily machine — morning voice-note commitment, evening settle ${'(call or text, their choice)'}, their own money staked on showing up, a living streak they can see grow. "Your programme is the WHAT; I'm the EVERY DAY."`,
+      '',
+      `3. WHAT I DO FOR YOU (2 min):`,
+      `   - "I flag clients who are slipping before they ghost you — you'll hear from me when someone misses repeatedly."`,
+      `   - "Every two weeks you and I have a short ponder call: I bring patterns from your clients' days — what they're avoiding, what's landing — and you adjust their programmes on the call. You say it, I apply it."`,
+      `   - "Anything you tell me about a client — notes, focus areas, style — I coach in YOUR voice, on YOUR programme. I never contradict you."`,
+      brand ? `   ${brand}` : '',
+      '',
+      `4. HOW CLIENTS JOIN (1 min): "You have an invite link in your coach console — anyone who joins through it is bound to you automatically. Their subscription is theirs; your flat fee covers you regardless of client count."`,
+      '',
+      `5. SET THEIR SETUP HOMEWORK (1 min): programme areas + a line of coaching style in the console — "ten minutes that make me sound like you from day one."`,
+      '',
+      `6. SAVE MY NUMBER (15s): "Save this number — ponder calls and client alerts come from it."`,
+      '',
+      `7. CLOSE with the open loop: "First ponder lands in two weeks — by then I'll have real patterns from your first clients. I think you'll be surprised what people tell me at 7am." Warm, confident, done.`,
+      '',
+      `RULES: never talk to a coach about THEIR streaks/stakes (they have none). Never promise client data you don't have yet. If they ask something operational you can't answer, point to the coach console or support — don't improvise.`,
     ].filter(Boolean).join('\n');
   },
 
@@ -648,7 +691,10 @@ class PromptService {
 
       case 'CHAT':             return 'chat';
       case 'RESCUE':           return 'rescue';
-      case 'ONBOARDING':       return 'onboarding';
+      case 'ONBOARDING':
+        // Coaches share the ONBOARDING call type (enum migration not worth it)
+        // but get the partner briefing, never the consumer pep talk.
+        return ctx.subscription_tier === 'COACH' ? 'coach_onboarding' : 'onboarding';
       case 'SEASON_CLOSE':     return 'season_close';
       case 'MONTHLY_CHECKIN':  return 'monthly_checkin';
 
@@ -881,9 +927,12 @@ export function buildPonderPrompt(ctx: Record<string, any>): string {
     'RULES:',
     '- This is a peer working session, not a coaching call. Treat the coach as a colleague.',
     '- Be direct and concise. Coaches are time-poor.',
+    '- OPEN WITH VALUE, not admin: lead with the single most interesting client pattern since last time — a win worth celebrating or a risk worth catching. Make the first 30 seconds prove the call was worth answering.',
     '- Surface patterns from client calls — tone, avoidance, what resonates.',
-    '- When the coach adjusts a programme, confirm it out loud: "Got it — I will note that."',
+    '- FLAG AT-RISK CLIENTS BY NAME with the evidence ("Sarah has missed 4 of 7 and stopped answering evenings") and ask how the coach wants to play it.',
+    '- When the coach adjusts a programme, confirm it out loud: "Got it — I will note that." Repeat the change back precisely.',
     '- Do not fabricate client data. Only reference what is in the brief above.',
+    '- CLOSE with an open loop: name what you will be watching between now and the next ponder ("I will keep an eye on whether Tom sticks to the new 3x plan — you will hear from me if not").',
     '- Keep the call under 10 minutes unless the coach wants to go deeper.',
   ].filter(Boolean).join('\n');
 }

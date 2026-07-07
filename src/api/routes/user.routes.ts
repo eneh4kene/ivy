@@ -560,7 +560,9 @@ router.post(
         : (config.retell.agentIds.b2c || '');
 
       const trackConfig = getTrackConfig(ctx.track);
-      const brief = await briefService.generateCallBrief(callType, ctx, trackConfig!);
+      const brief = (callType === 'ONBOARDING' && ctx.subscription_tier === 'COACH')
+        ? null // coach partner briefing stays on its static flow
+        : await briefService.generateCallBrief(callType, ctx, trackConfig!);
       const systemPrompt = promptService.buildSystemPrompt(callType, ctx, isB2B, brief ?? undefined);
 
       const fromNumber = fromOverride

@@ -281,7 +281,24 @@ class UserService {
       },
     });
     if (!user) return;
-    if (user.subscriptionTier === 'COACH') return; // coaches have no peer circle / personal stake
+    if (user.subscriptionTier === 'COACH') {
+      // Coaches skip the consumer Day-Zero (no circle, no stake) but get their
+      // own welcome: the partner briefing call (ONBOARDING type, coach flow via
+      // resolveFlowKey). Idempotent — one per coach, ever. Fire-and-forget.
+      if (user.phone && user.isOnboarded) {
+        (async () => {
+          const prior = await prisma.call.findFirst({
+            where: { userId, callType: 'ONBOARDING' },
+            select: { id: true },
+          });
+          if (prior) return;
+          const callService = (await import('./call.service')).default;
+          await callService.scheduleCall(userId, 'ONBOARDING', new Date(Date.now() + 2 * 60 * 1000));
+          logger.info(`Coach welcome call scheduled for ${userId}`);
+        })().catch((err) => logger.warn(`Coach welcome call scheduling failed for ${userId}:`, err));
+      }
+      return;
+    }
 
     // The welcome half needs only an onboarded user — NOT a card. This is the fix
     // for the "dead home / Ivy doesn't know I exist" gap: the circle + call no
