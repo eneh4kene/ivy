@@ -44,6 +44,7 @@ router.get('/marketplace', async (_req: AuthRequest, res: Response, next: NextFu
         coachProfile: {
           select: {
             programmeName: true,
+            discipline: true,
             coachingStyle: true,
             programmeNotes: true,
             whitelabelEnabled: true,
@@ -103,6 +104,7 @@ router.get('/marketplace/:id', async (req: AuthRequest, res: Response, next: Nex
         coachProfile: {
           select: {
             programmeName: true,
+            discipline: true,
             coachingStyle: true,
             programmeNotes: true,
           },

@@ -75,8 +75,8 @@ class PaymentController {
 
       const session = await paymentService.createCoachCheckoutSession(
         userId,
-        successUrl || `${process.env.FRONTEND_URL}/coach?setup=1`,
-        cancelUrl || `${process.env.FRONTEND_URL}/pricing`,
+        successUrl || `${process.env.FRONTEND_URL}/coach/join?from=checkout`,
+        cancelUrl || `${process.env.FRONTEND_URL}/coach/join`,
         currency || 'GBP',
       );
       res.json({ success: true, data: session });

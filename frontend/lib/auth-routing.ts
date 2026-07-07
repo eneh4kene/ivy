@@ -14,6 +14,11 @@ export function postLoginDestination(user: User, isNewUser = false): string {
   if (user.subscriptionTier === 'COACH') {
     return user.isOnboarded ? '/coach' : '/coach/settings'
   }
+  // Coach-intent signup (role='coach' from /for-coaches) that hasn't activated
+  // the £79 coach plan yet → the activation page, never consumer onboarding.
+  if (user.role === 'coach') {
+    return '/coach/join'
+  }
   if (isNewUser || !user.isOnboarded) {
     // Consumers get the modern stake-aware flow; B2B still uses the legacy
     // multi-step wizard (company/employee/admin setup).
