@@ -3,6 +3,7 @@ import prisma from '../utils/prisma';
 import logger from '../utils/logger';
 import { sendTelegramAdmin } from '../utils/telegram-admin';
 import { config } from '../config';
+import { logUsage } from '../services/usage.service';
 
 /**
  * Ops pulse — bootstrapper's mission control, delivered to the admin Telegram.
@@ -33,6 +34,66 @@ async function spendByService(since: Date): Promise<{ lines: string[]; total: nu
     .map((r) => `  ${r.service}: £${(r._sum.costGbp ?? 0).toFixed(2)}`);
   const total = rows.reduce((s, r) => s + (r._sum.costGbp ?? 0), 0);
   return { lines, total };
+}
+
+/**
+ * The discovery half of the weekly pulse: Haiku reads the week's call
+ * transcripts + user chat messages and surfaces what a founder doing manual
+ * user research would find — the moments, the friction, one suggested
+ * iteration. Every transcript is a user interview; this is the synthesis.
+ */
+async function discoveryDigest(since: Date): Promise<string | null> {
+  if (!process.env.ANTHROPIC_API_KEY) return null;
+  const [calls, userMsgs] = await Promise.all([
+    prisma.call.findMany({
+      where: { status: 'COMPLETED', transcript: { not: null }, scheduledAt: { gte: since } },
+      orderBy: { scheduledAt: 'desc' },
+      take: 20,
+      select: { callType: true, transcript: true, sentiment: true },
+    }),
+    prisma.message.findMany({
+      where: { channel: 'IN_APP', direction: 'INBOUND', createdAt: { gte: since } },
+      orderBy: { createdAt: 'desc' },
+      take: 40,
+      select: { content: true },
+    }),
+  ]);
+  if (calls.length === 0 && userMsgs.length === 0) return null;
+
+  const NL = '\n';
+  const corpus = [
+    ...calls.map((c) => `[${c.callType} call, sentiment ${c.sentiment ?? '?'}]${NL}${(c.transcript ?? '').slice(0, 1500)}`),
+    userMsgs.length
+      ? `[USER CHAT MESSAGES]${NL}${userMsgs.map((m) => `- ${m.content.slice(0, 200)}`).join(NL)}`
+      : '',
+  ].filter(Boolean).join(`${NL}${NL}---${NL}${NL}`).slice(0, 60_000);
+
+  try {
+    const Anthropic = (await import('@anthropic-ai/sdk')).default;
+    const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+    const res = await client.messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 500,
+      messages: [{
+        role: 'user',
+        content: `You are synthesising a week of beta-user conversations with an AI accountability coach for the founder. From the transcripts and messages below, produce EXACTLY this, tersely:
+
+MOMENTS (up to 3): the most revealing user quotes or exchanges — verbatim fragments, with why each matters.
+FRICTION (up to 2): where users hesitated, pushed back, misunderstood, or the product failed them.
+ITERATE: the single highest-leverage change to make this week, one sentence.
+
+If the data is too thin to say something real, say "Too quiet to synthesise" and nothing else. Never invent.
+
+${corpus}`,
+      }],
+    });
+    logUsage('anthropic', 'haiku_tokens', (res.usage?.input_tokens ?? 0) + (res.usage?.output_tokens ?? 0), undefined, { op: 'discovery_digest' }).catch(() => {});
+    const text = res.content[0]?.type === 'text' ? res.content[0].text.trim() : null;
+    return text || null;
+  } catch (err) {
+    logger.warn('Discovery digest synthesis failed:', err);
+    return null;
+  }
 }
 
 async function twilioBalanceUsd(): Promise<number | null> {
@@ -100,6 +161,8 @@ export const opsWeeklyPulse = inngest.createFunction(
     const keptDays = cyclesSettled.reduce((s, c) => s + (c.daysInCycle - c.daysForfeited), 0);
     const totalDays = cyclesSettled.reduce((s, c) => s + c.daysInCycle, 0);
 
+    const digest = await discoveryDigest(since);
+
     const msg = [
       '🌿 Ivy weekly pulse',
       `Users: ${onboarded} onboarded (+${newUsers} new this week)`,
@@ -108,7 +171,8 @@ export const opsWeeklyPulse = inngest.createFunction(
       `Calls: ${callsDone} completed · ${callsMissed} missed`,
       `Chat: ${chatMsgs} messages`,
       `Burn (7d): £${total.toFixed(2)}`,
-    ].join('\n');
+      digest ? `\n— DISCOVERY —\n${digest}` : '',
+    ].filter(Boolean).join('\n');
 
     await sendTelegramAdmin(msg);
     logger.info('Ops weekly pulse sent');
