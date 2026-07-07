@@ -244,8 +244,13 @@ const dailyCostAlert = inngest.createFunction(
   }
 );
 
+import { opsDailyGuard, opsWeeklyPulse } from './ops';
+
 /** All Inngest functions, served at /api/inngest. */
 export const functions = [
+  // Ops mission control (cost guard + weekly product pulse → admin Telegram)
+  opsDailyGuard,
+  opsWeeklyPulse,
   // Cron backbone (Phase 1)
   weeklyBuddyDigest,
   weeklyCoachDigest,
