@@ -1,6 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { TrackConfig } from '../config/tracks';
 import logger from '../utils/logger';
+import { logUsage } from './usage.service';
 
 // Frozen so prompt caching activates after the first call.
 const BRIEF_SYSTEM = `You write the FLOW section of a system prompt for Ivy, an AI voice accountability coach making a real phone call right now.
@@ -205,6 +206,7 @@ class BriefService {
           },
         ],
       });
+      logUsage('anthropic', 'haiku_tokens', (response.usage?.input_tokens ?? 0) + (response.usage?.output_tokens ?? 0), ctx.user_id, { op: 'call_brief', callType }).catch(() => {});
 
       const brief = response.content[0]?.type === 'text' ? response.content[0].text.trim() : null;
       if (!brief) return null;

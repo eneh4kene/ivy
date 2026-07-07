@@ -21,6 +21,12 @@ const COST_PER_UNIT: Record<string, Record<string, number>> = {
   telegram: {
     telegram_message: 0, // free
   },
+  anthropic: {
+    // Blended per-TOKEN rates in GBP (input+output averaged for monitoring —
+    // precise enough for cost guarding, not billing). Haiku ≈ $1/$5 per Mtok.
+    haiku_tokens: 0.0000024,
+    sonnet_tokens: 0.000012,
+  },
 }
 
 export async function logUsage(

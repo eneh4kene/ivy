@@ -19,6 +19,7 @@ import logger from '../utils/logger'
 import callService from './call.service'
 import { promptService } from './prompt.service'
 import * as pushService from './push.service'
+import { logUsage } from './usage.service';
 
 const MODEL = 'claude-haiku-4-5'
 const HISTORY_LIMIT = 20 // recent turns sent to the model
@@ -167,6 +168,7 @@ class ChatService {
       })
 
       const reply = res.content[0]?.type === 'text' ? res.content[0].text.trim() : ''
+      logUsage('anthropic', 'haiku_tokens', (res.usage?.input_tokens ?? 0) + (res.usage?.output_tokens ?? 0), userId, { op: 'chat_reply' }).catch(() => {})
       return reply || FALLBACK
     } catch (err) {
       logger.error(`Ivy chat reply failed for ${userId}:`, err)

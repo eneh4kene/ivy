@@ -3,6 +3,7 @@ import prisma from '../utils/prisma';
 import logger from '../utils/logger';
 import { startOfDay, subDays } from 'date-fns';
 import { parseModelJson } from '../utils/model-json';
+import { logUsage } from './usage.service';
 
 // Per-call structured insights extracted from transcript
 export interface CallInsights {
@@ -170,6 +171,7 @@ class InsightService {
           },
         ],
       });
+      logUsage('anthropic', 'haiku_tokens', (response.usage?.input_tokens ?? 0) + (response.usage?.output_tokens ?? 0), undefined, { op: 'call_insights' }).catch(() => {});
 
       const raw = response.content[0]?.type === 'text' ? response.content[0].text.trim() : null;
       if (!raw) return;
@@ -251,6 +253,7 @@ class InsightService {
         system: [{ type: 'text', text: CHAT_MEMORY_SYSTEM, cache_control: { type: 'ephemeral' } }] as any,
         messages: [{ role: 'user', content: `Chat:\n${transcript}` }],
       });
+      logUsage('anthropic', 'haiku_tokens', (response.usage?.input_tokens ?? 0) + (response.usage?.output_tokens ?? 0), undefined, { op: 'chat_memory' }).catch(() => {});
 
       const raw = response.content[0]?.type === 'text' ? response.content[0].text.trim() : null;
       const moments: CallInsights['memorable_moments'] = raw ? (parseModelJson<CallInsights>(raw).memorable_moments ?? []) : [];
@@ -346,6 +349,7 @@ class InsightService {
           },
         ],
       });
+      logUsage('anthropic', 'haiku_tokens', (response.usage?.input_tokens ?? 0) + (response.usage?.output_tokens ?? 0), undefined, { op: 'inferred_profile' }).catch(() => {});
 
       const raw = response.content[0]?.type === 'text' ? response.content[0].text.trim() : null;
       if (!raw) return;
