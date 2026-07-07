@@ -2,6 +2,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import prisma from '../utils/prisma';
 import logger from '../utils/logger';
 import { startOfDay, subDays } from 'date-fns';
+import { parseModelJson } from '../utils/model-json';
 
 // Per-call structured insights extracted from transcript
 export interface CallInsights {
@@ -173,7 +174,7 @@ class InsightService {
       const raw = response.content[0]?.type === 'text' ? response.content[0].text.trim() : null;
       if (!raw) return;
 
-      const insights: CallInsights = JSON.parse(raw);
+      const insights: CallInsights = parseModelJson<CallInsights>(raw);
 
       await prisma.call.update({
         where: { id: callId },
@@ -252,7 +253,7 @@ class InsightService {
       });
 
       const raw = response.content[0]?.type === 'text' ? response.content[0].text.trim() : null;
-      const moments: CallInsights['memorable_moments'] = raw ? (JSON.parse(raw).memorable_moments ?? []) : [];
+      const moments: CallInsights['memorable_moments'] = raw ? (parseModelJson<CallInsights>(raw).memorable_moments ?? []) : [];
 
       if (moments.length) {
         await prisma.callMemory.createMany({
@@ -349,7 +350,7 @@ class InsightService {
       const raw = response.content[0]?.type === 'text' ? response.content[0].text.trim() : null;
       if (!raw) return;
 
-      const profile: Omit<InferredProfile, 'call_answer_rate'> = JSON.parse(raw);
+      const profile: Omit<InferredProfile, 'call_answer_rate'> = parseModelJson<Omit<InferredProfile, 'call_answer_rate'>>(raw);
 
       await prisma.user.update({
         where: { id: userId },

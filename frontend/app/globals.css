@@ -483,7 +483,7 @@
 }
 /* Subtle cabinet grid behind transparent content */
 .theme-arcade::before {
-  content: ""; position: fixed; inset: 0; z-index: 0; pointer-events: none; opacity: .35;
+  content: ""; position: fixed; inset: 0; z-index: -1; pointer-events: none; opacity: .35;
   background-image:
     linear-gradient(rgba(39,232,255,.05) 1px, transparent 1px),
     linear-gradient(90deg, rgba(39,232,255,.05) 1px, transparent 1px);
@@ -491,7 +491,6 @@
   -webkit-mask-image: radial-gradient(ellipse 90% 75% at 50% 24%, #000 28%, transparent 84%);
           mask-image: radial-gradient(ellipse 90% 75% at 50% 24%, #000 28%, transparent 84%);
 }
-.theme-arcade > * { position: relative; z-index: 1; }
 
 /* Crisp mono headings */
 .theme-arcade h1, .theme-arcade h2, .theme-arcade h3, .theme-arcade .font-display {
@@ -618,7 +617,7 @@
 }
 /* Drifting plankton — tiny fixed lights instead of the arcade grid */
 .theme-vine::before {
-  content: ""; position: fixed; inset: 0; z-index: 0; pointer-events: none;
+  content: ""; position: fixed; inset: 0; z-index: -1; pointer-events: none;
   background-image:
     radial-gradient(circle 1.2px at 12% 16%, rgba(70,240,200,.4) 99%, transparent),
     radial-gradient(circle 1px   at 84% 11%, rgba(70,240,200,.26) 99%, transparent),
@@ -629,7 +628,12 @@
   -webkit-mask-image: radial-gradient(ellipse 95% 70% at 50% 22%, #000 30%, transparent 85%);
           mask-image: radial-gradient(ellipse 95% 70% at 50% 22%, #000 30%, transparent 85%);
 }
-.theme-vine > * { position: relative; z-index: 1; }
+/* NOTE: no `.theme-vine > *` position override — it silently defeated
+   position:fixed on direct children (the bottom nav scrolled with the page:
+   same 0-1-0 specificity as Tailwind's .fixed, but later in the sheet).
+   The ::before layer sits at z-index:-1 inside this isolated stacking
+   context instead, which achieves the same layering without touching
+   children. */
 
 /* The voice: Newsreader italic for display type */
 .theme-vine h1, .theme-vine h2, .theme-vine h3, .theme-vine .font-display {

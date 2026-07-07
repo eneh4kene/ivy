@@ -441,9 +441,14 @@ const FLOWS: Record<string, FlowFn> = {
 
     // Day Zero can land at any hour. If it's evening, open by acknowledging that
     // and that they've just joined — don't run a morning "what are you doing today" framing.
+    // The FIRST 20 seconds of the first call set the entire relationship.
+    // Ivy introduces herself by name, is matter-of-fact (never apologetic)
+    // about being an AI, and frames what this call is — BEFORE any stats,
+    // streaks, circles, or mechanics. Nobody feels at home being told their
+    // streak is zero by a stranger.
     const welcomeLine = isEvening
-      ? `1. WELCOME (1 min): Warm, genuine. "I know it's evening and you've literally just joined — thanks for picking up. This is our first proper conversation; let's set you up right." No morning framing.`
-      : `1. WELCOME (1 min): Warm, genuine. "This is your first call. Give it a real shot."`;
+      ? `1. WELCOME FIRST — nothing else until this lands (1 min): "Hey ${ctx.user_name ?? 'there'} — I'm Ivy. I'm your coach in this thing — AI, yes, but I'll know you better than most humans bother to. Thanks for picking up, especially this late on the day you joined. This call is just us figuring out how to make this work for you." Warm, unhurried, no morning framing. Do NOT mention streaks, circles, or money in your opening lines.`
+      : `1. WELCOME FIRST — nothing else until this lands (1 min): "Hey ${ctx.user_name ?? 'there'} — I'm Ivy. I'm your coach here — AI, yes, but my whole job is knowing you and making sure you do what you said you would. This first call is just us getting set up properly." Warm, unhurried. Do NOT open with streaks, zeros, circles, or money — that data comes later, once it means something.`;
 
     return [
       `THIS CALL: Onboarding — first call with Ivy${isEvening ? ' (evening, brand-new user)' : ''}.`,
@@ -467,7 +472,9 @@ const FLOWS: Record<string, FlowFn> = {
       '',
       `6. SCHEDULE (2 min): Evening call time? Which days? (Morning arming is async — they record a voice note, not a call.)`,
       '',
-      `7. CLOSE: "You've just made your first commitment. Tomorrow morning, drop your voice note — I'll hear it." End with energy.`,
+      `7. CLOSE with an open loop: name the SPECIFIC thing you'll be listening for tomorrow — "Tomorrow morning, drop your voice note about [their first session]. I'll be listening for whether you [their specific plan]." End with energy.`,
+      '',
+      `IF THEY ASK TO START OVER ("start again", "from the beginning"): actually restart — greet them fresh, re-introduce yourself in different words, and walk the flow from the top. Do NOT just repeat your last paragraph.`,
     ].filter(Boolean).join('\n');
   },
 
@@ -703,9 +710,14 @@ class PromptService {
       timing = `They asked a while back (about ${hrs} hour${hrs === 1 ? '' : 's'} ago), so this is the callback they wanted.`;
     }
 
+    const resume = ctx.resumes_interrupted_call
+      ? 'IMPORTANT — RESUME, DON\'T RESTART: the last call was cut short mid-conversation when they asked you to ring back. Check RECENT CALLS / memory for what was already covered and pick up from exactly there. Do NOT re-deliver ground you already covered, do NOT re-introduce the call\'s purpose from scratch — a quick "so, where we left off—" and straight back in.'
+      : '';
+
     return [
       'WHY YOU ARE CALLING: This is the callback THEY asked you for on your last call — you said you would ring back, and you are keeping your word.',
       timing,
+      resume,
       'Acknowledge it naturally in your opening so they know you remembered — e.g. a quick "you asked me to call back" or "right on time, like you wanted." Phrase it your own way; do NOT use a fixed line, and do NOT over-explain it. One light touch, then move into the actual conversation.',
     ].filter(Boolean).join(' ');
   }
@@ -825,6 +837,8 @@ class PromptService {
       successCharityLine,
       stakeReminder,
       `- Keep calls to the target length — Ivy respects their time`,
+      `- CLOSE WITH AN OPEN LOOP: end every call naming the specific thing you'll be listening/asking for next time ("tomorrow I want to hear how the 6am session went") — never a generic goodbye`,
+      `- VOICEMAIL: if you hear an answering-machine greeting or a beep instead of a person, say ONE short line ("It's Ivy — I'll catch you properly later") and END THE CALL immediately. Never deliver the session content to a machine.`,
       `- When the conversation is genuinely done (commitment locked, or a rest day accepted, and you've said goodbye), END THE CALL — use the end_call tool to hang up. Don't keep talking after the goodbye.`,
       '',
       `NEVER:`,

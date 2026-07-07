@@ -142,7 +142,7 @@ class WebhookController {
             ).catch((err) => logger.error('Insight extraction error:', err));
 
             // Keep Ivy's word: if the user asked to be called back, schedule it.
-            callbackService.detectAndSchedule(dbUserId, call.transcript)
+            callbackService.detectAndSchedule(dbUserId, call.transcript, dbCallType)
               .catch((err) => logger.error('Callback detection error:', err));
           }
 
