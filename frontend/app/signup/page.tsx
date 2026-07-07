@@ -17,6 +17,9 @@ function SignupForm() {
   const searchParams = useSearchParams()
   const promoCode = searchParams.get('promo') ?? undefined
   const plan = searchParams.get('plan') ?? undefined
+  // Coach-intent signup (from /for-coaches). Persisted as role='coach' on the
+  // user row, so the post-verify routing can send them down the coach funnel.
+  const isCoach = searchParams.get('as') === 'coach'
 
   const [firstName, setFirstName] = useState('')
   const [lastName, setLastName] = useState('')
@@ -49,6 +52,7 @@ function SignupForm() {
         goal: '',
         region,
         currency,
+        ...(isCoach && { role: 'coach' as const }),
         ...(region === 'US' && { tcpaConsent }),
       })
       // Send magic link with promo code and plan if present
@@ -92,7 +96,7 @@ function SignupForm() {
                   <Sparkles className="w-4 h-4 text-primary" />
                   <span className="text-xs font-medium text-primary uppercase tracking-wider">Free to start</span>
                 </div>
-                <h1 className="text-xl font-bold tracking-tight mb-1.5 text-balance">Create your account</h1>
+                <h1 className="text-xl font-bold tracking-tight mb-1.5 text-balance">{isCoach ? 'Create your coach account' : 'Create your account'}</h1>
                 <p className="text-sm text-muted-foreground">Enter your details and we'll send you a sign-up link — no password needed</p>
                 {promoCode && (
                   <div className="mt-3 flex items-center gap-2 px-3 py-2 rounded-lg bg-primary/10 border border-primary/20">

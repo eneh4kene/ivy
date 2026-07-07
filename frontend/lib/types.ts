@@ -76,7 +76,7 @@ export interface Company {
 }
 
 // User roles for access control
-export type UserRole = 'user' | 'admin' | 'superadmin'
+export type UserRole = 'user' | 'coach' | 'admin' | 'superadmin'
 
 // Workout types
 export type WorkoutStatus = 'PLANNED' | 'COMPLETED' | 'PARTIAL' | 'SKIPPED' | 'MISSED'

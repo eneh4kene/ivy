@@ -1024,6 +1024,7 @@ model CoachProfile {
 
   // Programme identity
   programmeName   String   // e.g. "12-week Fat Loss", "Marathon Prep"
+  discipline      String?  // coach type for discovery + Ivy's framing: "fitness" | "wellness" | "nutrition" | "mindset" | "physio" | "other"
   coachingStyle   String?  // e.g. "direct and data-driven", "nurturing, long-term mindset"
   programmeNotes  String?  @db.Text // general instructions for all clients
 

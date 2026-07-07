@@ -7,6 +7,7 @@ import crypto from 'crypto';
 
 export interface CoachProfileInput {
   programmeName: string;
+  discipline?: string;
   coachingStyle?: string;
   programmeNotes?: string;
   whitelabelEnabled?: boolean;
@@ -359,6 +360,7 @@ class CoachService {
     coach_programme: string | null;
     coach_notes: string | null;
     coach_style: string | null;
+    coach_discipline: string | null;
     brand_name: string | null;
     programme_areas: string | null;
   }> {
@@ -373,6 +375,7 @@ class CoachService {
             coachProfile: {
               select: {
                 programmeName: true,
+                discipline: true,
                 coachingStyle: true,
                 programmeNotes: true,
                 brandName: true,
@@ -385,7 +388,7 @@ class CoachService {
     });
 
     if (!user?.coach) {
-      return { coach_name: null, coach_programme: null, coach_notes: null, coach_style: null, brand_name: null, programme_areas: null };
+      return { coach_name: null, coach_programme: null, coach_notes: null, coach_style: null, coach_discipline: null, brand_name: null, programme_areas: null };
     }
 
     const profile = user.coach.coachProfile;
@@ -394,6 +397,7 @@ class CoachService {
       coach_programme: profile?.programmeName ?? null,
       coach_notes: user.coachNotes ?? profile?.programmeNotes ?? null,
       coach_style: profile?.coachingStyle ?? null,
+      coach_discipline: profile?.discipline ?? null,
       brand_name: (profile?.whitelabelEnabled && profile?.brandName) ? profile.brandName : null,
       programme_areas: (() => {
         const areas = Array.isArray(user.programmeAreas) ? user.programmeAreas as any[] : [];

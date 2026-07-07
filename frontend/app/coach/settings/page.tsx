@@ -11,7 +11,9 @@
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { ArrowLeft, Save, Check, Eye, EyeOff, ChevronDown } from 'lucide-react'
-import { coachApi } from '@/lib/api'
+import { useRouter } from 'next/navigation'
+import { coachApi, usersApi } from '@/lib/api'
+import { useAuthStore } from '@/lib/store/auth.store'
 
 // ─── Toggle switch ─────────────────────────────────────────────────────────────
 
@@ -65,7 +67,17 @@ function Section({ title, subtitle, children }: { title: string; subtitle?: stri
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
+const DISCIPLINES = [
+  { id: 'fitness',   label: 'Fitness / PT' },
+  { id: 'wellness',  label: 'Wellness' },
+  { id: 'nutrition', label: 'Nutrition' },
+  { id: 'mindset',   label: 'Mindset / Performance' },
+  { id: 'physio',    label: 'Physio / Rehab' },
+  { id: 'other',     label: 'Other' },
+] as const
+
 const DEFAULT_PROFILE = {
+  discipline:          '',
   programmeName:       '',
   coachingStyle:       '',
   programmeNotes:      '',
@@ -81,6 +93,9 @@ const DEFAULT_PROFILE = {
 }
 
 export default function CoachSettingsPage() {
+  const router = useRouter()
+  const { user, fetchUser } = useAuthStore()
+  const [phone, setPhone] = useState('')
   const [profile, setProfile] = useState(DEFAULT_PROFILE)
   const [loaded, setLoaded] = useState(false)
   const [saved, setSaved] = useState(false)
@@ -91,6 +106,7 @@ export default function CoachSettingsPage() {
     coachApi.getProfile().then((p) => {
       if (!p) return
       setProfile({
+        discipline:          (p as any).discipline ?? '',
         programmeName:       p.programmeName ?? '',
         coachingStyle:       p.coachingStyle ?? '',
         programmeNotes:      p.programmeNotes ?? '',
@@ -108,6 +124,8 @@ export default function CoachSettingsPage() {
     }).catch(() => setLoaded(true))
   }, [])
 
+  useEffect(() => { if (user?.phone) setPhone(user.phone) }, [user?.phone])
+
   const handleSave = async () => {
     if (!profile.programmeName.trim()) {
       setError('Programme name is required.')
@@ -117,6 +135,7 @@ export default function CoachSettingsPage() {
     setSaving(true)
     try {
       await coachApi.updateProfile({
+        discipline:          profile.discipline || undefined,
         programmeName:       profile.programmeName,
         coachingStyle:       profile.coachingStyle,
         programmeNotes:      profile.programmeNotes,
@@ -130,6 +149,18 @@ export default function CoachSettingsPage() {
         ponderCallTime:      profile.ponderCallTime,
         ponderCallFrequency: profile.ponderCallFrequency,
       })
+      // Phone powers the ponder calls + the welcome call — save if provided.
+      if (phone.trim() && phone.trim() !== user?.phone) {
+        await usersApi.updateProfile({ phone: phone.trim() } as any).catch(() => {})
+      }
+      // First completed setup = coach onboarding done → the partner welcome
+      // call schedules itself server-side. Route into the console.
+      if (user && !user.isOnboarded) {
+        await usersApi.markAsOnboarded().catch(() => {})
+        await fetchUser().catch(() => {})
+        router.replace('/coach')
+        return
+      }
       setSaved(true)
       setTimeout(() => setSaved(false), 2000)
     } catch (err: any) {
@@ -168,6 +199,41 @@ export default function CoachSettingsPage() {
             title="Your programme"
             subtitle="This shapes how Ivy introduces you and runs calls with your clients."
           >
+            <div>
+              <label className={labelClass}>Your discipline</label>
+              <div className="flex flex-wrap gap-2">
+                {DISCIPLINES.map((d) => (
+                  <button
+                    key={d.id}
+                    type="button"
+                    onClick={() => set({ discipline: d.id })}
+                    className={`px-3 py-2 rounded-xl text-xs font-medium border transition-colors ${
+                      p.discipline === d.id
+                        ? 'border-gold-400 bg-gold-400/15 text-gold-200'
+                        : 'border-ink-600 text-ink-300 hover:border-ink-500'
+                    }`}
+                  >
+                    {d.label}
+                  </button>
+                ))}
+              </div>
+              <p className="text-2xs text-ink-400 mt-1.5">How clients discover you, and how Ivy introduces you — &ldquo;your {p.discipline || 'fitness'} coach&rdquo;.</p>
+            </div>
+
+            <div>
+              <label className={labelClass}>
+                Your phone{' '}
+                <span className="text-ink-400 font-normal">— for ponder calls</span>
+              </label>
+              <input
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                placeholder="+44 7700 900000"
+                className={inputClass}
+              />
+              <p className="text-2xs text-ink-400 mt-1.5">Ivy rings you here — the welcome call and your biweekly ponder sessions.</p>
+            </div>
+
             <div>
               <label className={labelClass}>Programme name *</label>
               <input

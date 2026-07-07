@@ -64,6 +64,7 @@ export const usersApi = {
     region?: string
     currency?: string
     tcpaConsent?: boolean
+    role?: 'user' | 'coach'
   }) => {
     const response = await client.post<ApiResponse<User>>('/api/users', data)
     return response.data.data!
@@ -560,6 +561,7 @@ export const adminApi = {
 
 // Coach API
 export interface CoachProfile {
+  discipline?: string
   id: string; userId: string
   programmeName: string; coachingStyle?: string; programmeNotes?: string
   whitelabelEnabled: boolean; brandName?: string; brandLogoUrl?: string

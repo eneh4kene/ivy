@@ -13,6 +13,9 @@ export const createUserSchema = z.object({
     goal: z.string().default(''),
     preferredCharityId: z.string().uuid().optional(),
     tcpaConsent: z.boolean().optional(), // required for US users
+    // Self-serve coach signup ("For coaches" page). Whitelisted — never trust
+    // arbitrary roles from the client.
+    role: z.enum(['user', 'coach']).optional(),
   }),
 });
 

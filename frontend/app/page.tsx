@@ -127,6 +127,9 @@ export default function LandingPage() {
             <Link href="/pricing" className="hidden sm:inline-flex text-sm text-ink-300 hover:text-ink-50 transition-colors px-3 py-2">
               Pricing
             </Link>
+            <Link href="/for-coaches" className="hidden sm:inline-flex text-sm text-ink-300 hover:text-ink-50 transition-colors px-3 py-2">
+              For coaches
+            </Link>
             <Link href="/login" className="text-sm text-ink-300 hover:text-ink-50 transition-colors px-3 py-2">
               Sign in
             </Link>
@@ -297,6 +300,7 @@ export default function LandingPage() {
           <p className="text-xs text-ink-500">© 2026 Ivy. All rights reserved.</p>
           <div className="flex items-center gap-4 text-xs text-ink-400">
             <Link href="/pricing" className="hover:text-ink-100 transition-colors">Pricing</Link>
+            <Link href="/for-coaches" className="hover:text-ink-100 transition-colors">For coaches</Link>
             <Link href="/login" className="hover:text-ink-100 transition-colors">Sign in</Link>
           </div>
         </div>
