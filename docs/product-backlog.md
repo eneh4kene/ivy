@@ -83,6 +83,15 @@ SMS OTP, nudge SMS are all Twilio); WebRTC is an addition.
     "Ivy 🌿" shows on incoming calls instead of a bare number. Tiny build
     (MMS/vCard link), big pickup-rate effect. Do with the next Twilio touch.
 
+### 12. Coach self-serve entry (currently NO public entry point)
+Marketing "Get started" is consumer-only; coaches today are onboarded by hand
+(runbook: coach signs up normally via magic link → founder flips
+`subscriptionTier='COACH'` in SQL → coach lands on /coach/settings → completing
+setup triggers the partner welcome call automatically). Self-serve = "For
+coaches" marketing page + COACH-variant signup + £79 coach checkout
+(STRIPE_PRICE_COACH_GBP already exists in Stripe).
+- **Trigger: the second coach you can't hand-hold personally.**
+
 ---
 
 ## SMALL REFINEMENTS (batch into any nearby work)
