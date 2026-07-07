@@ -60,7 +60,28 @@ SMS OTP, nudge SMS are all Twilio); WebRTC is an addition.
    The memory pipeline already has the data; needs a trigger job + taste.
 7. **Witness feature** — user nominates one friend (not a user) who receives the
    weekly vine report by SMS. Deeper accountability + organic distribution to
-   non-users.
+   non-users. NOTE: the AccountabilityBuddy model (name/email/WhatsApp) already
+   exists and Ivy now pitches it on the first call — this item is about making
+   the buddy actually RECEIVE things (weekly vine report, slack alerts).
+
+### Hooky nuggets (founder brainstorm, 7 Jul — triaged honestly)
+8. **"Embers" — disappearing notes from Ivy** ⭐ the gold one. When Ivy's pattern
+   engine notices something real ("you've kept every Tuesday for a month"), she
+   sends a view-once note — their name, one line, gone when closed. Rarity +
+   ephemerality + being-seen = the strongest hook in the pile, and it's cheap:
+   a messageType with view-once UI + a pattern trigger. Build with proactive
+   pattern texts (#6) — same trigger engine.
+9. **Before/after photos** — proven mechanic in fitness, works for Season Close
+   reveals ("day 1 you vs day 84 you"). Consent-sensitive, storage + UI work.
+   Build when Season Close ships its share card (#5) — they compound.
+10. **"Dream-self" one-time image** — AI-generated future-self visual at
+    onboarding, view-once. RISKY: photoreal future-self is uncanny/cheesy and
+    can land as body-shaming. The on-brand version: generate their FUTURE VINE
+    (a lush season-84 garden with their name, "this is 84 kept days") — same
+    aspiration, zero cringe, pure vine language. Park until garden (#4) exists.
+11. **Save-my-number vCard** — after the first call, text a contact card so
+    "Ivy 🌿" shows on incoming calls instead of a bare number. Tiny build
+    (MMS/vCard link), big pickup-rate effect. Do with the next Twilio touch.
 
 ---
 
