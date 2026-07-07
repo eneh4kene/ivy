@@ -83,7 +83,25 @@ SMS OTP, nudge SMS are all Twilio); WebRTC is an addition.
     "Ivy 🌿" shows on incoming calls instead of a bare number. Tiny build
     (MMS/vCard link), big pickup-rate effect. Do with the next Twilio touch.
 
-### 12. Coach self-serve entry (currently NO public entry point)
+### 12a. Client→coach connect requests (the marketplace dead-end)
+Ivy's coach-escalation nudge points struggling users at the Coaches section,
+but the marketplace is browse-only — the detail page honestly says "ask the
+coach for an invite link." Design when built: "Request to join" on a coach
+profile → notifies the coach (digest/Telegram) → coach accepts in console →
+coachId set (reuse the pendingCoachId acceptance machinery, reversed
+initiator). NOT coach-browses-users — that's a privacy landmine; a possible
+later variant is an opt-in "open to coaching" pool.
+- **Trigger: marketplace matters (>handful of coaches + organic consumers).**
+
+### 12b. Coach client management (leave / remove / transfer)
+Today: a user with a coach who clicks another coach's invite gets a hard
+"You already have a coach on Ivy" — no leave, no transfer, no coach-side
+remove. Fine at beta scale (ask the founder); needs real flows before
+multi-coach scale: client "leave coach", coach "remove client", both ends
+notified, prompts stop referencing the old coach immediately.
+- **Trigger: first real coach-switch request.**
+
+### 12. Coach self-serve entry — ✅ SHIPPED 7 Jul (for-coaches page → signup?as=coach → /coach/join £79 → settings → welcome call)
 Marketing "Get started" is consumer-only; coaches today are onboarded by hand
 (runbook: coach signs up normally via magic link → founder flips
 `subscriptionTier='COACH'` in SQL → coach lands on /coach/settings → completing
