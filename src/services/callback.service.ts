@@ -35,7 +35,7 @@ class CallbackService {
    * Inspect a completed call's transcript; schedule a callback if the user asked
    * for one. Best-effort: never throws into the webhook (caller should .catch).
    */
-  async detectAndSchedule(userId: string, transcript: string): Promise<void> {
+  async detectAndSchedule(userId: string, transcript: string, originalCallType?: string): Promise<void> {
     if (!this.client || !transcript?.trim()) return;
 
     const minutes = await this.extractCallbackDelay(transcript);
@@ -63,11 +63,17 @@ class CallbackService {
     }
 
     try {
-      // Mark it as a callback so the prompt can have Ivy acknowledge she's
-      // returning the call the user asked for (naturally, not scripted).
-      const call = await callService.scheduleCall(userId, 'RESCUE', scheduledAt, {
+      // Resume the call they cut short, as the SAME call type — an onboarding
+      // interrupted by "call me back in a minute" must come back as onboarding,
+      // not a rescue (learned live: the first ever callback returned as RESCUE
+      // and pitched skip-recovery to a brand-new user's voicemail). Markers let
+      // the prompt have Ivy acknowledge the callback AND pick up where the last
+      // call left off instead of starting over.
+      const resumeType = (originalCallType ?? 'RESCUE') as Parameters<typeof callService.scheduleCall>[1];
+      const call = await callService.scheduleCall(userId, resumeType, scheduledAt, {
         is_callback: true,
         callback_requested_minutes: clamped,
+        resumes_interrupted_call: true,
       });
       logger.info(`Callback honoured: ${call.id} for user ${userId} in ${clamped}m (${scheduledAt.toISOString()})`);
     } catch (err) {
