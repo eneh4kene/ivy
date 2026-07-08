@@ -333,11 +333,14 @@ class CallService {
           select: { callType: true, callSummary: true, scheduledAt: true, status: true },
         }),
 
-        // Layer 3: long-term curated memories
+        // Layer 3: long-term curated memories. Fetch a wider window and select
+        // identity-first below — pure take-8-by-recency let foundational facts
+        // (their WHY, life events) scroll out of Ivy's head after a few weeks,
+        // making calls feel dumber over time instead of smarter.
         prisma.callMemory.findMany({
           where: { userId },
           orderBy: { createdAt: 'desc' },
-          take: 8,
+          take: 24,
           select: { content: true, category: true },
         }),
 
@@ -371,7 +374,18 @@ class CallService {
       }
 
       if (ltMemories.length) {
-        long_term_memories = ltMemories
+        // Identity-first selection: the facts that define WHO they are and WHY
+        // they're doing this (motivation, life events, breakthroughs) stay in
+        // Ivy's head permanently; the remaining slots go to the freshest
+        // memories. Cap 10 to keep the prompt lean.
+        const identity = ltMemories.filter((m) =>
+          ['motivation', 'life_event', 'breakthrough'].includes(m.category));
+        const rest = ltMemories.filter((m) => !identity.includes(m));
+        const seen = new Set<string>();
+        const selected = [...identity.slice(0, 5), ...rest]
+          .filter((m) => !seen.has(m.content) && seen.add(m.content))
+          .slice(0, 10);
+        long_term_memories = selected
           .map((m) => `${m.category}: ${m.content}`)
           .join('\n');
       }
@@ -620,6 +634,7 @@ class CallService {
       probe_for_specificity: (user?.inferredProfile as any)?.probe_for_specificity ?? false,
       most_effective_nudge: (user?.inferredProfile as any)?.most_effective_nudge ?? null,
       high_risk_signals: (user?.inferredProfile as any)?.high_risk_signals ?? [],
+      recurring_blockers: (user?.inferredProfile as any)?.recurring_blockers ?? null,
       preferred_register: (user?.inferredProfile as any)?.preferred_register ?? null,
       behavioural_modifiers: (user?.inferredProfile as any)?.behavioural_modifiers ?? null,
 

@@ -29,6 +29,7 @@ WHAT TO INCLUDE:
 - Specific opening (reference their name, what they planned, their streak if relevant — from context)
 - The right verification for their track
 - Deflection patterns to watch for (from avoidance_signals AND recent call history)
+- If recurring_blockers is set: these carry REAL counts — when the same blocker surfaces, name the count once ("that's the third time work has eaten the evening"); precision lands, vagueness doesn't. Never scold.
 - Which nudge to lead with if they hesitate (from most_effective_nudge)
 - Memorial season override if season_type is "memorial": skip all accountability, check in on them as a person only
 - Re-engagement override if days_since_last_interaction > 3: this is a check-in, not a session — no pressure
@@ -90,6 +91,7 @@ class BriefService {
       // Stats
       current_streak: ctx.current_streak,
       days_since_workout: ctx.days_since_workout,
+      recurring_blockers: ctx.recurring_blockers,
       days_since_last_interaction: ctx.days_since_last_interaction,
       workouts_this_week: ctx.workouts_this_week,
       total_workouts: ctx.total_workouts,

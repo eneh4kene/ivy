@@ -814,6 +814,14 @@ class PromptService {
     if (risks.length) {
       lines.push(`Listen for: ${risks.join(', ')} — these precede misses. Probe gently if you hear them.`);
     }
+    const blockers = Array.isArray(ctx.recurring_blockers) ? ctx.recurring_blockers : [];
+    if (blockers.length) {
+      const bl = blockers
+        .slice(0, 3)
+        .map((b: any) => `"${b.blocker}" (${b.times_seen}x)`)
+        .join(', ');
+      lines.push(`RECURRING BLOCKERS with real counts: ${bl}. When one comes up again, you may name the count plainly — "that's the ${'$'}{n}th time" lands harder than vague pattern talk. Once, as an observation, never as a scolding.`);
+    }
     if (ctx.preferred_register && ctx.preferred_register !== 'direct') {
       const reg: Record<string, string> = {
         gentle: 'gentle — softness over directness',

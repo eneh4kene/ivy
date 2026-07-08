@@ -28,6 +28,9 @@ export interface CallInsights {
 export interface InferredProfile {
   inferred_patterns: string | null;
   notable_observation: string | null;
+  /** Recurring blockers with evidence-based counts across the analysed calls —
+   *  lets Ivy say "that's the 4th time work ran late" instead of vague pattern talk. */
+  recurring_blockers: Array<{ blocker: string; times_seen: number; last_seen: string }> | null;
   commitment_style: 'specific' | 'vague' | 'variable';
   most_effective_nudge: string | null;
   high_risk_signals: string[];
@@ -322,6 +325,7 @@ class InsightService {
       const responseSchema = `{
   "inferred_patterns": "string or null",
   "notable_observation": "string or null",
+  "recurring_blockers": [{"blocker": "short label e.g. 'work ran late'", "times_seen": 3, "last_seen": "ISO date"}] or null — COUNT actual occurrences of obstacles_mentioned across the calls below; only include blockers seen 2+ times; times_seen must be a real count from the data, never estimated,
   "commitment_style": "specific | vague | variable",
   "most_effective_nudge": "consequence_framing | identity | gift_frame | social_proof | minimum_negotiation | null",
   "high_risk_signals": ["array of strings"],
