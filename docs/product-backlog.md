@@ -101,6 +101,32 @@ multi-coach scale: client "leave coach", coach "remove client", both ends
 notified, prompts stop referencing the old coach immediately.
 - **Trigger: first real coach-switch request.**
 
+### 12c. Coach-scoped circles (parked 9 Jul — decided shape, waiting on client volume)
+Question raised: should coaches start/manage their own circles? Assessment
+after reading the full lifecycle (circle.service):
+- **How circles work today:** consumers are auto-assigned at Day-Zero to the
+  fullest open peer circle matching their track (+company scope for B2B), 6-8
+  max, or seed a new one as facilitator. Layers: sprint goals (pledge/theme),
+  group consistency, witnessed stakes, circle games, Ivy referencing standing
+  on calls. Coaches are explicitly excluded (autoAssign returns null). The
+  schema already anticipates non-peer tiers (`tier: 'peer' | 'pro' |
+  'celebrity'` — 'pro' unused).
+- **Decision: yes eventually, but auto-formed and coach-OBSERVED, never
+  coach-managed or coach-inhabited.** When a coach has ≥5 active clients,
+  auto-form a coach-scoped circle (tier 'pro', coach's brand as name) and make
+  it THE circle for those clients (replaces peer assignment — avoids the
+  two-circles problem; autoAssign's one-active-circle idempotency stays true).
+  Coach sees group pulse in the console but is NOT a member: a coach in the
+  room flips clients from confiding ("I'm struggling") to performing, and the
+  7am honesty is the data moat. No management UI — coaches neglect admin
+  surfaces; Ivy runs the circle as she does today.
+- **Why not now:** a 3-client circle is a dead room, and dead rooms teach
+  users the feature is a ghost town. Also the standing rule: consumer beta
+  must prove retention before unparking.
+- **Cheap interim if wanted:** console "group pulse" card (aggregate book
+  consistency) — data exists, no circle mechanics needed.
+- **Trigger: first coach reaches 5+ active clients.**
+
 ### 12. Coach self-serve entry — ✅ SHIPPED 7 Jul (for-coaches page → signup?as=coach → /coach/join £79 → settings → welcome call)
 Marketing "Get started" is consumer-only; coaches today are onboarded by hand
 (runbook: coach signs up normally via magic link → founder flips
