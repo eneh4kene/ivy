@@ -55,6 +55,18 @@ function verifyRetellSignature(req: Request): string | null {
   return null;
 }
 
+/**
+ * True call duration in seconds from a Retell call object. Retell reports
+ * `duration_ms` at the top level (there is NO call_analysis.call_duration —
+ * reading it wrote duration=0 on every call row and logged 0 minutes of
+ * Retell usage for cost tracking). Timestamp diff is the fallback.
+ */
+function retellDurationSecs(call: any): number {
+  const ms = call?.duration_ms
+    ?? ((call?.end_timestamp && call?.start_timestamp) ? call.end_timestamp - call.start_timestamp : 0);
+  return Math.max(0, Math.round(ms / 1000));
+}
+
 class WebhookController {
   /**
    * Handle Retell AI webhook events
@@ -92,7 +104,7 @@ class WebhookController {
           break;
 
         case 'call_ended': {
-          const durationSecs: number = call.call_analysis?.call_duration ?? 0;
+          const durationSecs = retellDurationSecs(call);
           const reason: string = call.disconnection_reason ?? 'completed';
 
           if (dbCallId) {
@@ -114,13 +126,16 @@ class WebhookController {
         }
 
         case 'call_analyzed': {
-          const durationSecs = call.call_analysis?.call_duration ?? 0;
+          const durationSecs = retellDurationSecs(call);
           const outcome = call.call_analysis?.user_sentiment ?? 'neutral';
 
           if (dbCallId) {
             await callService.updateCallStatus(dbCallId, 'COMPLETED', {
               transcript: call.transcript || '',
               sentiment: outcome,
+              // call_ended already wrote duration, but re-assert it here — the
+              // analyzed payload is the more settled record of the two.
+              ...(durationSecs > 0 && { duration: durationSecs }),
             });
           }
 
