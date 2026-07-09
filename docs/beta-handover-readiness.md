@@ -5,6 +5,16 @@ Vercel `www.ivykeeps.life`, prod Neon DB, Stripe in **test mode**). Everything b
 exercised for real — no mocks — by driving the deployed app with a browser and checking
 the resulting rows in the prod DB and objects in Stripe.
 
+**UPDATE 9 Jul 2026:** the Twilio KYC blocker below is RESOLVED (was still marked
+pending in this doc, which caused a stale re-verification to report it as the live
+blocker again). Confirmed directly against the Twilio account via `fly ssh console`:
+both numbers are purchased and voice+SMS capable — `+16506635861` (US) and
+`+447480534197` (UK, regulatory bundle approved). The one real remaining item is
+unchanged: a live voice call has never been proven end-to-end (audio + transcript
+landing on the call row). Separately, prod (Fly v77, deployed 7 Jul) is one commit
+behind `master` as of 9 Jul, and the e2e suite hasn't been re-run since 2 Jul despite
+~15 feature commits landing 3–7 Jul.
+
 ## ✅ Proven working end-to-end (live prod)
 
 1. **Signup → magic link → onboarding → stake setup → checkout.** A fresh user walked
@@ -22,8 +32,9 @@ the resulting rows in the prod DB and objects in Stripe.
    donation row targets Against Malaria Foundation; the beta guard correctly skipped
    the real Every.org payout (test mode).
 5. **Ivy chat is alive.** Real message → real Anthropic reply round-trip on prod.
-   The "Call me now" chat action creates and schedules the call correctly (the dial
-   itself is blocked by Twilio — see blockers).
+   The "Call me now" chat action creates and schedules the call correctly. Twilio is
+   configured and numbers are live (see below) — the dial itself just hasn't been
+   proven end-to-end with a real answered call yet.
 6. **Every consumer surface renders authed** (home, ivy, circles, impact, daily,
    settings) with the bottom nav, plus PWA manifest / service worker / offline page.
 7. **Playwright e2e suite: 8/8 green** on live prod, mobile + desktop
@@ -35,35 +46,37 @@ the resulting rows in the prod DB and objects in Stripe.
 
 ## 🔴 BLOCKER — founder must fix before handing to beta users
 
-**UPDATE 6 Jul 2026:** a NEW Twilio account ("Ivy API", upgraded, $20 balance) replaced the
-old one; its credentials are live on Fly and authenticate. The ONLY remaining step is
-**KYC verification in Trust Hub** (Console → Trust Hub → create/submit the customer
-profile — identity + address; founder-only). Twilio blocks ALL number purchases until
-approved. Once approved, Claude buys the number + wires webhooks + geo-permissions +
-sets `TWILIO_PHONE_NUMBER` automatically. A **UK (+44) number additionally needs the UK
-regulatory bundle** (address proof) — do that before coach handover so calls come from
-+44, not +1. Original context below:
+**RESOLVED 7 Jul 2026 — Twilio is fully configured, do not re-flag this as pending.**
+The account history: old account had invalid creds (401) → replaced with a new account
+("Ivy API") → Trust Hub KYC submitted and **approved** → numbers purchased and verified
+live on the account (checked directly via the Twilio API from the Fly box, not just
+Fly secrets):
 
-**Twilio credentials were invalid (HTTP 401 / error 20003).** Until fixed:
-- **No outbound calls connect** (welcome, morning, evening, rescue, callbacks).
-- **SMS phone-verification fails**, which blocks onboarding for every real client
-  (only the e2e fast-path skips it).
+- `+16506635861` (US, voice+SMS)
+- `+447480534197` (UK, voice+SMS, regulatory bundle approved)
 
-Fix: log into the Twilio console → confirm the account is active → copy the current
-Account SID + Auth Token → then:
+Both are set as `TWILIO_PHONE_NUMBER_US` / `TWILIO_PHONE_NUMBER` on Fly, webhooks wired
+at purchase (`voice_url`→`/webhooks/twilio-inbound`, `sms_url`→`/webhooks/twilio-sms`),
+and `smsFrom()` auto-routes by destination (+44→UK number, else US). A test SMS to the
+founder sent successfully.
+
+**The one thing that is still actually unproven:** a real live voice call, start to
+finish — dial connects, founder answers, and a transcript lands on the `calls` row
+afterwards. Do this before beta handover:
+
+1. Onboard with your own number (or use an existing account).
+2. Tap **Call me now** in the Ivy chat.
+3. Answer, talk for a bit, hang up.
+4. Confirm the `calls` row got a `transcript` and `callSummary` populated (check
+   Neon or the ops dashboard), not just a `completed` status.
+
+If you want to re-verify any of this yourself rather than trust this doc, don't rely on
+reading Fly secrets (they're write-only) — query the Twilio account directly, e.g. from
+the Fly box:
 
 ```bash
-fly secrets set TWILIO_AUTH_TOKEN=<token> -a ivykeeps-api   # and SID if it changed
+fly ssh console -a ivykeeps-api -C "node -e \"const s=process.env.TWILIO_ACCOUNT_SID,t=process.env.TWILIO_AUTH_TOKEN;fetch('https://api.twilio.com/2010-04-01/Accounts/'+s+'/IncomingPhoneNumbers.json',{headers:{Authorization:'Basic '+Buffer.from(s+':'+t).toString('base64')}}).then(r=>r.json()).then(j=>console.log(JSON.stringify(j.incoming_phone_numbers?.map(n=>n.phone_number))))\""
 ```
-
-Verify from the Fly box (should print `HTTP 200`):
-
-```bash
-fly ssh console -a ivykeeps-api -C "node -e \"const s=process.env.TWILIO_ACCOUNT_SID,t=process.env.TWILIO_AUTH_TOKEN;fetch('https://api.twilio.com/2010-04-01/Accounts/'+s+'.json',{headers:{Authorization:'Basic '+Buffer.from(s+':'+t).toString('base64')}}).then(r=>console.log('HTTP',r.status))\""
-```
-
-Then do one live proof with your own account: onboard, tap **Call me now** in the Ivy
-chat, take the call, and confirm a transcript lands on the call row afterwards.
 
 ## 🛠 Fixed during this pass (all deployed)
 
@@ -86,8 +99,9 @@ chat, take the call, and confirm a transcript lands on the call row afterwards.
 
 - **Stripe is in test mode** — clients use card `4242 4242 4242 4242`. Conversion to
   live keys is a secrets flip (see docs/beta-launch-runbook.md).
-- **Live voice call end-to-end** (audio + transcript) unproven since the Twilio break;
-  everything up to the dial is proven. One founder test call closes this.
+- **Live voice call end-to-end** (audio + transcript) still unproven — Twilio is fully
+  configured and numbers are live, but no one has actually answered a call and checked
+  the transcript lands. One founder test call closes this (see blocker section above).
 - Collective-charity-goal donations are deliberately dormant (Phase 6); no UI promises
   them.
 - Coach marketplace is browse-only by design (no pricing/ratings shown).
