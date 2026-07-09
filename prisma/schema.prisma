@@ -120,6 +120,7 @@ model User {
   lifeMarkers      LifeMarker[]
   messages         Message[]
   ivyCircles       IvyCircleMember[]
+  coachCircles     IvyCircle[]       @relation("CoachCircles")
   seasons          Season[]
   impactStories    ImpactStory[]
   accountabilityBuddy AccountabilityBuddy?
@@ -729,6 +730,13 @@ model IvyCircle {
   companyId String?
   company   Company? @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
+  // Coach-scoped circle (tier 'pro'): auto-formed when a coach reaches 5+
+  // active clients; it becomes THE circle for that coach's clients. The coach
+  // OBSERVES via the console pulse — they are never a member (a coach in the
+  // room turns confiding into performing).
+  coachId String?
+  coach   User?   @relation("CoachCircles", fields: [coachId], references: [id], onDelete: SetNull)
+
   name        String
   description String?
   track       String  @default("fitness") // fitness | focus | sleep | balance
@@ -750,6 +758,7 @@ model IvyCircle {
   games       CircleGame[]
 
   @@index([companyId])
+  @@index([coachId])
   @@map("ivy_circles")
 }
 

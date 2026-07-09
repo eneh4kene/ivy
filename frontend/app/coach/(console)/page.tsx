@@ -16,7 +16,7 @@ import {
   MessageCircle, ChevronRight, Link2, UserX, Shield,
   PhoneCall, Share2, X,
 } from 'lucide-react'
-import { coachApi, type CoachProfile, type CoachClient } from '@/lib/api'
+import { coachApi, type CoachProfile, type CoachClient, type CoachPulse } from '@/lib/api'
 import { useAuthStore } from '@/lib/store/auth.store'
 import { ClientRow, SectionHeader, segmentClients } from '@/components/coach/ClientRoster'
 
@@ -26,6 +26,7 @@ export default function CoachDashboard() {
   const { user } = useAuthStore()
   const [profile, setProfile] = useState<CoachProfile | null>(null)
   const [clients, setClients] = useState<CoachClient[]>([])
+  const [pulse, setPulse] = useState<CoachPulse | null>(null)
   const [inviteUrl, setInviteUrl] = useState('')
   const [copied, setCopied] = useState(false)
   const [loadError, setLoadError] = useState('')
@@ -53,6 +54,8 @@ export default function CoachDashboard() {
     }).catch((err) => {
       setLoadError(err.message ?? 'Failed to load coach data')
     })
+    // Pulse is additive — its failure never blocks the console.
+    coachApi.getPulse().then(setPulse).catch(() => {})
   }, [])
 
   const handleCopy = () => {
@@ -195,6 +198,38 @@ export default function CoachDashboard() {
             </div>
           ))}
         </div>
+
+        {/* ── Group pulse — the book as one number ── */}
+        {pulse && pulse.activeClients > 0 && pulse.rate !== null && (
+          <div className="rounded-2xl surface p-4 mb-5 animate-fade-in">
+            <div className="flex items-center justify-between mb-1">
+              <p className="text-2xs font-semibold uppercase tracking-widest text-ink-400">Group pulse</p>
+              {pulse.circle && (
+                <span className="text-2xs text-gold-400/80 font-medium truncate max-w-[50%]">
+                  {pulse.circle.name} · {pulse.circle.size} in circle
+                </span>
+              )}
+            </div>
+            <div className="flex items-end gap-3">
+              <p className="font-display text-4xl font-semibold text-ink-50 tabular-nums leading-none">
+                {pulse.rate}<span className="text-xl text-ink-400">%</span>
+              </p>
+              <div className="pb-0.5">
+                <p className="text-xs text-ink-300">of planned days kept this week</p>
+                {pulse.prevRate !== null && pulse.prevRate !== pulse.rate && (
+                  <p className={`text-2xs font-medium ${pulse.rate >= pulse.prevRate ? 'text-sage-400' : 'text-ember-400'}`}>
+                    {pulse.rate >= pulse.prevRate ? '▲' : '▼'} {Math.abs(pulse.rate - pulse.prevRate)} vs last week
+                  </p>
+                )}
+              </div>
+            </div>
+            {pulse.topPerformers.length > 0 && (
+              <p className="text-2xs text-ink-400 mt-2">
+                Carrying the group: <span className="text-ink-200">{pulse.topPerformers.join(', ')}</span>
+              </p>
+            )}
+          </div>
+        )}
 
         {/* ── Invite link ── */}
         <div className="glass-gold rounded-2xl p-4 mb-6">

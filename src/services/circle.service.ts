@@ -27,6 +27,7 @@ class CircleService {
     tier: string
     seasonTheme?: string
     companyId?: string
+    coachId?: string
     maxSize?: number
   }) {
     const circle = await prisma.ivyCircle.create({
@@ -36,6 +37,7 @@ class CircleService {
         tier: data.tier,
         seasonTheme: data.seasonTheme,
         companyId: data.companyId,
+        coachId: data.coachId,
         maxSize: data.maxSize ?? (data.tier === 'pro' || data.tier === 'celebrity' ? 4 : 8),
       },
       include: { members: { include: { user: { select: { id: true, firstName: true } } } } },
@@ -189,12 +191,30 @@ class CircleService {
   ): Promise<{ circleId: string; created: boolean } | null> {
     const user = await prisma.user.findUnique({
       where: { id: userId },
-      select: { id: true, track: true, companyId: true, subscriptionTier: true },
+      select: { id: true, track: true, companyId: true, subscriptionTier: true, coachId: true },
     })
     if (!user) throw new NotFoundError('User not found')
 
     // Coaches don't belong to peer accountability circles.
     if (user.subscriptionTier === 'COACH') return null
+
+    // Coached clients belong with their coach's cohort, not a random peer pod.
+    // ensureCoachCircle forms the circle at the threshold and migrates the
+    // whole book (including this user) into it — checked BEFORE the generic
+    // idempotency below, or a coached user already sitting in a peer circle
+    // would short-circuit and never move.
+    if (user.coachId) {
+      const coachCircle = await this.ensureCoachCircle(user.coachId)
+      if (coachCircle) {
+        const inIt = await prisma.ivyCircleMember.findFirst({
+          where: { userId, circleId: coachCircle.id, isActive: true },
+          select: { id: true },
+        })
+        if (inIt) return { circleId: coachCircle.id, created: false }
+        // Coach circle exists but this user couldn't be placed (full) — fall
+        // through to peer assignment so they're never circle-less.
+      }
+    }
 
     // Idempotent: already placed in an active circle?
     const existing = await prisma.ivyCircleMember.findFirst({
@@ -248,6 +268,92 @@ class CircleService {
       `Auto-assigned ${userId} to NEW circle ${circle.id} as facilitator (track=${track})`,
     )
     return { circleId: circle.id, created: true }
+  }
+
+  // ── Coach-scoped circles (backlog 12c) ─────────────────────────────────────
+
+  /** Active clients required before a coach circle forms — below this a
+   *  circle is a dead room, which is worse than a peer pod. */
+  private static readonly COACH_CIRCLE_THRESHOLD = 5
+
+  /**
+   * Form/maintain the coach's client circle. Called from autoAssignToCircle
+   * (every coached client's Day-Zero) and when an existing user links to a
+   * coach — so the 5th activation is the kickoff, whichever path it arrives by.
+   *
+   * Shape (deliberate): tier 'pro', named after the coach's brand/programme,
+   * clients migrated OUT of peer pods INTO it (one circle per client — the
+   * one-active-circle assumption elsewhere stays true). The coach observes
+   * through the console pulse and is NEVER a member: a coach in the room turns
+   * 7am confiding into performing, and the honesty is the data moat.
+   *
+   * Returns the circle when it exists (formed now or earlier), else null.
+   */
+  async ensureCoachCircle(coachId: string): Promise<{ id: string; name: string } | null> {
+    const clients = await prisma.user.findMany({
+      where: { coachId, isOnboarded: true, isActive: true },
+      select: { id: true, track: true },
+    })
+
+    let circle = await prisma.ivyCircle.findFirst({
+      where: { coachId, isActive: true },
+      orderBy: { createdAt: 'asc' },
+      select: { id: true, name: true },
+    })
+
+    if (!circle) {
+      if (clients.length < CircleService.COACH_CIRCLE_THRESHOLD) return null
+
+      const [profile, coach] = await Promise.all([
+        prisma.coachProfile.findUnique({
+          where: { userId: coachId },
+          select: { programmeName: true, brandName: true, whitelabelEnabled: true },
+        }),
+        prisma.user.findUnique({ where: { id: coachId }, select: { firstName: true } }),
+      ])
+      const name =
+        (profile?.whitelabelEnabled && profile.brandName) ||
+        profile?.programmeName ||
+        `${coach?.firstName ?? 'Coach'}'s Cohort`
+
+      // Dominant track across the book — the circle experience is track-themed.
+      const trackTally = new Map<string, number>()
+      for (const c of clients) {
+        const t = c.track || 'fitness'
+        trackTally.set(t, (trackTally.get(t) ?? 0) + 1)
+      }
+      const track = [...trackTally.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? 'fitness'
+
+      const created = await this.createCircle({ name, track, tier: 'pro', coachId, maxSize: 10 })
+      circle = { id: created.id, name: created.name }
+      logger.info(`Coach circle formed for ${coachId}: ${circle.id} "${name}" (${clients.length} clients)`)
+    }
+
+    // Migrate every active client in — moving them out of peer pods. Full
+    // circle (book > 10): remaining clients stay in their peer pods; an
+    // overflow second circle is parked until a real book needs it.
+    for (const client of clients) {
+      const memberships = await prisma.ivyCircleMember.findMany({
+        where: { userId: client.id, isActive: true },
+        select: { circleId: true },
+      })
+      if (memberships.some((m) => m.circleId === circle!.id)) continue
+      try {
+        await this.addMember(circle.id, client.id, 'member')
+      } catch (err) {
+        if (err instanceof BadRequestError) {
+          logger.warn(`Coach circle ${circle.id} full — ${client.id} stays in peer pod`)
+          continue
+        }
+        throw err
+      }
+      for (const m of memberships) {
+        await this.removeMember(m.circleId, client.id)
+      }
+      logger.info(`Moved client ${client.id} into coach circle ${circle.id}`)
+    }
+
+    return circle
   }
 
   async setSprintGoal(circleId: string, data: {

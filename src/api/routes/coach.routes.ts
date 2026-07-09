@@ -161,6 +161,15 @@ router.get('/clients', requireCoach, async (req: AuthRequest, res: Response, nex
   } catch (err) { next(err); }
 });
 
+// GET /api/coach/pulse — the book as one number (week's days-kept rate,
+// trend vs last week, top performers, coach circle when formed)
+router.get('/pulse', requireCoach, async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const pulse = await coachService.getBookPulse(req.user!.id);
+    res.json({ success: true, data: pulse });
+  } catch (err) { next(err); }
+});
+
 // GET /api/coach/clients/:id
 router.get('/clients/:id', requireCoach, async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {

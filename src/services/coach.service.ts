@@ -309,6 +309,13 @@ class CoachService {
         pendingCoachId: null,
       },
     });
+
+    // An already-onboarded user linking to a coach can be the activation that
+    // tips the book over the coach-circle threshold — check now, since their
+    // Day-Zero (the usual trigger) already ran. Fire-and-forget.
+    import('./circle.service')
+      .then(({ default: circleService }) => circleService.ensureCoachCircle(user.pendingCoachId!))
+      .catch((err) => logger.warn(`ensureCoachCircle failed after link for ${userId}:`, err));
   }
 
   async declineCoachInvite(userId: string): Promise<void> {
@@ -351,6 +358,22 @@ class CoachService {
         coachLinkedAt: null,
       },
     });
+
+    // Leaving the coach also means leaving the coach's circle — re-seat them
+    // in a peer pod so they're never circle-less. Fire-and-forget.
+    (async () => {
+      const { default: circleService } = await import('./circle.service');
+      const coachCircles = await prisma.ivyCircleMember.findMany({
+        where: { userId: client.id, isActive: true, circle: { coachId: { not: null } } },
+        select: { circleId: true },
+      });
+      for (const m of coachCircles) {
+        await circleService.removeMember(m.circleId, client.id);
+      }
+      if (coachCircles.length > 0) {
+        await circleService.autoAssignToCircle(client.id);
+      }
+    })().catch((err) => logger.warn(`Coach-circle unlink cleanup failed for ${client.id}:`, err));
   }
 
   // ── Coach context for Ivy calls ────────────────────────────────────────────
@@ -407,6 +430,67 @@ class CoachService {
   }
 
   // ── PT weekly digest ───────────────────────────────────────────────────────
+
+  /**
+   * Group pulse — the coach's whole book as one number: % of planned days
+   * kept (COMPLETED/PARTIAL over planned workouts, same semantics as circle
+   * group-consistency) this week vs last, plus who's carrying the group and
+   * the coach circle if one has formed.
+   */
+  async getBookPulse(coachId: string) {
+    const clients = await prisma.user.findMany({
+      where: { coachId, isOnboarded: true, isActive: true },
+      select: { id: true, firstName: true },
+    });
+
+    const circle = await prisma.ivyCircle.findFirst({
+      where: { coachId, isActive: true },
+      select: { id: true, name: true, size: true },
+    });
+
+    if (clients.length === 0) {
+      return { rate: null, prevRate: null, activeClients: 0, topPerformers: [], circle };
+    }
+
+    const now = Date.now();
+    const weekAgo = new Date(now - 7 * 86_400_000);
+    const twoWeeksAgo = new Date(now - 14 * 86_400_000);
+    const userIds = clients.map((c) => c.id);
+
+    const workouts = await prisma.workout.findMany({
+      where: { userId: { in: userIds }, plannedDate: { gte: twoWeeksAgo } },
+      select: { userId: true, status: true, plannedDate: true },
+    });
+
+    const kept = (s: string) => s === 'COMPLETED' || s === 'PARTIAL';
+    const thisWeek = workouts.filter((w) => w.plannedDate >= weekAgo);
+    const lastWeek = workouts.filter((w) => w.plannedDate < weekAgo);
+    const rateOf = (ws: typeof workouts) =>
+      ws.length > 0 ? Math.round((ws.filter((w) => kept(w.status)).length / ws.length) * 100) : null;
+
+    // Who's carrying the group this week (min 2 planned days to qualify)
+    const byUser = new Map<string, { kept: number; total: number }>();
+    for (const w of thisWeek) {
+      const e = byUser.get(w.userId) ?? { kept: 0, total: 0 };
+      e.total++;
+      if (kept(w.status)) e.kept++;
+      byUser.set(w.userId, e);
+    }
+    const topPerformers = [...byUser.entries()]
+      .filter(([, e]) => e.total >= 2)
+      .sort((a, b) => b[1].kept / b[1].total - a[1].kept / a[1].total)
+      .slice(0, 3)
+      .map(([id]) => clients.find((c) => c.id === id)?.firstName)
+      .filter(Boolean) as string[];
+
+    return {
+      rate: rateOf(thisWeek),
+      prevRate: rateOf(lastWeek),
+      activeClients: clients.length,
+      topPerformers,
+      circle,
+    };
+  }
 
   async sendWeeklyDigestToAllCoaches() {
     const coaches = await prisma.user.findMany({

@@ -571,6 +571,13 @@ export interface CoachProfile {
   ponderCallTime?: string
   ponderCallFrequency?: string
 }
+export interface CoachPulse {
+  rate: number | null
+  prevRate: number | null
+  activeClients: number
+  topPerformers: string[]
+  circle: { id: string; name: string; size: number } | null
+}
 export interface CoachClient {
   id: string; firstName: string; lastName: string; email: string
   track: string; goal: string; coachNotes?: string
@@ -642,6 +649,10 @@ export const coachApi = {
   },
   getInviteLink: async (): Promise<{ token: string; url: string }> => {
     const response = await client.get<ApiResponse<{ token: string; url: string }>>('/api/coach/invite-link')
+    return response.data.data!
+  },
+  getPulse: async (): Promise<CoachPulse> => {
+    const response = await client.get<ApiResponse<CoachPulse>>('/api/coach/pulse')
     return response.data.data!
   },
   resetInviteLink: async (): Promise<{ token: string; url: string }> => {
