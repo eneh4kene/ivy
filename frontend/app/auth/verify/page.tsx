@@ -2,7 +2,7 @@
 
 import { Suspense, useEffect, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { authApi } from '@/lib/api'
+import { authApi, usersApi } from '@/lib/api'
 import { useAuthStore } from '@/lib/store/auth.store'
 import { postLoginDestination } from '@/lib/auth-routing'
 
@@ -26,12 +26,28 @@ function VerifyContent() {
       try {
         const { accessToken, user } = await authApi.verifyMagicLink(token)
         setToken(accessToken)
-        setUser(user)
+
+        // Coach intent from /signup?as=coach: when the account already existed,
+        // signup couldn't set role — the flag carries the intent across the
+        // magic-link round-trip and the server applies it only to stranded
+        // half-signups (role 'user', FREE, not onboarded).
+        let authedUser = user
+        if (typeof window !== 'undefined' && window.localStorage.getItem('ivy_coach_intent') === '1') {
+          window.localStorage.removeItem('ivy_coach_intent')
+          if (user.role === 'user' && user.subscriptionTier === 'FREE' && !user.isOnboarded) {
+            try {
+              await usersApi.updateProfile({ role: 'coach' } as any)
+              authedUser = { ...user, role: 'coach' as const }
+            } catch { /* non-fatal — they can restart from /for-coaches */ }
+          }
+        }
+
+        setUser(authedUser)
         setStatus('success')
 
         // postLoginDestination is the single source of truth for post-auth
         // routing (coach funnel, consumer onboarding, B2B) — never fork it here.
-        setTimeout(() => router.push(postLoginDestination(user)), 1000)
+        setTimeout(() => router.push(postLoginDestination(authedUser)), 1000)
       } catch (err: any) {
         setStatus('error')
         setError(err.message || 'Failed to verify magic link')

@@ -42,6 +42,14 @@ function SignupForm() {
     }
 
     setIsLoading(true)
+    // Coach intent must survive the magic-link round-trip even when the account
+    // already exists (createUser 409s and role is never sent). The verify page
+    // reads this flag and applies the upgrade server-side (guarded to stranded
+    // half-signups). Same-browser open only — acceptable for magic links.
+    if (typeof window !== 'undefined') {
+      if (isCoach) window.localStorage.setItem('ivy_coach_intent', '1')
+      else window.localStorage.removeItem('ivy_coach_intent')
+    }
     try {
       // Create user account
       await usersApi.createUser({

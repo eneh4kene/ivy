@@ -37,6 +37,10 @@ export const updateUserSchema = z.object({
     eveningCallTime: z.string().regex(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/).optional(), // HH:MM
     callFrequency: z.number().min(1).max(7).optional(), // 1-7 calls per week
     preferredDays: z.string().optional(), // JSON array
+    // Coach-intent adoption only — never any other role from the client. The
+    // service additionally guards this to stranded half-signups (role='user',
+    // FREE, not onboarded), so it can't touch real consumers or admins.
+    role: z.enum(['coach']).optional(),
   }),
 });
 

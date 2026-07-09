@@ -150,6 +150,23 @@ class AuthService {
           throw err;
         }
       }
+    } else if (
+      opts.role === 'coach' &&
+      (user as any).role === 'user' &&
+      user.subscriptionTier === 'FREE' &&
+      !user.isOnboarded
+    ) {
+      // Coach-intent sign-in (from /signup?as=coach) on an existing account
+      // that's a stranded half-signup — no onboarding done, nothing paid,
+      // plain user role. Google verified they own the email, so adopting the
+      // freshly-expressed intent is safe. Active/onboarded consumers and any
+      // elevated role are never touched.
+      user = await prisma.user.update({
+        where: { id: user.id },
+        data: { role: 'coach' },
+        select: AUTH_USER_SELECT,
+      });
+      logger.info(`Coach intent adopted for existing SSO user ${user.id} (${email})`);
     }
 
     if (!user.isActive) {

@@ -94,3 +94,41 @@ test('coach journey — signup → activation → setup → console → invite r
     run('teardown.sh', [coachId, coachEmail])
   }
 })
+
+test('coach intent survives an existing half-signup account (email path)', async ({
+  page,
+  assertNoViolations,
+}) => {
+  test.setTimeout(120_000)
+
+  // A PLAIN consumer half-signup (role='user', FREE, not onboarded) — the state
+  // an account is in when someone signed up once, wandered off, and later came
+  // back through /for-coaches. Signup then 409s and can never send role, so the
+  // intent rides localStorage into the verify page and is applied server-side.
+  const out = run('bootstrap.sh')
+  const grab = (key: string) => {
+    const m = out.match(new RegExp(`export ${key}='([^']*)'`))
+    if (!m) throw new Error(`bootstrap.sh output missing ${key}:\n${out}`)
+    return m[1]
+  }
+  const userId = grab('E2E_USER_ID')
+  const email = grab('E2E_USER_EMAIL')
+  const verifyUrl = grab('E2E_VERIFY_URL')
+
+  try {
+    // What the signup page does when isCoach — before the browser ever
+    // navigates, so the verify page sees it on load.
+    await page.addInitScript(() => window.localStorage.setItem('ivy_coach_intent', '1'))
+
+    await completeVerify(page, verifyUrl)
+
+    // The regression: this used to fall through to /onboard-consumer because
+    // the existing account's role was still 'user'.
+    await page.waitForURL(/\/coach\/join/, { timeout: 20_000 })
+    await expect(page.getByText('Activate your coach plan')).toBeVisible()
+
+    assertNoViolations('coach intent on existing account')
+  } finally {
+    run('teardown.sh', [userId, email])
+  }
+})

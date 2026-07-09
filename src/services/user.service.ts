@@ -75,6 +75,10 @@ class UserService {
         region: true,
         currency: true,
         profileImage: true,
+        // Client-side routing (postLoginDestination, coach guards) keys on
+        // role — every user-shaped response must carry it or a fetchUser()
+        // refresh silently strips coaches back to consumers.
+        role: true,
         subscriptionTier: true,
         subscriptionStatus: true,
         track: true,
@@ -156,6 +160,17 @@ class UserService {
       throw new NotFoundError('User not found');
     }
 
+    // Coach-intent adoption (from /signup?as=coach, applied post-verify): only
+    // a stranded half-signup may become a coach — plain user role, nothing
+    // paid, onboarding never completed. Anything else silently drops the field.
+    if (data.role === 'coach') {
+      const eligible =
+        existingUser.role === 'user' &&
+        existingUser.subscriptionTier === 'FREE' &&
+        !existingUser.isOnboarded;
+      if (!eligible) delete (data as { role?: string }).role;
+    }
+
     // Update user
     let user;
     try {
@@ -169,6 +184,7 @@ class UserService {
         lastName: true,
         phone: true,
         timezone: true,
+        role: true,
         track: true,
         goal: true,
         // Stake config — used by the frontend to gate paid users with no stake
