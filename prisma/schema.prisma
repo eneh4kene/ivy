@@ -121,6 +121,7 @@ model User {
   messages         Message[]
   ivyCircles       IvyCircleMember[]
   coachCircles     IvyCircle[]       @relation("CoachCircles")
+  circleSessionShares CircleSessionShare[]
   seasons          Season[]
   impactStories    ImpactStory[]
   accountabilityBuddy AccountabilityBuddy?
@@ -1013,10 +1014,32 @@ model CircleSprintSession {
   highlights       String? @db.Text // JSON — key moments Ivy surfaces in individual calls
 
   catchups CircleCatchup[]
+  shares   CircleSessionShare[]
 
   @@index([sprintId])
   @@index([circleId])
   @@map("circle_sprint_sessions")
+}
+
+// The async circle session: each member drops one win and one honest struggle
+// while the session is open. Sharing is the price of seeing the room — the
+// mechanic that makes the "session" a real meeting instead of a push
+// notification about nothing.
+model CircleSessionShare {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
+
+  sessionId String
+  session   CircleSprintSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  win      String @db.Text
+  struggle String @db.Text
+
+  @@unique([sessionId, userId])
+  @@index([userId])
+  @@map("circle_session_shares")
 }
 
 // ============================================

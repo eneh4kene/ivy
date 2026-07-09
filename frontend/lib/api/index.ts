@@ -340,6 +340,17 @@ interface Circle {
 }
 interface SprintGoal { circleId: string; sprintNumber: number; pledge: string; theme?: string; targetMetric?: string }
 interface ConsistencyResult { rate: number; topPerformers: string[]; memberCount: number }
+export interface CircleCurrentSession {
+  id: string
+  status: 'scheduled' | 'open' | 'completed'
+  opensAt: string
+  closesAt: string
+  sprintNumber: number | null
+  memberCount: number
+  sharedCount: number
+  myShare: { win: string; struggle: string } | null
+  room: Array<{ firstName: string; isYou: boolean; win: string; struggle: string }> | null
+}
 
 export const circlesApi = {
   getMy: async (): Promise<Circle[]> => {
@@ -382,6 +393,14 @@ export const circlesApi = {
   getConsistency: async (circleId: string): Promise<ConsistencyResult> => {
     const response = await client.get<ApiResponse<ConsistencyResult>>(`/api/circles/${circleId}/consistency`)
     return response.data.data!
+  },
+  getCurrentSession: async (): Promise<CircleCurrentSession | null> => {
+    const response = await client.get<ApiResponse<CircleCurrentSession | null>>('/api/circles/session/current')
+    return response.data.data ?? null
+  },
+  submitSessionShare: async (win: string, struggle: string): Promise<CircleCurrentSession | null> => {
+    const response = await client.post<ApiResponse<CircleCurrentSession | null>>('/api/circles/session/share', { win, struggle })
+    return response.data.data ?? null
   },
   getSessions: async (circleId: string): Promise<CircleSession[]> => {
     const response = await client.get<ApiResponse<CircleSession[]>>(`/api/circles/${circleId}/sessions`)

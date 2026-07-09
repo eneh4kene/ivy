@@ -9,6 +9,7 @@ import {
 } from '../controllers/circle-game.controller'
 import gameSuggestionService from '../../services/game-suggestion.service'
 import circleCatchupService from '../../services/circle-catchup.service'
+import circleSessionService from '../../services/circle-session.service'
 
 const router = Router()
 router.use(authenticate)
@@ -18,6 +19,24 @@ router.get('/my', async (req: AuthRequest, res: Response, next: NextFunction): P
   try {
     const memberships = await circleService.getCirclesForUser(req.user!.id)
     res.json({ success: true, data: memberships })
+  } catch (err) { next(err) }
+})
+
+// GET /api/circles/session/current — my circle's current session + the room
+// (room content only visible once I've shared). MUST stay above /:id.
+router.get('/session/current', async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const session = await circleSessionService.getCurrentSession(req.user!.id)
+    res.json({ success: true, data: session })
+  } catch (err) { next(err) }
+})
+
+// POST /api/circles/session/share — drop my win + struggle, unlock the room
+router.post('/session/share', async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const { win, struggle } = req.body ?? {}
+    const session = await circleSessionService.submitShare(req.user!.id, String(win ?? ''), String(struggle ?? ''))
+    res.json({ success: true, data: session })
   } catch (err) { next(err) }
 })
 

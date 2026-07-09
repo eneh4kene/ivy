@@ -61,6 +61,29 @@ const ponderScheduler = inngest.createFunction(
   }
 );
 
+// Every 30 minutes — circle session lifecycle: open sessions whose time has
+// come (members invited to drop win + struggle), close sessions past their
+// 72h window (room sealed, absentees handed to the catch-up service).
+const circleSessionLifecycle = inngest.createFunction(
+  { id: 'circle-session-lifecycle', name: 'Circle session lifecycle', triggers: { cron: '*/30 * * * *' } },
+  async ({ step }) => {
+    const { default: circleSessionService } = await import('../services/circle-session.service');
+    await step.run('open-due-sessions', () => circleSessionService.openDueSessions());
+    await step.run('close-expired-sessions', () => circleSessionService.closeExpiredSessions());
+    return { ok: true };
+  }
+);
+
+// Every Monday at 8:30am UTC — the week's group number to every circle member
+const circleMemberPulse = inngest.createFunction(
+  { id: 'circle-member-pulse', name: 'Weekly circle member pulse', triggers: { cron: '30 8 * * 1' } },
+  async ({ step }) => {
+    const { default: circleService } = await import('../services/circle.service');
+    await step.run('send-member-pulse', () => circleService.sendWeeklyMemberPulse());
+    return { ok: true };
+  }
+);
+
 // Event-driven: a coach (or Ivy, post-ponder/chat) changed a client's
 // programme → tell the client about an hour later. The delay batches a burst
 // of edits from one session into one nudge, and the client reads the CURRENT
@@ -298,6 +321,8 @@ export const functions = [
   weeklyCoachDigest,
   ponderScheduler,
   programmeUpdatedNotify,
+  circleSessionLifecycle,
+  circleMemberPulse,
   monthlyDonationDispatch,
   dailyEveningCalls,
   dailyChatMemory,

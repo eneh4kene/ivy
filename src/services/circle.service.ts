@@ -245,6 +245,10 @@ class CircleService {
       try {
         await this.addMember(c.id, userId, 'member')
         logger.info(`Auto-assigned ${userId} to existing circle ${c.id} (track=${track})`)
+        // Make the placement felt — both directions. Fire-and-forget.
+        this.announcePeerJoin(c.id, userId).catch((err) =>
+          logger.warn(`Peer-join announcement failed for ${userId}:`, err),
+        )
         return { circleId: c.id, created: false }
       } catch (err) {
         // Lost the last seat to a concurrent join — fall through to the next.
@@ -267,7 +271,54 @@ class CircleService {
     logger.info(
       `Auto-assigned ${userId} to NEW circle ${circle.id} as facilitator (track=${track})`,
     )
+    this.announcePeerJoin(circle.id, userId).catch((err) =>
+      logger.warn(`Seed-circle announcement failed for ${userId}:`, err),
+    )
     return { circleId: circle.id, created: true }
+  }
+
+  /**
+   * A peer joining a circle is a small formation moment of its own: the
+   * joiner learns who they're standing with, the room learns someone new
+   * showed up. Circles are ≤8 and joins are rare, so this never spams.
+   */
+  private async announcePeerJoin(circleId: string, newUserId: string): Promise<void> {
+    const [members, circle] = await Promise.all([
+      prisma.ivyCircleMember.findMany({
+        where: { circleId, isActive: true },
+        select: { userId: true, user: { select: { firstName: true } } },
+      }),
+      prisma.ivyCircle.findUnique({ where: { id: circleId }, select: { name: true } }),
+    ])
+    if (!circle) return
+
+    const joiner = members.find((m) => m.userId === newUserId)
+    const others = members.filter((m) => m.userId !== newUserId)
+    const chatService = (await import('./chat.service')).default
+
+    const otherNames = others.map((o) => o.user.firstName).filter(Boolean)
+    const names =
+      otherNames.length > 3
+        ? `${otherNames.slice(0, 3).join(', ')} and ${otherNames.length - 3} other${otherNames.length - 3 === 1 ? '' : 's'}`
+        : otherNames.join(', ')
+
+    chatService.postIvyMessage(
+      newUserId,
+      others.length > 0
+        ? `You've landed in ${circle.name} — ${names} ${otherNames.length === 1 ? 'is' : 'are'} in there with you. They'll hear when you show up; you'll hear when they don't. Have a look at your Circle tab.`
+        : `You're the first one in ${circle.name}. The room fills as others start — for now, you set the tone.`,
+      { messageType: 'circle_formed', metadata: { circleId }, notify: false },
+    ).catch((err) => logger.warn(`Join message failed for ${newUserId}:`, err))
+
+    if (joiner?.user.firstName) {
+      for (const o of others) {
+        chatService.postIvyMessage(
+          o.userId,
+          `${joiner.user.firstName} just stepped into ${circle.name}. One more pair of eyes.`,
+          { messageType: 'circle_formed', metadata: { circleId }, notify: false },
+        ).catch((err) => logger.warn(`Join broadcast failed for ${o.userId}:`, err))
+      }
+    }
   }
 
   // ── Coach-scoped circles (backlog 12c) ─────────────────────────────────────
@@ -300,6 +351,7 @@ class CircleService {
       orderBy: { createdAt: 'asc' },
       select: { id: true, name: true },
     })
+    let formedNow = false
 
     if (!circle) {
       if (clients.length < CircleService.COACH_CIRCLE_THRESHOLD) return null
@@ -326,6 +378,7 @@ class CircleService {
 
       const created = await this.createCircle({ name, track, tier: 'pro', coachId, maxSize: 10 })
       circle = { id: created.id, name: created.name }
+      formedNow = true
       logger.info(`Coach circle formed for ${coachId}: ${circle.id} "${name}" (${clients.length} clients)`)
     }
 
@@ -353,7 +406,105 @@ class CircleService {
       logger.info(`Moved client ${client.id} into coach circle ${circle.id}`)
     }
 
+    // The formation MOMENT — fires exactly once, when the room comes alive.
+    // Every member hears who they're standing with; the coach hears their
+    // crew is official. Fire-and-forget: announcements never fail formation.
+    if (formedNow) {
+      this.announceCoachCircleFormation(circle.id, coachId).catch((err) =>
+        logger.warn(`Coach circle formation announcement failed for ${circle!.id}:`, err),
+      )
+    }
+
     return circle
+  }
+
+  private async announceCoachCircleFormation(circleId: string, coachId: string): Promise<void> {
+    const [members, circle, coach] = await Promise.all([
+      prisma.ivyCircleMember.findMany({
+        where: { circleId, isActive: true },
+        select: { userId: true, user: { select: { firstName: true } } },
+      }),
+      prisma.ivyCircle.findUnique({ where: { id: circleId }, select: { name: true } }),
+      prisma.user.findUnique({ where: { id: coachId }, select: { firstName: true } }),
+    ])
+    if (!circle) return
+
+    const chatService = (await import('./chat.service')).default
+
+    for (const m of members) {
+      const others = members
+        .filter((o) => o.userId !== m.userId)
+        .map((o) => o.user.firstName)
+        .filter(Boolean)
+      const names =
+        others.length > 2
+          ? `${others.slice(0, 2).join(', ')} and ${others.length - 2} other${others.length - 2 === 1 ? '' : 's'}`
+          : others.join(' and ')
+      chatService.postIvyMessage(
+        m.userId,
+        `Something's happened. ${coach?.firstName ?? 'Your coach'}'s crew just became official — you're now in ${circle.name} with ${names}. They'll hear when you show up; you'll hear when they go quiet. Check your Circle tab.`,
+        { messageType: 'circle_formed', metadata: { circleId } },
+      ).catch((err) => logger.warn(`Formation message failed for ${m.userId}:`, err))
+    }
+
+    chatService.postIvyMessage(
+      coachId,
+      `Your crew is official: ${circle.name} is live with ${members.length} of your clients in the room. They now show up in front of each other, not just in front of you — I'll bring the group pulse to your console and your ponder calls.`,
+      { messageType: 'circle_formed', metadata: { circleId } },
+    ).catch((err) => logger.warn(`Coach formation message failed for ${coachId}:`, err))
+  }
+
+  /**
+   * Weekly pulse to every circle member — the group's week as one number,
+   * plus where you stood in it. Turns the silent room into a rhythm. No LLM:
+   * template lines, real math, pennies to run.
+   */
+  async sendWeeklyMemberPulse(): Promise<void> {
+    const circles = await prisma.ivyCircle.findMany({
+      where: { isActive: true },
+      select: { id: true, name: true },
+    })
+    const chatService = (await import('./chat.service')).default
+    const weekAgo = new Date(Date.now() - 7 * 86_400_000)
+
+    for (const circle of circles) {
+      const members = await prisma.ivyCircleMember.findMany({
+        where: { circleId: circle.id, isActive: true },
+        select: { userId: true, user: { select: { firstName: true } } },
+      })
+      if (members.length < 2) continue // a pulse of one is just a mirror
+
+      const workouts = await prisma.workout.findMany({
+        where: { userId: { in: members.map((m) => m.userId) }, plannedDate: { gte: weekAgo } },
+        select: { userId: true, status: true },
+      })
+      if (workouts.length === 0) continue // nothing planned anywhere — stay quiet
+
+      const kept = (s: string) => s === 'COMPLETED' || s === 'PARTIAL'
+      const groupRate = Math.round((workouts.filter((w) => kept(w.status)).length / workouts.length) * 100)
+
+      for (const m of members) {
+        const mine = workouts.filter((w) => w.userId === m.userId)
+        const myRate = mine.length > 0 ? mine.filter((w) => kept(w.status)).length / mine.length : null
+
+        let personal: string
+        if (myRate === null) {
+          personal = `Nothing planned from you last week — the room notices quiet.`
+        } else if (myRate >= 0.8) {
+          personal = `You were one of the ones carrying it.`
+        } else if (myRate > 0) {
+          personal = `Every day you keep lifts the room's number.`
+        } else {
+          personal = `The room held without you this week — jump back in, they'll hear it.`
+        }
+
+        chatService.postIvyMessage(
+          m.userId,
+          `${circle.name} kept ${groupRate}% of planned days last week. ${personal}`,
+          { messageType: 'circle_pulse', metadata: { circleId: circle.id }, notify: false },
+        ).catch((err) => logger.warn(`Circle pulse failed for ${m.userId}:`, err))
+      }
+    }
   }
 
   async setSprintGoal(circleId: string, data: {

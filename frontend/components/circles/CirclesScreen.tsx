@@ -14,13 +14,13 @@
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
-import { ArrowLeft, Users, Calendar, ChevronRight, Zap, Sparkles } from 'lucide-react'
-import { circlesApi, circleGamesApi } from '@/lib/api'
+import { ArrowLeft, Users, Calendar, Zap, Sparkles, Lock, Send } from 'lucide-react'
+import { circlesApi, circleGamesApi, type CircleCurrentSession } from '@/lib/api'
 import { useAuthStore } from '@/lib/store/auth.store'
 
 type Circle = Awaited<ReturnType<typeof circlesApi.getMy>>[number]
 type ActiveGame = Awaited<ReturnType<typeof circleGamesApi.getActiveGame>>
-type Session = Awaited<ReturnType<typeof circlesApi.getSessions>>[number]
+type Pulse = Awaited<ReturnType<typeof circlesApi.getConsistency>>
 
 const HUES = [14, 44, 152, 238, 280, 320]
 function hueFor(seed: string): number {
@@ -74,11 +74,132 @@ function NavBar({ title, subtitle }: { title?: string; subtitle?: string }) {
   )
 }
 
+/**
+ * The async session room. Sharing is the price of seeing it: until your win +
+ * struggle are in, the others' shares stay counted-but-veiled.
+ */
+function SessionCard({ session, onUpdate }: {
+  session: CircleCurrentSession
+  onUpdate: (s: CircleCurrentSession | null) => void
+}) {
+  const [win, setWin] = useState('')
+  const [struggle, setStruggle] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+
+  const submit = async () => {
+    setBusy(true)
+    setError('')
+    try {
+      const updated = await circlesApi.submitSessionShare(win, struggle)
+      onUpdate(updated)
+    } catch (err: any) {
+      setError(err.message ?? "Couldn't share — try again.")
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const hoursLeft = Math.max(0, Math.round((new Date(session.closesAt).getTime() - Date.now()) / 3_600_000))
+  const inputClass = 'w-full px-3 py-2.5 text-sm bg-ink-900/50 border border-ink-600 rounded-xl text-ink-200 placeholder:text-ink-600 focus:outline-none focus:ring-1 focus:ring-periwinkle-400/40 resize-none'
+
+  // Upcoming: a promise, not a room yet.
+  if (session.status === 'scheduled') {
+    const days = Math.max(0, Math.ceil((new Date(session.opensAt).getTime() - Date.now()) / 86_400_000))
+    return (
+      <div className="glass rounded-2xl p-4 flex items-center gap-3 page-enter" style={{ animationDelay: '150ms' }}>
+        <Calendar className="w-4 h-4 text-periwinkle-400 shrink-0" />
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-medium text-ink-50">
+            {days === 0 ? 'Session opens today' : `Session opens in ${days} day${days !== 1 ? 's' : ''}`}
+          </p>
+          <p className="text-xs text-ink-400 mt-0.5">Come with one win and one honest struggle.</p>
+        </div>
+      </div>
+    )
+  }
+
+  // Open, not yet shared: the locked room.
+  if (session.status === 'open' && !session.myShare) {
+    return (
+      <div className="surface border-periwinkle-400/25 rounded-2xl p-4 page-enter" style={{ animationDelay: '150ms' }}>
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-1.5">
+            <Lock className="w-3 h-3 text-periwinkle-400" />
+            <span className="text-2xs font-semibold uppercase tracking-widest text-periwinkle-400">Session open</span>
+          </div>
+          <span className="text-2xs text-ink-400">{hoursLeft}h left</span>
+        </div>
+        <p className="text-sm text-ink-200 mb-1">
+          {session.sharedCount > 0
+            ? `${session.sharedCount} of ${session.memberCount} are already in the room.`
+            : 'The room is waiting for its first voice.'}
+        </p>
+        <p className="text-xs text-ink-400 mb-3">Share yours to see theirs — that&rsquo;s the deal.</p>
+        <div className="space-y-2">
+          <textarea value={win} onChange={(e) => setWin(e.target.value)} rows={2} maxLength={500}
+            placeholder="One win from this sprint…" className={inputClass} />
+          <textarea value={struggle} onChange={(e) => setStruggle(e.target.value)} rows={2} maxLength={500}
+            placeholder="One honest struggle…" className={inputClass} />
+          <button
+            onClick={submit}
+            disabled={busy || !win.trim() || !struggle.trim()}
+            className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-periwinkle-500/90 text-ink-900 text-sm font-semibold hover:bg-periwinkle-400 active:scale-[0.99] transition-all disabled:opacity-50"
+          >
+            <Send className="w-3.5 h-3.5" /> {busy ? 'Stepping in…' : 'Step into the room'}
+          </button>
+          {error && <p className="text-xs text-ember-400">{error}</p>}
+        </div>
+      </div>
+    )
+  }
+
+  // Shared (open or completed): the room itself.
+  if (session.myShare && session.room) {
+    return (
+      <div className="surface rounded-2xl p-4 page-enter" style={{ animationDelay: '150ms' }}>
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-1.5">
+            <Users className="w-3 h-3 text-sage-400" />
+            <span className="text-2xs font-semibold uppercase tracking-widest text-sage-400">
+              {session.status === 'open' ? 'The room' : 'Session closed'}
+            </span>
+          </div>
+          <span className="text-2xs text-ink-400">
+            {session.status === 'open' ? `${session.sharedCount} of ${session.memberCount} in · ${hoursLeft}h left` : `${session.sharedCount} of ${session.memberCount} showed`}
+          </span>
+        </div>
+        <div className="space-y-3">
+          {session.room.map((s, i) => (
+            <div key={i} className={`rounded-xl p-3 ${s.isYou ? 'bg-gold-400/05 border border-gold-400/10' : 'bg-ink-900/50 border border-ink-700'}`}>
+              <p className={`text-xs font-semibold mb-1.5 ${s.isYou ? 'text-gold-300' : 'text-ink-100'}`}>{s.isYou ? 'You' : s.firstName}</p>
+              <p className="text-xs text-ink-200 leading-relaxed"><span className="text-sage-400">Win</span> — {s.win}</p>
+              <p className="text-xs text-ink-300 leading-relaxed mt-1"><span className="text-ember-400">Struggle</span> — {s.struggle}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+    )
+  }
+
+  // Completed without sharing: you missed the room.
+  return (
+    <div className="glass rounded-2xl p-4 flex items-center gap-3 page-enter" style={{ animationDelay: '150ms' }}>
+      <Lock className="w-4 h-4 text-ink-400 shrink-0" />
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-medium text-ink-200">The room closed without you this time</p>
+        <p className="text-xs text-ink-400 mt-0.5">Ivy will catch you up on your next call. Next session, step in.</p>
+      </div>
+    </div>
+  )
+}
+
 export function CirclesScreen() {
   const { user } = useAuthStore()
   const [circle, setCircle] = useState<Circle | null>(null)
   const [activeGame, setActiveGame] = useState<ActiveGame>(null)
-  const [nextSession, setNextSession] = useState<Session | null>(null)
+  const [session, setSession] = useState<CircleCurrentSession | null>(null)
+  const [pulse, setPulse] = useState<Pulse | null>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -89,19 +210,17 @@ export function CirclesScreen() {
         const c = cs?.[0] ?? null
         setCircle(c)
         if (c) {
-          circlesApi.getSessions(c.id)
-            .then((sessions) => {
-              if (!alive) return
-              const upcoming = sessions
-                .filter((s) => s.status !== 'COMPLETED' && new Date(s.scheduledAt).getTime() >= Date.now())
-                .sort((a, b) => new Date(a.scheduledAt).getTime() - new Date(b.scheduledAt).getTime())
-              setNextSession(upcoming[0] ?? null)
-            })
+          circlesApi.getConsistency(c.id)
+            .then((p) => { if (alive) setPulse(p) })
             .catch(() => {})
         }
       })
       .catch(() => {})
       .finally(() => { if (alive) setLoading(false) })
+
+    circlesApi.getCurrentSession()
+      .then((s) => { if (alive) setSession(s) })
+      .catch(() => {})
 
     circleGamesApi.getActiveGame()
       .then((g) => { if (alive) setActiveGame(g) })
@@ -109,10 +228,6 @@ export function CirclesScreen() {
 
     return () => { alive = false }
   }, [])
-
-  const daysToSession = nextSession
-    ? Math.max(0, Math.ceil((new Date(nextSession.scheduledAt).getTime() - Date.now()) / 86400000))
-    : null
 
   if (loading) {
     return (
@@ -181,6 +296,23 @@ export function CirclesScreen() {
           </div>
         </div>
 
+        {/* ── Group pulse strip ── */}
+        {pulse && pulse.memberCount > 1 && (
+          <div className="surface rounded-2xl p-4 mb-5 page-enter flex items-center gap-4" style={{ animationDelay: '40ms' }}>
+            <p className="font-display text-3xl font-semibold text-ink-50 tabular-nums leading-none">
+              {pulse.rate}<span className="text-lg text-ink-400">%</span>
+            </p>
+            <div className="min-w-0">
+              <p className="text-xs text-ink-200">of the group&rsquo;s planned days kept this sprint</p>
+              {pulse.topPerformers.length > 0 && (
+                <p className="text-2xs text-ink-400 mt-0.5 truncate">
+                  Carrying it: <span className="text-ink-200">{pulse.topPerformers.join(', ')}</span>
+                </p>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* ── Member roster ── */}
         <div className="surface rounded-2xl p-3 mb-5 page-enter" style={{ animationDelay: '60ms' }}>
           <div className="flex items-center justify-between px-2 mb-1">
@@ -228,21 +360,8 @@ export function CirclesScreen() {
           )}
         </div>
 
-        {/* ── Session countdown ── */}
-        {daysToSession !== null && nextSession && (
-          <div className="glass rounded-2xl p-4 flex items-center gap-3 page-enter" style={{ animationDelay: '150ms' }}>
-            <Calendar className="w-4 h-4 text-periwinkle-400 shrink-0" />
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-ink-50">
-                {daysToSession === 0 ? 'Sprint session today' : `Sprint session in ${daysToSession} day${daysToSession !== 1 ? 's' : ''}`}
-              </p>
-              <p className="text-xs text-ink-400 mt-0.5">
-                {new Date(nextSession.scheduledAt).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'short' })}
-              </p>
-            </div>
-            <ChevronRight className="w-4 h-4 text-ink-400 shrink-0" />
-          </div>
-        )}
+        {/* ── The session — upcoming promise / locked room / the room / missed ── */}
+        {session && <SessionCard session={session} onUpdate={setSession} />}
       </div>
     </div>
   )
