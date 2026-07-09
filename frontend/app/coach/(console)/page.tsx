@@ -14,6 +14,7 @@ import Link from 'next/link'
 import {
   Settings, Flame, AlertTriangle, Users, Copy, Check,
   MessageCircle, ChevronRight, Link2, UserX, Shield,
+  PhoneCall, Share2, X,
 } from 'lucide-react'
 import { coachApi, type CoachProfile, type CoachClient } from '@/lib/api'
 
@@ -166,6 +167,17 @@ export default function CoachDashboard() {
   const [inviteUrl, setInviteUrl] = useState('')
   const [copied, setCopied] = useState(false)
   const [loadError, setLoadError] = useState('')
+  const [showWelcome, setShowWelcome] = useState(false)
+
+  useEffect(() => {
+    // Fresh from first setup (?welcome=1): tell them Ivy is about to ring, so
+    // the welcome call lands as a promise kept rather than an unknown number.
+    const params = new URLSearchParams(window.location.search)
+    if (params.get('welcome') === '1') {
+      setShowWelcome(true)
+      window.history.replaceState(null, '', '/coach')
+    }
+  }, [])
 
   useEffect(() => {
     Promise.all([
@@ -187,6 +199,22 @@ export default function CoachDashboard() {
     setTimeout(() => setCopied(false), 2000)
   }
 
+  const handleShare = async () => {
+    // Native share sheet where the PWA has it (iOS/Android); copy elsewhere.
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: profile?.programmeName || 'Join my programme',
+          text: 'Join my coaching programme — Ivy handles your daily accountability.',
+          url: inviteUrl,
+        })
+        return
+      } catch { /* user dismissed the sheet — nothing to do */ }
+    } else {
+      handleCopy()
+    }
+  }
+
   if (loadError) {
     return (
       <div className="min-h-dvh mesh-bg-subtle flex items-center justify-center px-6 text-center">
@@ -196,9 +224,26 @@ export default function CoachDashboard() {
   }
 
   if (!profile) {
+    // Skeleton mirrors the real layout so the console appears to resolve,
+    // not pop in — no full-screen spinner.
     return (
-      <div className="min-h-dvh mesh-bg-subtle flex items-center justify-center">
-        <span className="w-6 h-6 rounded-full border-2 border-gold-400/40 border-t-gold-400 animate-spin" />
+      <div className="min-h-dvh mesh-bg-subtle pb-safe-b">
+        <div className="max-w-lg mx-auto px-4 animate-pulse">
+          <div className="flex items-center justify-between pt-safe-t pt-6 pb-5">
+            <div className="space-y-2">
+              <div className="h-7 w-44 rounded-lg bg-ink-700/70" />
+              <div className="h-3 w-24 rounded bg-ink-700/50" />
+            </div>
+            <div className="w-9 h-9 rounded-xl bg-ink-700/70" />
+          </div>
+          <div className="grid grid-cols-4 gap-2 mb-5">
+            {[0, 1, 2, 3].map((i) => <div key={i} className="h-[68px] rounded-xl bg-ink-700/40" />)}
+          </div>
+          <div className="h-[120px] rounded-2xl bg-ink-700/40 mb-6" />
+          <div className="space-y-2">
+            {[0, 1, 2].map((i) => <div key={i} className="h-[62px] rounded-2xl bg-ink-700/40" />)}
+          </div>
+        </div>
       </div>
     )
   }
@@ -222,6 +267,11 @@ export default function CoachDashboard() {
             </h1>
             <p className="text-xs text-ink-400 mt-0.5">
               {active.length} active client{active.length !== 1 ? 's' : ''}
+              {profile.ponderCallEnabled && profile.ponderCallTime && (
+                <span className="text-ink-500">
+                  {' '}· ponder {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][profile.ponderCallDay ?? 1]} {profile.ponderCallTime}
+                </span>
+              )}
             </p>
           </div>
           <Link href="/coach/settings">
@@ -233,6 +283,29 @@ export default function CoachDashboard() {
             </button>
           </Link>
         </div>
+
+        {/* ── Welcome-call banner (first arrival after setup) ── */}
+        {showWelcome && (
+          <div className="glass-gold rounded-2xl p-4 mb-5 flex items-start gap-3 animate-fade-in">
+            <div className="w-9 h-9 rounded-xl bg-gold-400/15 flex items-center justify-center shrink-0">
+              <PhoneCall className="w-4 h-4 text-gold-300" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold text-ink-50 mb-0.5">Ivy&rsquo;s about to ring you</p>
+              <p className="text-xs text-ink-300 leading-relaxed">
+                Your welcome call lands in the next couple of minutes — pick up and
+                she&rsquo;ll walk you through how you two work together.
+              </p>
+            </div>
+            <button
+              onClick={() => setShowWelcome(false)}
+              className="text-ink-500 hover:text-ink-300 transition-colors shrink-0 -mt-0.5 -mr-0.5 p-1"
+              aria-label="Dismiss"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        )}
 
         {/* ── Stats bar ── */}
         <div className="grid grid-cols-4 gap-2 mb-5">
@@ -285,6 +358,13 @@ export default function CoachDashboard() {
                 ? <><Check className="w-3.5 h-3.5" /> Copied</>
                 : <><Copy className="w-3.5 h-3.5" /> Copy</>
               }
+            </button>
+            <button
+              onClick={handleShare}
+              className="px-3 py-2 rounded-xl border border-gold-400/30 bg-gold-400/10 text-gold-400 hover:bg-gold-400/15 transition-colors flex items-center shrink-0"
+              aria-label="Share invite link"
+            >
+              <Share2 className="w-3.5 h-3.5" />
             </button>
           </div>
         </div>

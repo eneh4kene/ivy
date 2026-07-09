@@ -40,7 +40,7 @@ export const authApi = {
     return response.data.data!
   },
 
-  googleAuth: async (data: { idToken: string; region?: 'GB' | 'US'; tcpaConsent?: boolean }) => {
+  googleAuth: async (data: { idToken: string; region?: 'GB' | 'US'; tcpaConsent?: boolean; role?: 'coach' }) => {
     const response = await client.post<ApiResponse<{ accessToken: string; user: User; isNewUser: boolean }>>('/api/auth/google', data)
     return response.data.data!
   },

@@ -18,10 +18,12 @@ interface Props {
   /** Region hint for new SSO accounts (from the signup form). */
   region?: 'GB' | 'US'
   tcpaConsent?: boolean
+  /** Coach-intent signup (from /signup?as=coach) — persisted on new accounts. */
+  role?: 'coach'
   onError?: (message: string) => void
 }
 
-export function GoogleSignInButton({ region, tcpaConsent, onError }: Props) {
+export function GoogleSignInButton({ region, tcpaConsent, role, onError }: Props) {
   const router = useRouter()
   const loginWithGoogle = useAuthStore((s) => s.loginWithGoogle)
   const containerRef = useRef<HTMLDivElement>(null)
@@ -29,8 +31,8 @@ export function GoogleSignInButton({ region, tcpaConsent, onError }: Props) {
 
   // Keep the latest opts in a ref so the GIS callback (registered once) always
   // reads current values without re-initializing.
-  const optsRef = useRef({ region, tcpaConsent })
-  optsRef.current = { region, tcpaConsent }
+  const optsRef = useRef({ region, tcpaConsent, role })
+  optsRef.current = { region, tcpaConsent, role }
 
   useEffect(() => {
     if (!GOOGLE_CLIENT_ID) return
@@ -44,6 +46,7 @@ export function GoogleSignInButton({ region, tcpaConsent, onError }: Props) {
         const { isNewUser, user } = await loginWithGoogle(response.credential, {
           region: optsRef.current.region,
           tcpaConsent: optsRef.current.tcpaConsent,
+          role: optsRef.current.role,
         })
         router.push(postLoginDestination(user, isNewUser))
       } catch (err: any) {

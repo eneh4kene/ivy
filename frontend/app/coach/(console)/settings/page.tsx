@@ -102,6 +102,10 @@ export default function CoachSettingsPage() {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
+  // First completed save doubles as coach onboarding — frame the page as a
+  // setup moment, not an edit screen, until then.
+  const firstRun = !!user && !user.isOnboarded
+
   useEffect(() => {
     coachApi.getProfile().then((p) => {
       if (!p) return
@@ -150,15 +154,24 @@ export default function CoachSettingsPage() {
         ponderCallFrequency: profile.ponderCallFrequency,
       })
       // Phone powers the ponder calls + the welcome call — save if provided.
+      // A silent failure here would silently kill both, so surface it.
       if (phone.trim() && phone.trim() !== user?.phone) {
-        await usersApi.updateProfile({ phone: phone.trim() } as any).catch(() => {})
+        try {
+          await usersApi.updateProfile({ phone: phone.trim() } as any)
+        } catch {
+          setError("Couldn't save your phone number — use international format, e.g. +44 7700 900123.")
+          setSaving(false)
+          return
+        }
       }
       // First completed setup = coach onboarding done → the partner welcome
       // call schedules itself server-side. Route into the console.
       if (user && !user.isOnboarded) {
         await usersApi.markAsOnboarded().catch(() => {})
         await fetchUser().catch(() => {})
-        router.replace('/coach')
+        // welcome=1 → the console tells them to expect Ivy's welcome call,
+        // so the ring two minutes from now lands as a promise kept, not spam.
+        router.replace(phone.trim() ? '/coach?welcome=1' : '/coach')
         return
       }
       setSaved(true)
@@ -181,14 +194,22 @@ export default function CoachSettingsPage() {
 
         {/* ── Header ── */}
         <div className="flex items-center gap-3 pt-safe-t pt-6 pb-5">
-          <Link href="/coach">
-            <button className="w-9 h-9 rounded-xl bg-ink-700/80 border border-ink-600 flex items-center justify-center hover:bg-ink-700 transition-colors" aria-label="Back">
-              <ArrowLeft className="w-4 h-4 text-ink-200" />
-            </button>
-          </Link>
+          {!firstRun && (
+            <Link href="/coach">
+              <button className="w-9 h-9 rounded-xl bg-ink-700/80 border border-ink-600 flex items-center justify-center hover:bg-ink-700 transition-colors" aria-label="Back">
+                <ArrowLeft className="w-4 h-4 text-ink-200" />
+              </button>
+            </Link>
+          )}
           <div>
-            <h1 className="font-display text-xl font-semibold text-ink-50">Coach settings</h1>
-            <p className="text-2xs text-ink-400">How Ivy shows up for your clients</p>
+            <h1 className="font-display text-xl font-semibold text-ink-50">
+              {firstRun ? 'Set up your programme' : 'Coach settings'}
+            </h1>
+            <p className="text-2xs text-ink-400">
+              {firstRun
+                ? 'Two minutes — this is how Ivy sounds like you from day one'
+                : 'How Ivy shows up for your clients'}
+            </p>
           </div>
         </div>
 
@@ -454,8 +475,17 @@ export default function CoachSettingsPage() {
               ? <><Check className="w-4 h-4" /> Saved</>
               : saving
               ? <><span className="w-4 h-4 rounded-full border-2 border-ink-900/30 border-t-ink-900 animate-spin" /> Saving…</>
+              : firstRun
+              ? <><Check className="w-4 h-4" /> Finish setup</>
               : <><Save className="w-4 h-4" /> Save settings</>}
           </button>
+
+          {firstRun && phone.trim() && (
+            <p className="text-center text-2xs text-ink-400 leading-relaxed px-4">
+              Once you finish, Ivy rings you within a couple of minutes for a proper
+              welcome — keep your phone handy.
+            </p>
+          )}
 
         </div>
       </div>

@@ -532,11 +532,11 @@ class CoachService {
     const formatBrief = (c: any) =>
       `[${c.firstName} ${c.lastName}] — ${c.track} — ${completedCalls(c)}/${c.calls.length} calls — ${c.streaks?.currentStreak ?? 0} day streak`;
 
+    // Data only — the conversational framing and session-running rules live in
+    // buildPonderPrompt (prompt.service), which wraps this brief. Duplicating
+    // instructions here made the composed prompt contradict itself.
     const lines = [
-      `You are Ivy, calling ${coach?.firstName ?? 'Coach'} for your biweekly coaching ponder session.`,
-      `This is a working session, not a report. Be a thought partner.`,
-      '',
-      `ROSTER: ${clients.length} clients | ${needsAttention.length} need attention | ${onTrack.length} on track`,
+      `YOUR NOTES ON ${(coach?.firstName ?? 'the coach').toUpperCase()}'S ROSTER (${clients.length} client${clients.length === 1 ? '' : 's'} — ${needsAttention.length} need attention, ${onTrack.length} on track):`,
       '',
     ];
 
@@ -551,15 +551,7 @@ class CoachService {
     }
 
     lines.push(
-      '── HOW TO RUN THIS SESSION ─────────────────────────────────',
-      '- Lead with flagged clients. Share what you have been observing in their calls.',
-      '- Let the coach redirect to any client at any time.',
-      '- Share patterns — tone, avoidance, what resonates, what does not.',
-      '- If the coach adjusts a programme area, confirm it out loud: "Got it — noted."',
-      '- At the end, summarise the key decisions made.',
-      '- Keep it under 10 minutes unless the coach wants to go deeper.',
-      '',
-      'After this call, you will send a Telegram message summarising the key decisions made.',
+      'After this call, any programme changes the coach agreed are extracted from the transcript and applied automatically, and the coach receives a written summary — you can promise both.',
     );
 
     return lines.join('\n');

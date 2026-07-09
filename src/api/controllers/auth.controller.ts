@@ -229,8 +229,8 @@ class AuthController {
     next: NextFunction
   ): Promise<void> {
     try {
-      const { idToken, region, tcpaConsent } = req.body;
-      const result = await authService.googleSignIn(idToken, { region, tcpaConsent });
+      const { idToken, region, tcpaConsent, role } = req.body;
+      const result = await authService.googleSignIn(idToken, { region, tcpaConsent, role });
       sendSuccess(res, result);
     } catch (error) {
       next(error);

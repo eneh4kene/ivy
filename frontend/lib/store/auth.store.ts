@@ -15,7 +15,7 @@ interface AuthState {
   setToken: (token: string) => void
   login: (email: string) => Promise<void>
   verifyMagicLink: (token: string) => Promise<void>
-  loginWithGoogle: (idToken: string, opts?: { region?: 'GB' | 'US'; tcpaConsent?: boolean }) => Promise<{ isNewUser: boolean; user: User }>
+  loginWithGoogle: (idToken: string, opts?: { region?: 'GB' | 'US'; tcpaConsent?: boolean; role?: 'coach' }) => Promise<{ isNewUser: boolean; user: User }>
   logout: () => void
   fetchUser: () => Promise<void>
 }

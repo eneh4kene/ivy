@@ -220,9 +220,15 @@ class UserService {
       select: { id: true, isOnboarded: true, onboardedAt: true },
     });
 
-    // Coaches don't have a personal season arc or accountability calls
+    // Coaches don't have a personal season arc or accountability calls — but
+    // setup completing IS their Day-Zero moment: the webhook-time trigger fired
+    // before they had a phone or isOnboarded, so re-trigger here to schedule
+    // the partner welcome call (idempotent — one ONBOARDING call per coach, ever).
     if (fullUser?.subscriptionTier === 'COACH') {
-      logger.info(`Coach onboarded: ${user.id} — skipping season and call setup`);
+      logger.info(`Coach onboarded: ${user.id} — skipping season/call setup, triggering coach welcome`);
+      this.startDayZeroExperience(userId).catch((err) =>
+        logger.warn(`Coach Day-Zero trigger failed for ${userId}:`, err)
+      );
       return user;
     }
 
