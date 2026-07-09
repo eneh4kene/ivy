@@ -1,4 +1,5 @@
 import prisma from '../utils/prisma';
+import { config } from '../config';
 import { CreateUserInput, UpdateUserInput } from '../types/user.schema';
 import { BadRequestError, ConflictError, NotFoundError } from '../utils/errors';
 import logger from '../utils/logger';
@@ -144,7 +145,13 @@ class UserService {
       throw new NotFoundError('User not found');
     }
 
-    return user;
+    // The number Ivy dials from (currency-routed, same rule as call placement
+    // in inngest/calls.ts) — surfaced so the UI can say "save this number"
+    // instead of users staring at an unknown caller.
+    const ivyCallNumber =
+      (user.currency === 'USD' && config.twilio.phoneNumberUs) || config.twilio.phoneNumber || null;
+
+    return { ...user, ivyCallNumber };
   }
 
   /**

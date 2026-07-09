@@ -44,6 +44,8 @@ export interface User {
   onboardedAt?: string
   lastCallAt?: string
   role?: UserRole
+  // The number Ivy dials from (currency-routed) — for "save this number" UI.
+  ivyCallNumber?: string | null
   createdAt: string
   updatedAt: string
   preferredCharity?: Charity

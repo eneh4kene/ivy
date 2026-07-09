@@ -47,6 +47,16 @@ router.post('/twilio-sms', webhookController.handleTwilioSms);
 router.post('/twilio-inbound', webhookController.handleTwilioInbound);
 
 /**
+ * @route   POST /webhooks/twilio-call-status
+ * @desc    Final-status callback for OUTBOUND dials (set per-call by
+ *          outbound-call.service). Marks ring-outs (no-answer/busy/failed) on
+ *          the call row — Retell's webhook can't, since the SIP leg never
+ *          connected for those.
+ * @access  Public (callId scoped per call via query param)
+ */
+router.post('/twilio-call-status', webhookController.handleTwilioCallStatus);
+
+/**
  * @route   POST /webhooks/retell-inbound
  * @desc    Retell inbound call webhook — fires before agent speaks, returns agent config + prompt
  * @access  Public (verified by RETELL_WEBHOOK_SECRET)

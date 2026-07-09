@@ -368,6 +368,46 @@ class WebhookController {
   }
 
   /**
+   * Final-status callback for outbound dials.
+   * POST /webhooks/twilio-call-status?callId=<our call row id>
+   *
+   * Fires once per outbound call with the final Twilio status. Only failure
+   * outcomes are recorded here (no-answer / busy / failed / canceled): for
+   * connected calls Retell's call_ended webhook is the source of truth
+   * (transcript, duration, outcome), so a 'completed' here is ignored.
+   * Guarded to rows still SCHEDULED/IN_PROGRESS so it can never overwrite a
+   * result Retell already wrote.
+   */
+  async handleTwilioCallStatus(req: Request, res: Response, _next: NextFunction): Promise<void> {
+    try {
+      const callId = String(req.query.callId ?? '');
+      const twilioStatus = String(req.body.CallStatus ?? '');
+      res.status(200).send('ok'); // ack immediately — Twilio retries on non-2xx
+
+      if (!callId || !twilioStatus) return;
+      const failureMap: Record<string, 'NO_ANSWER' | 'FAILED'> = {
+        'no-answer': 'NO_ANSWER',
+        busy: 'NO_ANSWER',
+        failed: 'FAILED',
+        canceled: 'FAILED',
+      };
+      const mapped = failureMap[twilioStatus];
+      if (!mapped) return;
+
+      const call = await prisma.call.findUnique({ where: { id: callId }, select: { status: true } });
+      if (!call || (call.status !== 'IN_PROGRESS' && call.status !== 'SCHEDULED')) return;
+
+      await callService.updateCallStatus(callId, mapped, {
+        endedAt: new Date(),
+        outcome: `twilio: ${twilioStatus}`,
+      });
+      logger.info(`Call ${callId} marked ${mapped} (twilio ${twilioStatus})`);
+    } catch (err) {
+      logger.error('twilio-call-status processing failed', err);
+    }
+  }
+
+  /**
    * Handle inbound SMS replies on the Twilio number.
    * POST /webhooks/twilio-sms
    *

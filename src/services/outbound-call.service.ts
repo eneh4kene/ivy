@@ -71,10 +71,18 @@ class OutboundCallService {
     }
 
     try {
+      // Final-status callback: Retell's webhook only fires when the SIP leg
+      // actually connects, so without this a ring-out (no-answer/busy/failed)
+      // leaves the call row IN_PROGRESS forever and the miss is invisible.
+      const callId = params.metadata?.callId;
       const call = await this.client().calls.create({
         to: params.toNumber,
         from: params.fromNumber,
         twiml,
+        ...(callId && {
+          statusCallback: `${config.server.baseUrl}/webhooks/twilio-call-status?callId=${encodeURIComponent(callId)}`,
+          statusCallbackEvent: ['completed'],
+        }),
       });
       logger.info(`Twilio outbound call placed: ${call.sid} → ${params.toNumber} (retell ${retellCallId})`);
       return { retellCallId, twilioSid: call.sid, sipUri };

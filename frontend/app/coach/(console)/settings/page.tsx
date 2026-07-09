@@ -86,7 +86,9 @@ const DEFAULT_PROFILE = {
   brandLogoUrl:        '',
   alertOnMissedCalls:  3 as 2 | 3 | 5,
   weeklyDigestEnabled: true,
-  ponderCallEnabled:   false,
+  // Default ON: the biweekly ponder call is the core of the coach product —
+  // new coaches opt out if they want, not in.
+  ponderCallEnabled:   true,
   ponderCallDay:       1,
   ponderCallTime:      '09:00',
   ponderCallFrequency: 'fortnightly' as 'weekly' | 'fortnightly',
@@ -101,6 +103,45 @@ export default function CoachSettingsPage() {
   const [saved, setSaved] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+
+  // Phone OTP verification — same server flow as consumer onboarding
+  // (request-otp texts a 6-digit code; verify updates the phone). A number
+  // Ivy will ring must be proven real, or the welcome call dials a typo.
+  const [otpSent, setOtpSent] = useState(false)
+  const [otpCode, setOtpCode] = useState('')
+  const [otpBusy, setOtpBusy] = useState(false)
+  const [otpError, setOtpError] = useState('')
+  const phoneChanged = phone.trim() !== '' && phone.trim() !== (user?.phone ?? '')
+  const phoneVerified = phone.trim() !== '' && phone.trim() === (user?.phone ?? '')
+
+  const sendOtp = async () => {
+    setOtpBusy(true)
+    setOtpError('')
+    try {
+      await usersApi.requestPhoneOtp(phone.trim())
+      setOtpSent(true)
+    } catch (err: any) {
+      setOtpError(err.message ?? "Couldn't send the code — check the number format (+44…).")
+    } finally {
+      setOtpBusy(false)
+    }
+  }
+
+  const confirmOtp = async () => {
+    setOtpBusy(true)
+    setOtpError('')
+    try {
+      const newPhone = await usersApi.verifyPhoneOtp(otpCode.trim())
+      setPhone(newPhone)
+      setOtpSent(false)
+      setOtpCode('')
+      await fetchUser().catch(() => {})
+    } catch (err: any) {
+      setOtpError(err.message ?? 'Wrong code — try again.')
+    } finally {
+      setOtpBusy(false)
+    }
+  }
 
   // First completed save doubles as coach onboarding — frame the page as a
   // setup moment, not an edit screen, until then.
@@ -153,16 +194,14 @@ export default function CoachSettingsPage() {
         ponderCallTime:      profile.ponderCallTime,
         ponderCallFrequency: profile.ponderCallFrequency,
       })
-      // Phone powers the ponder calls + the welcome call — save if provided.
-      // A silent failure here would silently kill both, so surface it.
-      if (phone.trim() && phone.trim() !== user?.phone) {
-        try {
-          await usersApi.updateProfile({ phone: phone.trim() } as any)
-        } catch {
-          setError("Couldn't save your phone number — use international format, e.g. +44 7700 900123.")
-          setSaving(false)
-          return
-        }
+      // Phone is set exclusively through OTP verification (confirmOtp updates
+      // it server-side) — an entered-but-unverified number never gets saved,
+      // because Ivy dialing an unproven number is how welcome calls ring into
+      // the void.
+      if (phoneChanged) {
+        setError('Verify your phone first — tap "Text me a code" next to the number.')
+        setSaving(false)
+        return
       }
       // First completed setup = coach onboarding done → the partner welcome
       // call schedules itself server-side. Route into the console.
@@ -246,13 +285,58 @@ export default function CoachSettingsPage() {
                 Your phone{' '}
                 <span className="text-ink-400 font-normal">— for ponder calls</span>
               </label>
-              <input
-                value={phone}
-                onChange={(e) => setPhone(e.target.value)}
-                placeholder="+44 7700 900000"
-                className={inputClass}
-              />
-              <p className="text-2xs text-ink-400 mt-1.5">Ivy rings you here — the welcome call and your biweekly ponder sessions.</p>
+              <div className="flex gap-2">
+                <input
+                  value={phone}
+                  onChange={(e) => { setPhone(e.target.value); setOtpSent(false); setOtpError('') }}
+                  placeholder="+44 7700 900000"
+                  className={inputClass}
+                  inputMode="tel"
+                />
+                {phoneChanged && !otpSent && (
+                  <button
+                    type="button"
+                    onClick={sendOtp}
+                    disabled={otpBusy}
+                    className="px-3 py-2 rounded-xl border border-gold-400/30 bg-gold-400/10 text-gold-400 text-xs font-medium hover:bg-gold-400/15 transition-colors shrink-0 whitespace-nowrap disabled:opacity-60"
+                  >
+                    {otpBusy ? 'Sending…' : 'Text me a code'}
+                  </button>
+                )}
+                {phoneVerified && (
+                  <span className="flex items-center gap-1 px-3 text-xs text-sage-400 shrink-0">
+                    <Check className="w-3.5 h-3.5" /> Verified
+                  </span>
+                )}
+              </div>
+              {otpSent && (
+                <div className="flex gap-2 mt-2 animate-fade-in">
+                  <input
+                    value={otpCode}
+                    onChange={(e) => setOtpCode(e.target.value)}
+                    placeholder="6-digit code"
+                    className={inputClass}
+                    inputMode="numeric"
+                    maxLength={6}
+                    autoComplete="one-time-code"
+                  />
+                  <button
+                    type="button"
+                    onClick={confirmOtp}
+                    disabled={otpBusy || otpCode.trim().length < 6}
+                    className="px-4 py-2 rounded-xl bg-gold-400 text-ink-900 text-xs font-semibold hover:bg-gold-300 transition-colors shrink-0 disabled:opacity-60"
+                  >
+                    {otpBusy ? 'Checking…' : 'Confirm'}
+                  </button>
+                </div>
+              )}
+              {otpError && <p className="text-2xs text-ember-400 mt-1.5">{otpError}</p>}
+              <p className="text-2xs text-ink-400 mt-1.5">
+                Ivy rings you here — the welcome call and your ponder sessions.
+                {user?.ivyCallNumber && (
+                  <> Her number is <span className="text-ink-200 font-medium whitespace-nowrap">{user.ivyCallNumber}</span> — save it as <span className="text-ink-200 font-medium">Ivy</span> so you know it&rsquo;s her.</>
+                )}
+              </p>
             </div>
 
             <div>
@@ -480,10 +564,11 @@ export default function CoachSettingsPage() {
               : <><Save className="w-4 h-4" /> Save settings</>}
           </button>
 
-          {firstRun && phone.trim() && (
+          {firstRun && phoneVerified && (
             <p className="text-center text-2xs text-ink-400 leading-relaxed px-4">
               Once you finish, Ivy rings you within a couple of minutes for a proper
-              welcome — keep your phone handy.
+              welcome{user?.ivyCallNumber ? ` from ${user.ivyCallNumber}` : ''} — keep
+              your phone handy.
             </p>
           )}
 

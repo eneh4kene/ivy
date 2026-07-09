@@ -17,6 +17,7 @@ import {
   PhoneCall, Share2, X,
 } from 'lucide-react'
 import { coachApi, type CoachProfile, type CoachClient } from '@/lib/api'
+import { useAuthStore } from '@/lib/store/auth.store'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -162,6 +163,7 @@ function SectionHeader({ label, count, accent }: { label: string; count: number;
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function CoachDashboard() {
+  const { user } = useAuthStore()
   const [profile, setProfile] = useState<CoachProfile | null>(null)
   const [clients, setClients] = useState<CoachClient[]>([])
   const [inviteUrl, setInviteUrl] = useState('')
@@ -293,8 +295,10 @@ export default function CoachDashboard() {
             <div className="flex-1 min-w-0">
               <p className="text-sm font-semibold text-ink-50 mb-0.5">Ivy&rsquo;s about to ring you</p>
               <p className="text-xs text-ink-300 leading-relaxed">
-                Your welcome call lands in the next couple of minutes — pick up and
-                she&rsquo;ll walk you through how you two work together.
+                Your welcome call lands in the next couple of minutes
+                {user?.ivyCallNumber && (
+                  <> from <span className="text-ink-100 font-medium whitespace-nowrap">{user.ivyCallNumber}</span> — save it as Ivy</>
+                )}. Pick up and she&rsquo;ll walk you through how you two work together.
               </p>
             </div>
             <button
