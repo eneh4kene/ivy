@@ -477,7 +477,35 @@ class CoachService {
   async updateProgrammeAreas(coachId: string, clientId: string, areas: Array<{ id: string; area: string; instruction: string }>) {
     const client = await prisma.user.findFirst({ where: { id: clientId, coachId } });
     if (!client) throw new NotFoundError('Client not found');
-    return prisma.user.update({ where: { id: clientId }, data: { programmeAreas: areas as any } });
+
+    // Stamp changed/new areas so the client's Plan view can say "updated today"
+    // per area, and diff against what was stored to decide whether anything
+    // actually changed (no change → no notification).
+    const prev: Array<{ id: string; area: string; instruction: string; updatedAt?: string }> =
+      Array.isArray(client.programmeAreas) ? (client.programmeAreas as any) : [];
+    const now = new Date().toISOString();
+    let changed = prev.length !== areas.length;
+    const stamped = areas.map((a) => {
+      const old = prev.find((p) => p.id === a.id);
+      if (old && old.area === a.area && old.instruction === a.instruction) {
+        return { ...a, updatedAt: old.updatedAt ?? now, updatedBy: (old as any).updatedBy ?? 'coach' };
+      }
+      changed = true;
+      return { ...a, updatedAt: now, updatedBy: 'coach' };
+    });
+
+    const updated = await prisma.user.update({
+      where: { id: clientId },
+      data: { programmeAreas: stamped as any },
+    });
+
+    if (changed) {
+      inngest.send({
+        name: 'programme/updated',
+        data: { clientId, coachId, source: 'coach' },
+      }).catch((err) => logger.warn(`programme/updated event failed for ${clientId}:`, err));
+    }
+    return updated;
   }
 
   // ── Ponder sessions ────────────────────────────────────────────────────────
@@ -631,12 +659,22 @@ class CoachService {
     return call;
   }
 
-  async extractAndApplyProgrammeUpdates(coachId: string, callSummary: string) {
+  /**
+   * Extract programme changes the coach stated (in a ponder call summary or a
+   * chat message) and apply them. Returns what was applied so the caller can
+   * confirm precisely (chat) or summarise (ponder). Emits programme/updated
+   * per affected client for the delayed client notification.
+   */
+  async extractAndApplyProgrammeUpdates(
+    coachId: string,
+    callSummary: string,
+    source: 'ponder' | 'chat' = 'ponder',
+  ): Promise<Array<{ clientId: string; clientName: string; area: string; instruction: string }>> {
     const clients = await prisma.user.findMany({
       where: { coachId },
       select: { id: true, firstName: true, lastName: true, programmeAreas: true },
     });
-    if (clients.length === 0 || !callSummary.trim()) return;
+    if (clients.length === 0 || !callSummary.trim()) return [];
 
     const clientList = clients.map((c) => `${c.firstName} ${c.lastName} (id: ${c.id})`).join('\n');
 
@@ -656,7 +694,7 @@ class CoachService {
       text = msg.content[0].type === 'text' ? msg.content[0].text.trim() : '[]';
     } catch (err) {
       logger.error(`Ponder: programme-update extraction failed for coach ${coachId} — updates from this call were NOT applied`, err);
-      return;
+      return [];
     }
 
     // Models sometimes wrap JSON in ``` fences despite instructions.
@@ -667,15 +705,19 @@ class CoachService {
       updates = JSON.parse(jsonText);
     } catch {
       logger.error(`Ponder: could not parse programme updates for coach ${coachId} — raw model output: ${text.slice(0, 300)}`);
-      return;
+      return [];
     }
-    if (!Array.isArray(updates) || updates.length === 0) return;
+    if (!Array.isArray(updates) || updates.length === 0) return [];
+
+    const now = new Date().toISOString();
+    const applied: Array<{ clientId: string; clientName: string; area: string; instruction: string }> = [];
+    const touchedClients = new Set<string>();
 
     for (const update of updates) {
       const client = clients.find((c) => c.id === update.clientId);
       if (!client) continue;
 
-      const areas: Array<{ id: string; area: string; instruction: string }> =
+      const areas: Array<{ id: string; area: string; instruction: string; updatedAt?: string; updatedBy?: string }> =
         Array.isArray(client.programmeAreas) ? (client.programmeAreas as any) : [];
 
       const existing = areas.findIndex((a) => a.area.toLowerCase() === update.area.toLowerCase());
@@ -683,14 +725,26 @@ class CoachService {
         if (existing !== -1) areas.splice(existing, 1);
       } else if (existing !== -1) {
         areas[existing].instruction = update.instruction;
+        areas[existing].updatedAt = now;
+        areas[existing].updatedBy = 'ivy';
       } else {
-        areas.push({ id: crypto.randomUUID(), area: update.area, instruction: update.instruction });
+        areas.push({ id: crypto.randomUUID(), area: update.area, instruction: update.instruction, updatedAt: now, updatedBy: 'ivy' });
       }
 
       await prisma.user.update({ where: { id: client.id }, data: { programmeAreas: areas as any } });
+      applied.push({ clientId: client.id, clientName: `${client.firstName} ${client.lastName}`.trim(), area: update.area, instruction: update.instruction });
+      touchedClients.add(client.id);
     }
 
-    logger.info(`Ponder: applied ${updates.length} programme area update(s) for coach ${coachId}`);
+    for (const clientId of touchedClients) {
+      inngest.send({
+        name: 'programme/updated',
+        data: { clientId, coachId, source },
+      }).catch((err) => logger.warn(`programme/updated event failed for ${clientId}:`, err));
+    }
+
+    logger.info(`Programme updates (${source}): applied ${applied.length} for coach ${coachId}`);
+    return applied;
   }
 }
 

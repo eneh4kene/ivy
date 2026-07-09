@@ -1,46 +1,37 @@
 'use client'
 
 /**
- * Persistent bottom tab bar for the consumer PWA — the app's primary
- * navigation. Four destinations: Home, Ivy (chat), Circle, Impact.
+ * Persistent bottom tab bar for the coach console — mirrors the consumer
+ * BottomNav so the coach PWA feels like the same product, not an admin panel.
+ * Four destinations: Console, Clients, Chat (Ivy), Settings.
  *
- * Rendered once via ConsumerShell so every consumer surface shares the same
- * chrome (previously each route was a standalone full-screen with no nav, which
- * is why actions ended up dumped mid-page). Uses theme-vine tokens and respects
- * the iOS home-indicator safe area.
+ * Rendered once via the (console) layout so every coach surface shares the
+ * chrome. The Chat tab carries the same unread badge as the consumer app —
+ * ponder summaries and slip alerts land there.
  */
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { Home, MessageCircle, Users, Heart, ClipboardList } from 'lucide-react'
+import { LayoutGrid, Users, MessageCircle, Settings } from 'lucide-react'
 import { useChatUnread } from '@/lib/hooks/useChatUnread'
-import { useAuthStore } from '@/lib/store/auth.store'
 
 type Tab = {
   href: string
   label: string
-  icon: typeof Home
-  /** highlight when the path starts with any of these */
+  icon: typeof LayoutGrid
   match: string[]
 }
 
 const TABS: Tab[] = [
-  { href: '/home', label: 'Home', icon: Home, match: ['/home'] },
-  { href: '/ivy', label: 'Ivy', icon: MessageCircle, match: ['/ivy'] },
-  { href: '/circles', label: 'Circle', icon: Users, match: ['/circles'] },
-  { href: '/donations', label: 'Impact', icon: Heart, match: ['/donations'] },
+  { href: '/coach', label: 'Console', icon: LayoutGrid, match: ['/coach'] },
+  { href: '/coach/clients', label: 'Clients', icon: Users, match: ['/coach/clients'] },
+  { href: '/coach/chat', label: 'Ivy', icon: MessageCircle, match: ['/coach/chat'] },
+  { href: '/coach/settings', label: 'Settings', icon: Settings, match: ['/coach/settings'] },
 ]
 
-// Users under a coach get a Plan tab — their coach-set programme lives there.
-const PLAN_TAB: Tab = { href: '/plan', label: 'Plan', icon: ClipboardList, match: ['/plan'] }
-
-export function BottomNav() {
+export function CoachNav() {
   const pathname = usePathname()
   const unread = useChatUnread()
-  const { user } = useAuthStore()
-  const tabs = user?.coachId
-    ? [TABS[0], PLAN_TAB, ...TABS.slice(1)]
-    : TABS
 
   return (
     <nav
@@ -48,10 +39,14 @@ export function BottomNav() {
       className="fixed bottom-0 inset-x-0 z-40 border-t border-ink-700/60 bg-ink-900/85 backdrop-blur-xl safe-bottom"
     >
       <ul className="mx-auto flex max-w-lg items-stretch justify-around px-2">
-        {tabs.map((tab) => {
-          const active = tab.match.some((m) => pathname === m || pathname.startsWith(`${m}/`))
+        {TABS.map((tab) => {
+          // /coach is a prefix of every coach route — exact-match it so it
+          // doesn't light up on /coach/clients etc.
+          const active = tab.href === '/coach'
+            ? pathname === '/coach'
+            : tab.match.some((m) => pathname === m || pathname.startsWith(`${m}/`))
           const Icon = tab.icon
-          const showBadge = tab.href === '/ivy' && unread > 0
+          const showBadge = tab.href === '/coach/chat' && unread > 0
           return (
             <li key={tab.href} className="flex-1">
               <Link

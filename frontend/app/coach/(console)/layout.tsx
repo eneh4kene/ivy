@@ -4,6 +4,7 @@ import { useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuthStore } from '@/lib/store/auth.store'
 import { postLoginDestination } from '@/lib/auth-routing'
+import { CoachNav } from '@/components/layout/CoachNav'
 
 /**
  * Gate for the coach console (/coach, /coach/clients, /coach/settings).
@@ -33,5 +34,10 @@ export default function CoachConsoleLayout({ children }: { children: React.React
     return null
   }
 
-  return <div className="theme-vine min-h-[100dvh]">{children}</div>
+  return (
+    <div className="theme-vine min-h-[100dvh] pb-20">
+      {children}
+      <CoachNav />
+    </div>
+  )
 }

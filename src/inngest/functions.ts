@@ -61,6 +61,48 @@ const ponderScheduler = inngest.createFunction(
   }
 );
 
+// Event-driven: a coach (or Ivy, post-ponder/chat) changed a client's
+// programme → tell the client about an hour later. The delay batches a burst
+// of edits from one session into one nudge, and the client reads the CURRENT
+// plan when they open the tab.
+const programmeUpdatedNotify = inngest.createFunction(
+  {
+    id: 'programme-updated-notify',
+    name: 'Programme updated — notify client',
+    triggers: { event: 'programme/updated' },
+    // A ponder session can touch one client several times — one notification
+    // per client per session is plenty.
+    idempotency: 'event.data.clientId',
+  },
+  async ({ event, step }) => {
+    await step.sleep('let-the-session-finish', '1h');
+
+    await step.run('notify-client', async () => {
+      const client = await prisma.user.findUnique({
+        where: { id: event.data.clientId as string },
+        select: {
+          id: true, firstName: true, isActive: true,
+          coach: { select: { firstName: true, coachProfile: { select: { brandName: true, whitelabelEnabled: true } } } },
+        },
+      });
+      if (!client || !client.isActive || !client.coach) return;
+
+      const coachLabel = (client.coach.coachProfile?.whitelabelEnabled && client.coach.coachProfile.brandName)
+        ? client.coach.coachProfile.brandName
+        : client.coach.firstName;
+
+      const chatService = (await import('../services/chat.service')).default;
+      // postIvyMessage writes the thread AND fires the web push.
+      await chatService.postIvyMessage(
+        client.id,
+        `${coachLabel} refreshed your programme — take a look in your Plan tab. I'll be coaching to it from today.`,
+        { messageType: 'programme_update' },
+      );
+    });
+    return { ok: true };
+  }
+);
+
 // 1st of every month at 2am UTC — dispatch accumulated wallet donations to charities
 const monthlyDonationDispatch = inngest.createFunction(
   { id: 'monthly-donation-dispatch', name: 'Monthly charity donation dispatch', triggers: { cron: '0 2 1 * *' } },
@@ -255,6 +297,7 @@ export const functions = [
   weeklyBuddyDigest,
   weeklyCoachDigest,
   ponderScheduler,
+  programmeUpdatedNotify,
   monthlyDonationDispatch,
   dailyEveningCalls,
   dailyChatMemory,

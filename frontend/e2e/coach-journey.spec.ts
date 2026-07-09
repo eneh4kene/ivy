@@ -77,6 +77,15 @@ test('coach journey — signup → activation → setup → console → invite r
     const inviteUrl = (await page.locator('.font-mono', { hasText: '/invite/' }).first().textContent())?.trim()
     expect(inviteUrl, 'console should surface a full invite URL').toMatch(/https?:\/\/.+\/invite\/.+/)
 
+    // ── 4b. The coach nav works: clients roster + Ivy chat surfaces render ──
+    await expect(page.getByRole('navigation', { name: 'Primary' })).toBeVisible()
+    await page.getByRole('navigation', { name: 'Primary' }).getByText('Clients').click()
+    await page.waitForURL(/\/coach\/clients$/, { timeout: 15_000 })
+    await expect(page.getByRole('heading', { name: 'Clients' })).toBeVisible()
+    await page.getByRole('navigation', { name: 'Primary' }).getByText('Ivy').click()
+    await page.waitForURL(/\/coach\/chat/, { timeout: 15_000 })
+    await expect(page.getByPlaceholder('Message Ivy…')).toBeVisible()
+
     // ── 5. The invite resolves for an anonymous visitor ──────────────────────
     const anon = await browser.newContext()
     try {

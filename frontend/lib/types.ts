@@ -46,6 +46,8 @@ export interface User {
   role?: UserRole
   // The number Ivy dials from (currency-routed) — for "save this number" UI.
   ivyCallNumber?: string | null
+  // Coach-set programme areas (Plan tab). updatedBy: 'coach' | 'ivy'.
+  programmeAreas?: Array<{ id: string; area: string; instruction: string; updatedAt?: string; updatedBy?: string }> | null
   createdAt: string
   updatedAt: string
   preferredCharity?: Charity

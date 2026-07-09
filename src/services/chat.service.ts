@@ -98,13 +98,52 @@ class ChatService {
       data: { userId, channel: 'IN_APP', direction: 'INBOUND', content: text, status: 'READ', messageType: 'chat' },
     })
 
-    const reply = await this.generateReply(userId)
+    // Coaches can state programme changes in chat ("move Tom to 3x a week") —
+    // extract + apply BEFORE generating the reply, so Ivy confirms what
+    // actually happened instead of promising vaguely. Only worth a model call
+    // when the message plausibly names a client.
+    let appliedNote: string | undefined
+    const user = await prisma.user.findUnique({ where: { id: userId }, select: { subscriptionTier: true } })
+    if (user?.subscriptionTier === 'COACH') {
+      appliedNote = await this.applyCoachProgrammeChanges(userId, text)
+    }
+
+    const reply = await this.generateReply(userId, appliedNote)
 
     const ivyMsg = await prisma.message.create({
       data: { userId, channel: 'IN_APP', direction: 'OUTBOUND', content: reply, status: 'SENT', messageType: 'chat' },
     })
 
     return ivyMsg
+  }
+
+  /**
+   * Run programme-update extraction on a coach's chat message when it mentions
+   * one of their clients by first name. Returns a note describing what was
+   * applied (for the reply prompt), or undefined when nothing ran/matched.
+   */
+  private async applyCoachProgrammeChanges(coachId: string, text: string): Promise<string | undefined> {
+    try {
+      const clients = await prisma.user.findMany({
+        where: { coachId },
+        select: { firstName: true },
+      })
+      const lower = text.toLowerCase()
+      const mentionsClient = clients.some(
+        (c) => c.firstName && c.firstName.length > 2 && lower.includes(c.firstName.toLowerCase()),
+      )
+      if (!mentionsClient) return undefined
+
+      const coachService = (await import('./coach.service')).default
+      const applied = await coachService.extractAndApplyProgrammeUpdates(coachId, text, 'chat')
+      if (applied.length === 0) return undefined
+      return applied
+        .map((u) => `${u.clientName} — ${u.area}: ${u.instruction === 'REMOVE' ? 'removed' : u.instruction}`)
+        .join('\n')
+    } catch (err) {
+      logger.warn(`Coach chat programme extraction failed for ${coachId}:`, err)
+      return undefined
+    }
   }
 
   /** Action-button taps on an Ivy card (onboarding handoff). */
@@ -137,20 +176,22 @@ class ChatService {
 
   // ── internals ────────────────────────────────────────────────────────────────
 
-  private async generateReply(userId: string): Promise<string> {
+  private async generateReply(userId: string, appliedNote?: string): Promise<string> {
     const FALLBACK = `I'm here — say a bit more and I'll help you sort it.`
     if (!this.client) return FALLBACK
 
     try {
       const [ctx, user, history] = await Promise.all([
         callService.getUserContext(userId, 'CHAT'),
-        prisma.user.findUnique({ where: { id: userId }, select: { subscriptionTier: true, commStyle: true } }),
+        prisma.user.findUnique({ where: { id: userId }, select: { subscriptionTier: true, commStyle: true, firstName: true } }),
         this.getThread(userId, HISTORY_LIMIT),
       ])
 
       const isB2B = user?.subscriptionTier === 'B2B'
       ctx.comm_preference = user?.commStyle ?? ctx.comm_preference
-      const system = promptService.buildSystemPrompt('CHAT', ctx, isB2B)
+      const system = user?.subscriptionTier === 'COACH'
+        ? await this.buildCoachChatSystem(userId, user.firstName ?? 'Coach', appliedNote)
+        : promptService.buildSystemPrompt('CHAT', ctx, isB2B)
 
       const messages = history.map((m) => ({
         role: (m.direction === 'INBOUND' ? 'user' : 'assistant') as 'user' | 'assistant',
@@ -174,6 +215,36 @@ class ChatService {
       logger.error(`Ivy chat reply failed for ${userId}:`, err)
       return FALLBACK
     }
+  }
+
+  /**
+   * System prompt for COACH chat — the same colleague who runs the ponder
+   * calls, in text form. Grounded in the live roster brief so she can answer
+   * "how's Sarah doing" with real data, and told exactly what programme
+   * changes were just applied so confirmations are precise, never vague.
+   */
+  private async buildCoachChatSystem(coachId: string, coachName: string, appliedNote?: string): Promise<string> {
+    let rosterBrief = ''
+    try {
+      const coachService = (await import('./coach.service')).default
+      rosterBrief = await coachService.generatePonderBrief(coachId)
+    } catch { /* roster unavailable — Ivy still replies, just without data */ }
+
+    return [
+      `You are Ivy, texting with ${coachName} — a professional coach you work WITH. You run the daily accountability for their clients (morning voice notes, evening settles, the money on the line) and report back what you see. This chat is the text side of your working relationship; the biweekly ponder call is the voice side.`,
+      '',
+      `TEXTING STYLE: short. One to three sentences unless they ask for a rundown. A colleague on WhatsApp, not a report. React to what they said first. Never bullet-point lists unless they ask for a summary.`,
+      '',
+      rosterBrief,
+      '',
+      appliedNote
+        ? `JUST APPLIED (from their last message — already saved to the programme, the client will be notified): \n${appliedNote}\nConfirm this naturally and precisely — repeat back what changed in your own words. Do not claim anything beyond these exact changes.`
+        : `PROGRAMME CHANGES: when they state a change for a named client ("move Tom to 3x a week"), it is extracted and applied automatically. If you see no JUST APPLIED block for a change they clearly requested, it did NOT apply — tell them to phrase it with the client's name and the specific change, don't pretend it worked.`,
+      '',
+      `Never invent client data — if it's not in your notes above, say you'll check. Slip alerts and ponder summaries also arrive in this thread, so they may reference those.`,
+      '',
+      `NEVER: open with "Great!"/"Absolutely!" or filler; talk to a coach about THEIR streaks/stakes (they have none — they're a partner, not a member); oversell — you're a colleague reporting from the field, and understatement lands better with professionals.`,
+    ].filter(Boolean).join('\n')
   }
 
   private async notify(userId: string, content: string): Promise<void> {

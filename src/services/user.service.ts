@@ -80,6 +80,8 @@ class UserService {
         // role — every user-shaped response must carry it or a fetchUser()
         // refresh silently strips coaches back to consumers.
         role: true,
+        // Coach-set programme — the consumer Plan tab renders this.
+        programmeAreas: true,
         subscriptionTier: true,
         subscriptionStatus: true,
         track: true,

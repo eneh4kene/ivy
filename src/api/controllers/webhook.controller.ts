@@ -152,24 +152,31 @@ class WebhookController {
               .catch((err) => logger.warn('Catch-up clear failed', err));
           }
 
-          // Ponder call post-processing
+          // Ponder call post-processing: apply the programme changes the coach
+          // stated, then tell them exactly what was applied — in-app thread
+          // (with web push) AND SMS/WhatsApp, so the confirmation is precise
+          // rather than "any updates have been applied".
           if (dbCallType === 'COACH_PONDER' && dbUserId) {
             const summary = call.call_analysis?.call_summary ?? (call.transcript?.slice(0, 800) ?? '');
             if (summary) {
-              coachService.extractAndApplyProgrammeUpdates(dbUserId, summary)
-                .catch((err) => logger.warn('Ponder programme update failed:', err));
+              coachService.extractAndApplyProgrammeUpdates(dbUserId, summary, 'ponder')
+                .then(async (applied) => {
+                  const appliedBlock = applied.length > 0
+                    ? `\n\nApplied to programmes:\n${applied.map((u) => `• ${u.clientName} — ${u.area}: ${u.instruction === 'REMOVE' ? 'removed' : u.instruction}`).join('\n')}\nYour clients will see the changes in their Plan tab (and get a nudge within the hour).`
+                    : `\n\nNo programme changes were requested on this call.`;
+                  const content = `Ponder summary:\n\n${summary.slice(0, 600)}${appliedBlock}`;
 
-              // Send WhatsApp summary to coach
-              prisma.user.findUnique({ where: { id: dbUserId }, select: { phone: true } })
-                .then((coach) => {
+                  const chatService = (await import('../../services/chat.service')).default;
+                  await chatService.postIvyMessage(dbUserId, content, { messageType: 'ponder_summary' })
+                    .catch((err) => logger.warn('Ponder in-app summary failed:', err));
+
+                  const coach = await prisma.user.findUnique({ where: { id: dbUserId }, select: { phone: true } });
                   if (coach?.phone) {
-                    messagingService.sendMessage(
-                      dbUserId,
-                      `Ivy ponder summary:\n\n${summary.slice(0, 600)}\n\nAny programme area updates from our chat have been applied.`
-                    ).catch((err) => logger.warn('Ponder summary message failed:', err));
+                    messagingService.sendMessage(dbUserId, `Ivy ${content}`)
+                      .catch((err) => logger.warn('Ponder summary message failed:', err));
                   }
                 })
-                .catch((err) => logger.warn('Ponder coach lookup failed:', err));
+                .catch((err) => logger.warn('Ponder programme update failed:', err));
             }
           }
           break;
