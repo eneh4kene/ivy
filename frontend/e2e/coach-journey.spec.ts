@@ -73,7 +73,7 @@ test('coach journey — signup → activation → setup → console → invite r
     // ── 4. Console renders with the real invite link ─────────────────────────
     await waitForApiIdle()
     await expect(page.getByRole('heading', { name: 'E2E Strength Foundation' })).toBeVisible()
-    await expect(page.getByText('Your invite link')).toBeVisible()
+    await expect(page.getByText('Your invite link', { exact: true })).toBeVisible()
     const inviteUrl = (await page.locator('.font-mono', { hasText: '/invite/' }).first().textContent())?.trim()
     expect(inviteUrl, 'console should surface a full invite URL').toMatch(/https?:\/\/.+\/invite\/.+/)
 

@@ -15,6 +15,19 @@ landing on the call row). Separately, prod (Fly v77, deployed 7 Jul) is one comm
 behind `master` as of 9 Jul, and the e2e suite hasn't been re-run since 2 Jul despite
 ~15 feature commits landing 3–7 Jul.
 
+**UPDATE 9 Jul 2026 (later):** all of the above closed. Prod is on latest master
+(Fly v79 + fresh Vercel deploy), the e2e suite is re-run green against live prod,
+and the **coach self-serve funnel — which had never worked — is fixed and verified
+end-to-end** (commit `c18c564`): magic-link verify had routed coach signups into
+consumer onboarding, `/coach/join` was locked behind the tier it grants, and the
+partner welcome call was unreachable code. The suite now includes a coach-journey
+spec (signup → activation → webhook-simulated tier flip → setup → console →
+anonymous invite resolution), green on live prod, mobile + desktop. **10/10 e2e
+green** (mobile ran on Chromium-emulated iPhone — the verification host can't
+install WebKit deps; re-run on a rooted machine for true-Safari coverage).
+Remaining for handover: the founder's live voice-call proof, now including one
+coach welcome call (finish coach setup with a real phone → Ivy rings ~2 min later).
+
 ## ✅ Proven working end-to-end (live prod)
 
 1. **Signup → magic link → onboarding → stake setup → checkout.** A fresh user walked
