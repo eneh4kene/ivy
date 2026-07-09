@@ -19,6 +19,9 @@ export const googleAuthSchema = z.object({
     // currency/region. Defaults to GB/GBP when omitted.
     region: z.enum(['GB', 'US']).optional(),
     tcpaConsent: z.boolean().optional(),
+    // Coach-intent signup (from /signup?as=coach). Only 'coach' is accepted —
+    // privileged roles can never arrive from the client.
+    role: z.enum(['coach']).optional(),
   }),
 });
 

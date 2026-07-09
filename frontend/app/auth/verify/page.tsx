@@ -4,6 +4,7 @@ import { Suspense, useEffect, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { authApi } from '@/lib/api'
 import { useAuthStore } from '@/lib/store/auth.store'
+import { postLoginDestination } from '@/lib/auth-routing'
 
 function VerifyContent() {
   const router = useRouter()
@@ -28,14 +29,9 @@ function VerifyContent() {
         setUser(user)
         setStatus('success')
 
-        // Route based on tier and onboarding state
-        let destination = '/dashboard'
-        if (user.subscriptionTier === 'COACH') {
-          destination = user.isOnboarded ? '/coach' : '/coach/settings'
-        } else if (!user.isOnboarded) {
-          destination = user.subscriptionTier === 'B2B' ? '/onboard/welcome' : '/onboard-consumer'
-        }
-        setTimeout(() => router.push(destination), 1000)
+        // postLoginDestination is the single source of truth for post-auth
+        // routing (coach funnel, consumer onboarding, B2B) — never fork it here.
+        setTimeout(() => router.push(postLoginDestination(user)), 1000)
       } catch (err: any) {
         setStatus('error')
         setError(err.message || 'Failed to verify magic link')

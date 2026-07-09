@@ -16,6 +16,7 @@ import { useRouter } from 'next/navigation'
 import { ArrowRight, PhoneCall, Bell, Link2, Loader2 } from 'lucide-react'
 import { ProtectedRoute } from '@/components/auth/protected-route'
 import { useAuthStore } from '@/lib/store/auth.store'
+import { postLoginDestination } from '@/lib/auth-routing'
 import { paymentsApi } from '@/lib/api'
 
 const DEAL = [
@@ -40,6 +41,9 @@ function CoachJoinInner() {
   useEffect(() => {
     if (user?.subscriptionTier === 'COACH') {
       router.replace(user.isOnboarded ? '/coach' : '/coach/settings')
+    } else if (user && user.role !== 'coach') {
+      // Consumers have no business on the coach activation page.
+      router.replace(postLoginDestination(user))
     }
   }, [user, router])
 

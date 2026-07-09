@@ -35,6 +35,9 @@ const AUTH_USER_SELECT = {
   callFrequency: true,
   telegramChatId: true,
   pendingCoachId: true,
+  // postLoginDestination on the client routes coach-intent signups
+  // (role='coach', tier still FREE) to /coach/join — it needs this field.
+  role: true,
 } as const;
 
 class AuthService {
@@ -69,7 +72,7 @@ class AuthService {
    */
   async googleSignIn(
     idToken: string,
-    opts: { region?: 'GB' | 'US'; tcpaConsent?: boolean } = {},
+    opts: { region?: 'GB' | 'US'; tcpaConsent?: boolean; role?: string } = {},
   ): Promise<{ accessToken: string; user: any; isNewUser: boolean }> {
     const clientId = config.calendar.google.clientId;
     if (!clientId) {
@@ -121,6 +124,9 @@ class AuthService {
             subscriptionTier: 'FREE',
             isActive: true,
             isOnboarded: false,
+            // Coach-intent SSO signup (from /signup?as=coach). Whitelisted to
+            // exactly 'coach' — clients must never mint admin roles.
+            ...(opts.role === 'coach' && { role: 'coach' }),
             ...(opts.tcpaConsent !== undefined && {
               tcpaConsent: opts.tcpaConsent,
               tcpaConsentAt: opts.tcpaConsent ? new Date() : null,

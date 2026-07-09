@@ -27,6 +27,12 @@ export function useStakeGate() {
   }, [fetchUser])
 
   useEffect(() => {
+    // Coaches never belong on consumer surfaces (home/dashboard) — even
+    // onboarded ones. Their world is the coach console / activation funnel.
+    if (user && (user.subscriptionTier === 'COACH' || user.role === 'coach')) {
+      router.replace(postLoginDestination(user))
+      return
+    }
     // Resume the journey: a half-onboarded user (e.g. installed the PWA
     // mid-funnel — start_url is /home) belongs back in onboarding, not on a
     // dead dashboard. postLoginDestination routes consumers / B2B / coaches

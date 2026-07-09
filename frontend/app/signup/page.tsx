@@ -240,7 +240,7 @@ function SignupForm() {
                 <div className="h-px flex-1 bg-border" />
               </div>
 
-              <GoogleSignInButton region={region} tcpaConsent={tcpaConsent} onError={setError} />
+              <GoogleSignInButton region={region} tcpaConsent={tcpaConsent} role={isCoach ? 'coach' : undefined} onError={setError} />
 
               <p className="text-center text-sm text-muted-foreground mt-6">
                 Already have an account?{' '}
