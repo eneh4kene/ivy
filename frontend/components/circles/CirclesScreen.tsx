@@ -75,6 +75,97 @@ function NavBar({ title, subtitle }: { title?: string; subtitle?: string }) {
 }
 
 /**
+ * The active game, rendered by mechanic: a progress bar for the collective
+ * pact, a mini leaderboard for the points race, holder + lives for the relay.
+ * Ivy's own state summary rides underneath — her voice, our pixels.
+ */
+function GameCard({ game, stateSummary, nameOf, myUserId }: {
+  game: NonNullable<ActiveGame>['game']
+  stateSummary?: string
+  nameOf: (id: string) => string
+  myUserId?: string
+}) {
+  const state = (game.state ?? {}) as Record<string, any>
+  const rules = (game.rules ?? {}) as Record<string, any>
+
+  let body: React.ReactNode = null
+  if (game.templateType === 'collective') {
+    const target = Number(rules.target ?? 30)
+    const total = Number(state.total ?? 0)
+    const pct = Math.min(100, Math.round((total / Math.max(1, target)) * 100))
+    const deadlineDays = Number(rules.deadline_days ?? 0)
+    const started = game.startedAt ? new Date(game.startedAt).getTime() : Date.now()
+    const daysLeft = deadlineDays ? Math.max(0, Math.ceil((started + deadlineDays * 86_400_000 - Date.now()) / 86_400_000)) : null
+    body = (
+      <div className="mt-3">
+        <div className="flex items-baseline justify-between mb-1.5">
+          <p className="text-sm text-ink-50 font-semibold tabular-nums">{total} <span className="text-ink-400 font-normal">of {target} kept days</span></p>
+          {daysLeft != null && <p className="text-2xs text-ink-400">{daysLeft} day{daysLeft !== 1 ? 's' : ''} left</p>}
+        </div>
+        <div className="h-2 rounded-full bg-ink-900/70 border border-ink-700 overflow-hidden">
+          <div className="h-full rounded-full bg-gradient-to-r from-sage-500 to-sage-300 transition-all duration-700" style={{ width: `${pct}%` }} />
+        </div>
+      </div>
+    )
+  } else if (game.templateType === 'points_race') {
+    const scores = (state.scores ?? {}) as Record<string, number>
+    const sorted = Object.entries(scores).sort(([, a], [, b]) => b - a)
+    const top = sorted.slice(0, 3)
+    const myRank = sorted.findIndex(([id]) => id === myUserId)
+    const rows = myUserId && myRank >= 3 ? [...top, sorted[myRank]] : top
+    body = (
+      <div className="mt-3 space-y-1">
+        {rows.map(([id, pts]) => {
+          const rank = sorted.findIndex(([sid]) => sid === id) + 1
+          const isYou = id === myUserId
+          return (
+            <div key={id} className={`flex items-center gap-2 rounded-lg px-2.5 py-1.5 ${isYou ? 'bg-gold-400/05 border border-gold-400/10' : ''}`}>
+              <span className="text-2xs text-ink-400 w-4 tabular-nums">{rank === 1 ? '👑' : rank}</span>
+              <span className={`flex-1 text-xs font-medium ${isYou ? 'text-gold-300' : 'text-ink-100'}`}>{isYou ? 'You' : nameOf(id)}</span>
+              <span className="text-xs text-ink-200 tabular-nums">{pts} pts</span>
+            </div>
+          )
+        })}
+        <p className="text-2xs text-ink-400 pt-0.5">First to {rules.target ?? 20} takes the crown.</p>
+      </div>
+    )
+  } else if (game.templateType === 'relay') {
+    const lives = Number(state.lives_remaining ?? 0)
+    const holderId = state.current_holder_id as string | undefined
+    const isYou = holderId === myUserId
+    body = (
+      <div className="mt-3 flex items-center justify-between">
+        <p className="text-sm text-ink-100">
+          <span className={isYou ? 'text-gold-300 font-semibold' : 'text-ink-50 font-semibold'}>{isYou ? 'You hold' : `${holderId ? nameOf(holderId) : 'Someone'} holds`}</span> the baton
+        </p>
+        <p className="text-xs tabular-nums" aria-label={`${lives} lives left`}>
+          {Array.from({ length: Math.max(lives, 0) }).map((_, i) => <span key={i} className="text-ember-400">♥ </span>)}
+          <span className="text-ink-400">{lives} {lives === 1 ? 'life' : 'lives'}</span>
+        </p>
+      </div>
+    )
+  }
+
+  return (
+    <>
+      <div className="flex items-center gap-1.5 mb-3">
+        <Zap className="w-3 h-3 text-sage-400" />
+        <span className="text-2xs font-semibold uppercase tracking-widest text-sage-400">Active game</span>
+      </div>
+      <h2 className="font-display text-lg text-ink-50">{game.name}</h2>
+      {game.description && <p className="text-sm text-ink-400 mt-1">{game.description}</p>}
+      {body}
+      {stateSummary && (
+        <div className="mt-3 flex items-start gap-2 rounded-xl bg-ink-900/60 border border-ink-700 p-3">
+          <Sparkles className="w-3.5 h-3.5 text-gold-400 shrink-0 mt-0.5" />
+          <p className="text-xs text-ink-200 leading-relaxed">{stateSummary}</p>
+        </div>
+      )}
+    </>
+  )
+}
+
+/**
  * The async session room. Sharing is the price of seeing it: until your win +
  * struggle are in, the others' shares stay counted-but-veiled.
  */
@@ -363,20 +454,12 @@ export function CirclesScreen() {
         {/* ── Active game ── */}
         <div className="surface rounded-2xl p-4 mb-5 page-enter" style={{ animationDelay: '100ms' }}>
           {game ? (
-            <>
-              <div className="flex items-center gap-1.5 mb-3">
-                <Zap className="w-3 h-3 text-sage-400" />
-                <span className="text-2xs font-semibold uppercase tracking-widest text-sage-400">Active game</span>
-              </div>
-              <h2 className="font-display text-lg text-ink-50">{game.name}</h2>
-              {game.description && <p className="text-sm text-ink-400 mt-1">{game.description}</p>}
-              {activeGame?.stateSummary && (
-                <div className="mt-3 flex items-start gap-2 rounded-xl bg-ink-900/60 border border-ink-700 p-3">
-                  <Sparkles className="w-3.5 h-3.5 text-gold-400 shrink-0 mt-0.5" />
-                  <p className="text-xs text-ink-200 leading-relaxed">{activeGame.stateSummary}</p>
-                </div>
-              )}
-            </>
+            <GameCard
+              game={game}
+              stateSummary={activeGame?.stateSummary}
+              myUserId={myUserId}
+              nameOf={(id) => circle.members.find((m) => m.userId === id)?.user.firstName ?? 'A circle-mate'}
+            />
           ) : (
             <div className="flex items-center gap-3">
               <div className="w-9 h-9 rounded-xl bg-ink-700 flex items-center justify-center shrink-0">

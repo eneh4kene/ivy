@@ -1199,10 +1199,11 @@ model CircleGameEvent {
   gameId String
   game   CircleGame @relation(fields: [gameId], references: [id], onDelete: Cascade)
 
-  userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  // Null for system events (timer ticks, deadline passes) — no human actor.
+  userId String?
+  user   User?   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  // workout_completed | workout_missed | baton_passed | points_awarded | streak_extended | game_won
+  // workout_completed | workout_missed | baton_passed | baton_timeout | points_awarded | streak_extended | game_won | game_lost
   eventType String
   payload   Json   @default("{}")
   note      String? // plain sentence Ivy can surface in a call

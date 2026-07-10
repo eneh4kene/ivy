@@ -413,6 +413,11 @@ class CircleService {
       this.announceCoachCircleFormation(circle.id, coachId).catch((err) =>
         logger.warn(`Coach circle formation announcement failed for ${circle!.id}:`, err),
       )
+      // Ivy is the game master: a room that just came alive gets its first
+      // game without anyone lifting a finger.
+      import('./circle-game.service')
+        .then(({ default: circleGameService }) => circleGameService.seedSprintPact(circle!.id))
+        .catch((err) => logger.warn(`Sprint pact seed failed for ${circle!.id}:`, err))
     }
 
     return circle
@@ -476,16 +481,27 @@ class CircleService {
 
       const workouts = await prisma.workout.findMany({
         where: { userId: { in: members.map((m) => m.userId) }, plannedDate: { gte: weekAgo } },
-        select: { userId: true, status: true },
+        select: { userId: true, status: true, armedAt: true },
       })
       if (workouts.length === 0) continue // nothing planned anywhere — stay quiet
 
-      const kept = (s: string) => s === 'COMPLETED' || s === 'PARTIAL'
-      const groupRate = Math.round((workouts.filter((w) => kept(w.status)).length / workouts.length) * 100)
+      // In the arming product a kept day is an ARMED day (status often stays
+      // PLANNED); explicit COMPLETED/PARTIAL still counts for legacy paths.
+      const kept = (w: { status: string; armedAt: Date | null }) =>
+        w.status === 'COMPLETED' || w.status === 'PARTIAL' ||
+        (!!w.armedAt && w.status !== 'MISSED' && w.status !== 'SKIPPED')
+      const groupRate = Math.round((workouts.filter(kept).length / workouts.length) * 100)
+
+      // The game is part of the week's story — one line, if there is one.
+      let gameLine = ''
+      try {
+        const circleGameService = (await import('./circle-game.service')).default
+        gameLine = await circleGameService.circlePulseLine(circle.id)
+      } catch { /* pulse still goes out without the game line */ }
 
       for (const m of members) {
         const mine = workouts.filter((w) => w.userId === m.userId)
-        const myRate = mine.length > 0 ? mine.filter((w) => kept(w.status)).length / mine.length : null
+        const myRate = mine.length > 0 ? mine.filter(kept).length / mine.length : null
 
         let personal: string
         if (myRate === null) {
@@ -500,7 +516,7 @@ class CircleService {
 
         chatService.postIvyMessage(
           m.userId,
-          `${circle.name} kept ${groupRate}% of planned days last week. ${personal}`,
+          `${circle.name} kept ${groupRate}% of planned days last week. ${personal}${gameLine ? ` ${gameLine}` : ''}`,
           { messageType: 'circle_pulse', metadata: { circleId: circle.id }, notify: false },
         ).catch((err) => logger.warn(`Circle pulse failed for ${m.userId}:`, err))
       }
@@ -548,7 +564,7 @@ class CircleService {
         userId: { in: userIds },
         plannedDate: { gte: since },
       },
-      select: { userId: true, status: true },
+      select: { userId: true, status: true, armedAt: true },
     })
 
     const byUser = new Map<string, { completed: number; total: number }>()
@@ -559,7 +575,12 @@ class CircleService {
       const entry = byUser.get(w.userId)
       if (entry) {
         entry.total++
-        if (w.status === 'COMPLETED' || w.status === 'PARTIAL') entry.completed++
+        // Armed days ARE kept days in the arming product (status often stays
+        // PLANNED); explicit COMPLETED/PARTIAL still counts for legacy paths.
+        if (
+          w.status === 'COMPLETED' || w.status === 'PARTIAL' ||
+          (!!w.armedAt && w.status !== 'MISSED' && w.status !== 'SKIPPED')
+        ) entry.completed++
       }
     }
 

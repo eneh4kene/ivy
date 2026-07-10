@@ -74,6 +74,18 @@ const circleSessionLifecycle = inngest.createFunction(
   }
 );
 
+// Every 30 minutes — the game clock: fire due spec-game timers (baton windows,
+// deadlines) and enforce legacy relay windows / collective deadlines. Without
+// this, time passes in the world but not in the game.
+const circleGameClock = inngest.createFunction(
+  { id: 'circle-game-clock', name: 'Circle game clock', triggers: { cron: '*/30 * * * *' } },
+  async ({ step }) => {
+    const { default: circleGameService } = await import('../services/circle-game.service');
+    const ticked = await step.run('tick-game-clocks', () => circleGameService.tickGameClocks());
+    return { ok: true, ticked };
+  }
+);
+
 // Every Monday at 8:30am UTC — the week's group number to every circle member
 const circleMemberPulse = inngest.createFunction(
   { id: 'circle-member-pulse', name: 'Weekly circle member pulse', triggers: { cron: '30 8 * * 1' } },
@@ -322,6 +334,7 @@ export const functions = [
   ponderScheduler,
   programmeUpdatedNotify,
   circleSessionLifecycle,
+  circleGameClock,
   circleMemberPulse,
   monthlyDonationDispatch,
   dailyEveningCalls,

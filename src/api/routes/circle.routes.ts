@@ -178,6 +178,27 @@ router.get('/:circleId/sessions', async (req: Request, res: Response, next: Next
 
 // ── Circle Games ──────────────────────────────────────────────────────────────
 
+// A circle's games belong to its members. 404 (not 403) so we don't confirm a
+// circle/game exists to outsiders — same posture as GET /:id above.
+const requireCircleMember = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const isMember = await circleService.isActiveMember(req.params.circleId, req.user!.id)
+    if (!isMember) { res.status(404).json({ success: false, error: 'Circle not found' }); return }
+    next()
+  } catch (err) { next(err) }
+}
+const requireGameMember = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const game = await prisma.circleGame.findUnique({
+      where: { id: req.params.gameId },
+      select: { circleId: true },
+    })
+    const isMember = game ? await circleService.isActiveMember(game.circleId, req.user!.id) : false
+    if (!isMember) { res.status(404).json({ success: false, error: 'Game not found' }); return }
+    next()
+  } catch (err) { next(err) }
+}
+
 // GET /api/circles/games/suggestions?track=fitness&tag=seasonal
 router.get('/games/suggestions', async (req: Request, res: Response, next: NextFunction) => {
   try {
@@ -194,21 +215,21 @@ router.get('/games/templates', listTemplates)
 router.get('/games/active', getActiveGame)
 
 // GET /api/circles/:circleId/games
-router.get('/:circleId/games', listGames)
+router.get('/:circleId/games', requireCircleMember, listGames)
 
 // POST /api/circles/:circleId/games
-router.post('/:circleId/games', createGame)
+router.post('/:circleId/games', requireCircleMember, createGame)
 
 // POST /api/circles/:circleId/games/spec — author a spec-backed game (LLM prompt or validated spec)
-router.post('/:circleId/games/spec', createSpecGame)
+router.post('/:circleId/games/spec', requireCircleMember, createSpecGame)
 
 // GET /api/circles/games/:gameId
-router.get('/games/:gameId', getGame)
+router.get('/games/:gameId', requireGameMember, getGame)
 
 // PATCH /api/circles/games/:gameId/pause
-router.patch('/games/:gameId/pause', pauseGame)
+router.patch('/games/:gameId/pause', requireGameMember, pauseGame)
 
 // PATCH /api/circles/games/:gameId/end
-router.patch('/games/:gameId/end', endGame)
+router.patch('/games/:gameId/end', requireGameMember, endGame)
 
 export default router

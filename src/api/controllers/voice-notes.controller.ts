@@ -174,6 +174,11 @@ router.post(
           logger.warn(`Arm: could not link workout ${workoutId} to cycle`, err),
         )
 
+        // An armed morning is a kept day — advance the circle game (non-blocking).
+        import('../../services/circle-game.service')
+          .then(({ default: circleGameService }) => circleGameService.processArmingEvent(userId, true))
+          .catch((err) => logger.warn(`Arm: circle game event failed for ${userId}`, err))
+
         // Increment daysArmed on the associated StakeCycle (if any)
         const workout = await prisma.workout.findUnique({
           where: { id: workoutId },

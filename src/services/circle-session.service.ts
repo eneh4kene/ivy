@@ -145,6 +145,12 @@ class CircleSessionService {
       await circleCatchupService.createCatchupsForAbsentees(session.id)
         .catch((err) => logger.warn(`Catch-up creation failed for session ${session.id}:`, err));
 
+      // Session close = the sprint rolls — seed the next sprint's game if the
+      // room doesn't already have one running.
+      import('./circle-game.service')
+        .then(({ default: circleGameService }) => circleGameService.seedSprintPact(session.circleId!))
+        .catch((err) => logger.warn(`Sprint pact seed failed for circle ${session.circleId}:`, err));
+
       logger.info(`Circle session ${session.id} completed: ${sharerIds.length}/${memberCount} shared`);
     }
     return expired.length;

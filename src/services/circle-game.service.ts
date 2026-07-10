@@ -1,7 +1,7 @@
 import prisma from '../utils/prisma';
 import logger from '../utils/logger';
 import { sendPushToUser, pushTemplates } from './push.service';
-import { createSpecGame as persistSpecGame, runSpecEvent, workoutTrigger } from './games/runtime';
+import { createSpecGame as persistSpecGame, runSpecEvent } from './games/runtime';
 import { compileGame, validateSpec } from './games/compiler';
 
 // ─── Template definitions ─────────────────────────────────────────────────────
@@ -57,6 +57,51 @@ export type TemplateType = keyof typeof GAME_TEMPLATES;
 // ─── State processors ─────────────────────────────────────────────────────────
 
 class CircleGameService {
+  /** The auto-seeded sprint game: the room holding 80% together for a sprint. */
+  static readonly PACT_SPRINT_DAYS = 14;
+  static readonly PACT_RATE = 0.8;
+
+  // ── Names & beats ────────────────────────────────────────────────────────────
+  // Games live or die on being FELT between calls. Beats are the sound a game
+  // makes: short Ivy-thread messages on the moments that matter. Quiet by
+  // default (no push) — the one member a beat is about can get a personal line.
+
+  /** userId → firstName for a circle's active members. */
+  private async memberNames(circleId: string): Promise<Map<string, string>> {
+    const members = await prisma.ivyCircleMember.findMany({
+      where: { circleId, isActive: true },
+      select: { userId: true, user: { select: { firstName: true } } },
+    });
+    return new Map(members.map((m) => [m.userId, m.user.firstName || 'Someone']));
+  }
+
+  /** Never throws — a failed beat must never break game state. */
+  private async announceBeat(
+    circleId: string,
+    message: string,
+    opts: { personal?: { userId: string; message: string; notify?: boolean }; gameId?: string } = {},
+  ): Promise<void> {
+    try {
+      const chatService = (await import('./chat.service')).default;
+      const members = await prisma.ivyCircleMember.findMany({
+        where: { circleId, isActive: true },
+        select: { userId: true },
+      });
+      for (const m of members) {
+        const isPersonal = opts.personal?.userId === m.userId;
+        const body = isPersonal ? opts.personal!.message : message;
+        if (!body) continue;
+        chatService.postIvyMessage(m.userId, body, {
+          messageType: 'circle_game',
+          metadata: opts.gameId ? { gameId: opts.gameId } : undefined,
+          notify: isPersonal ? (opts.personal!.notify ?? false) : false,
+        }).catch((err: unknown) => logger.warn(`Game beat failed for ${m.userId}:`, err));
+      }
+    } catch (err) {
+      logger.warn(`Game beat failed for circle ${circleId}:`, err);
+    }
+  }
+
   // ── Game CRUD ──────────────────────────────────────────────────────────────
 
   async createGame(circleId: string, data: {
@@ -206,6 +251,21 @@ class CircleGameService {
   // ── Event processing ───────────────────────────────────────────────────────
 
   async processWorkoutEvent(userId: string, workoutStatus: 'COMPLETED' | 'PARTIAL' | 'SKIPPED' | 'MISSED') {
+    await this.processOutcome(userId, workoutStatus === 'COMPLETED' || workoutStatus === 'PARTIAL');
+  }
+
+  /**
+   * The LIVE daily loop's entry point. In the arming product an armed morning
+   * IS the kept day (the slice releases on it) and a blown arming deadline is
+   * the miss — so games advance on the events the product actually generates:
+   * voice-notes controller fires (userId, true) on arm, arming.service fires
+   * (userId, false) at deadline enforcement.
+   */
+  async processArmingEvent(userId: string, armed: boolean) {
+    await this.processOutcome(userId, armed);
+  }
+
+  private async processOutcome(userId: string, isSuccess: boolean) {
     const result = await this.getActiveGameForUser(userId);
     if (!result) return;
 
@@ -214,16 +274,22 @@ class CircleGameService {
     // Spec-backed games run on the generic interpreter (src/services/games).
     // Legacy games (spec == null) fall through to the hard-coded processors below.
     if ((game as { spec?: unknown }).spec) {
-      await runSpecEvent(game as any, {
-        type: workoutTrigger(workoutStatus),
-        userId,
-        at: new Date().toISOString(),
-      });
+      const triggers: string[] = (game.spec as { triggers?: string[] })?.triggers ?? [];
+      // A spec authored against vn.armed gets vn.armed; everything else gets the
+      // workout trigger. Never both — one real-world moment, one game event.
+      const type = isSuccess
+        ? (triggers.includes('vn.armed') && !triggers.includes('workout.logged') ? 'vn.armed' : 'workout.logged')
+        : 'workout.missed';
+      const res = await runSpecEvent(game as any, { type: type as any, userId, at: new Date().toISOString() });
+      await this.emitSpecBeats(game, res, userId);
       return;
     }
 
-    const isSuccess = workoutStatus === 'COMPLETED' || workoutStatus === 'PARTIAL';
     const eventType = isSuccess ? 'workout_completed' : 'workout_missed';
+
+    // Pre-state snapshots for beat detection (the processors mutate in place).
+    const prevScores = { ...(((game.state as Record<string, any>).scores ?? {}) as Record<string, number>) };
+    const prevTotal = Number((game.state as Record<string, any>).total ?? 0);
 
     let note: string | null = null;
     let updatedState = { ...(game.state as Record<string, any>) };
@@ -268,26 +334,102 @@ class CircleGameService {
       }),
     ]);
 
-    // Check win condition for collective / points_race
-    if (game.templateType === 'collective') {
-      const rules = game.rules as Record<string, any>;
-      if (updatedState.total >= (rules.target ?? 30)) {
-        await this.completeGame(game.id);
-        await prisma.circleGameEvent.create({
-          data: { gameId: game.id, userId, eventType: 'game_won', payload: updatedState, note: 'Group hit the target!' },
-        });
+    // ── Beats + win conditions ─────────────────────────────────────────────
+    const names = await this.memberNames(game.circleId);
+    const name = (id: string | null | undefined) => (id ? names.get(id) ?? 'someone' : 'someone');
+    const rules = game.rules as Record<string, any>;
+
+    if (game.templateType === 'relay' && userId === (game.state as Record<string, any>).current_holder_id) {
+      // The actor WAS the holder — this outcome moved the baton.
+      const next = updatedState.current_holder_id as string | null;
+      if (isSuccess) {
+        this.announceBeat(game.circleId, `${name(userId)} kept the day and passed the baton to ${name(next)} — ${updatedState.lives_remaining} lives intact.`, {
+          gameId: game.id,
+          personal: next ? { userId: next, message: `${name(userId)} just passed you the baton. Keep today to pass it on — the room's watching.` } : undefined,
+        }).catch(() => {});
+      } else if (updatedState.lives_remaining > 0) {
+        this.announceBeat(game.circleId, `${name(userId)} dropped the baton — ${updatedState.lives_remaining} ${updatedState.lives_remaining === 1 ? 'life' : 'lives'} left. ${name(next)} picks it up.`, {
+          gameId: game.id,
+          personal: next ? { userId: next, message: `The baton's yours after a drop — ${updatedState.lives_remaining} ${updatedState.lives_remaining === 1 ? 'life' : 'lives'} left. Keep today and steady the room.` } : undefined,
+        }).catch(() => {});
+      } else {
+        this.announceBeat(game.circleId, `That was the last life. The relay is over — ${updatedState.passes ?? 0} passes was the run. New game with the next sprint.`, { gameId: game.id }).catch(() => {});
       }
     }
-    if (game.templateType === 'points_race') {
-      const rules = game.rules as Record<string, any>;
+
+    if (game.templateType === 'points_race' && isSuccess) {
       const scores = updatedState.scores as Record<string, number>;
+      const leaderOf = (s: Record<string, number>) => Object.entries(s).sort(([, a], [, b]) => b - a)[0]?.[0] ?? null;
+      const prevLeader = leaderOf(prevScores);
+      const nowLeader = leaderOf(scores);
+      if (nowLeader && nowLeader !== prevLeader && nowLeader === userId) {
+        this.announceBeat(game.circleId, `${name(userId)} just took the lead in ${game.name} — ${scores[userId]} points. First to ${rules.target ?? 20} takes the crown.`, { gameId: game.id }).catch(() => {});
+      }
       const winner = Object.entries(scores).find(([, pts]) => pts >= (rules.target ?? 20));
       if (winner) {
         await this.completeGame(game.id);
         await prisma.circleGameEvent.create({
-          data: { gameId: game.id, userId: winner[0], eventType: 'game_won', payload: { winner_id: winner[0], score: winner[1] }, note: `${winner[0]} won the race with ${winner[1]} points!` },
+          data: { gameId: game.id, userId: winner[0], eventType: 'game_won', payload: { winner_id: winner[0], score: winner[1] }, note: `${name(winner[0])} won the race with ${winner[1]} points!` },
         });
+        // Winner's spoils: victory buys influence, not just bragging rights.
+        this.announceBeat(game.circleId, `${name(winner[0])} takes the ${game.name} crown with ${winner[1]} points. 👑 Spoils of victory: ${name(winner[0])} names the room's pledge for the next sprint.`, {
+          gameId: game.id,
+          personal: { userId: winner[0], message: `The crown is yours — ${winner[1]} points. 👑 Your spoils: you name the room's pledge for the next sprint. Tell me here and I'll hold everyone to it.`, notify: true },
+        }).catch(() => {});
       }
+    }
+
+    if (game.templateType === 'collective' && isSuccess) {
+      const target = rules.target ?? 30;
+      const total = Number(updatedState.total ?? 0);
+      const crossed = (frac: number) => prevTotal < target * frac && total >= target * frac && total < target;
+      if (crossed(0.5)) {
+        this.announceBeat(game.circleId, `Halfway. ${total} of ${target} kept days banked — the room is carrying it together.`, { gameId: game.id }).catch(() => {});
+      } else if (crossed(0.9)) {
+        this.announceBeat(game.circleId, `${target - total} to go. The room is at ${total} of ${target} — bring it home.`, { gameId: game.id }).catch(() => {});
+      }
+      if (total >= target) {
+        await this.completeGame(game.id);
+        await prisma.circleGameEvent.create({
+          data: { gameId: game.id, userId, eventType: 'game_won', payload: updatedState, note: 'Group hit the target!' },
+        });
+        this.announceBeat(game.circleId, `TARGET HIT — ${total} kept days. 🏆 ${game.name} is won, and every single contribution built it. This room holds.`, { gameId: game.id }).catch(() => {});
+      }
+    }
+  }
+
+  /** Beats for spec-backed games: announce() notes + turn handoffs + finales. */
+  private async emitSpecBeats(game: any, res: { notes: string[]; emits: string[]; state: Record<string, unknown>; ended: { outcome: string; winner?: string } | null }, actorId?: string): Promise<void> {
+    try {
+      const names = await this.memberNames(game.circleId);
+      const name = (id: string | null | undefined) => (id ? names.get(id) ?? 'someone' : 'someone');
+
+      if (res.notes.length && !res.ended) {
+        const line = res.notes.join(' ');
+        const holder = res.state.current_holder_id as string | undefined;
+        this.announceBeat(game.circleId, actorId ? `${game.name}: ${name(actorId)} — ${line}` : `${game.name}: ${line}`, {
+          gameId: game.id,
+          personal: res.emits.includes('baton_passed') && holder
+            ? { userId: holder, message: `The baton's yours in ${game.name} — keep today to pass it on.` }
+            : undefined,
+        }).catch(() => {});
+      }
+      if (res.ended) {
+        const winnerName = res.ended.winner ? name(res.ended.winner) : null;
+        const msg = res.ended.outcome === 'win' && winnerName
+          ? `${game.name} is over — ${winnerName} takes the crown. 👑 Spoils of victory: ${winnerName} names the room's pledge for the next sprint.`
+          : res.ended.outcome === 'lose'
+            ? `${game.name} is over — the room ran out of road this time. New game with the next sprint.`
+            : `${game.name} complete — the room did it together. 🏆`;
+        this.announceBeat(game.circleId, msg, {
+          gameId: game.id,
+          personal: res.ended.outcome === 'win' && res.ended.winner
+            ? { userId: res.ended.winner, message: `The ${game.name} crown is yours. 👑 Your spoils: name the room's pledge for the next sprint — tell me here and I'll hold everyone to it.`, notify: true }
+            : undefined,
+        }).catch(() => {});
+      }
+    } catch (err) {
+      logger.warn(`Spec game beats failed for ${game.id}:`, err);
     }
   }
 
@@ -581,9 +723,12 @@ class CircleGameService {
   // ── Context for calls / briefs ─────────────────────────────────────────────
 
   async buildStateSummary(game: any, userId: string): Promise<string> {
+    // Ivy may speak this aloud — names, never user IDs.
+    const names = await this.memberNames(game.circleId).catch(() => new Map<string, string>());
+
     // Spec-backed games describe their own state — summarise it generically.
     if (game.spec) {
-      const summary = specStateSummary(game.spec, (game.state ?? {}) as Record<string, any>, userId);
+      const summary = specStateSummary(game.spec, (game.state ?? {}) as Record<string, any>, userId, Object.fromEntries(names));
       return summary || `Active game: ${game.name}. ${game.description ?? ''}`.trim();
     }
 
@@ -602,7 +747,7 @@ class CircleGameService {
           : '';
         return isHolder
           ? `You hold the baton (since ${heldSince}). Complete your workout to pass it on. ${state.lives_remaining} lives left.${batonStakeNote}`
-          : `${state.current_holder_id ?? 'Someone'} holds the baton. ${state.lives_remaining} lives remaining.`;
+          : `${names.get(state.current_holder_id) ?? 'A circle-mate'} holds the baton. ${state.lives_remaining} lives remaining.`;
       }
       case 'points_race': {
         const scores = (state.scores ?? {}) as Record<string, number>;
@@ -610,7 +755,10 @@ class CircleGameService {
         const sorted = Object.entries(scores).sort(([, a], [, b]) => b - a);
         const rank = sorted.findIndex(([id]) => id === userId) + 1;
         const leader = sorted[0];
-        return `You have ${userScore} pts (rank #${rank}). Leader has ${leader?.[1] ?? 0} pts. Target: ${rules.target ?? 20}.`;
+        const leaderBit = leader && leader[0] !== userId
+          ? `${names.get(leader[0]) ?? 'The leader'} leads with ${leader[1]} pts.`
+          : `You lead the race.`;
+        return `You have ${userScore} pts (rank #${rank}). ${leaderBit} Target: ${rules.target ?? 20}.`;
       }
       case 'collective': {
         const target = rules.target ?? 30;
@@ -621,6 +769,216 @@ class CircleGameService {
       default:
         return `Active game: ${game.name}. ${game.description ?? ''}`.trim();
     }
+  }
+
+  /**
+   * Circle-level standing (no "you" perspective) — one line for the weekly
+   * pulse and the coach console. Returns '' when there's nothing to say.
+   */
+  async circlePulseLine(circleId: string): Promise<string> {
+    const game = await prisma.circleGame.findFirst({
+      where: { circleId, status: 'active' },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    // No live game — was a crown taken this week? Say so once.
+    if (!game) {
+      const weekAgo = new Date(Date.now() - 7 * 86_400_000);
+      const win = await prisma.circleGameEvent.findFirst({
+        where: { eventType: 'game_won', createdAt: { gte: weekAgo }, game: { circleId } },
+        orderBy: { createdAt: 'desc' },
+        select: { userId: true, payload: true, game: { select: { name: true } } },
+      });
+      if (!win) return '';
+      const winnerId = (win.payload as { winner_id?: string; winner?: string } | null)?.winner_id
+        ?? (win.payload as { winner?: string } | null)?.winner ?? win.userId;
+      if (!winnerId) return '';
+      const names = await this.memberNames(circleId);
+      const winnerName = names.get(winnerId);
+      return winnerName ? `${winnerName} wears the ${win.game?.name ?? 'game'} crown from last sprint. 👑` : '';
+    }
+
+    const names = await this.memberNames(circleId);
+    const state = game.state as Record<string, any>;
+    const rules = game.rules as Record<string, any>;
+    switch (game.templateType) {
+      case 'relay':
+        return `${names.get(state.current_holder_id) ?? 'Someone'} holds the ${game.name} baton — ${state.lives_remaining} lives left.`;
+      case 'points_race': {
+        const sorted = Object.entries((state.scores ?? {}) as Record<string, number>).sort(([, a], [, b]) => b - a);
+        const [leadId, leadPts] = sorted[0] ?? [null, 0];
+        return leadId && Number(leadPts) > 0
+          ? `${names.get(leadId) ?? 'Someone'} leads ${game.name} with ${leadPts} pts — first to ${rules.target ?? 20} takes the crown.`
+          : `${game.name} is on — first to ${rules.target ?? 20} points takes the crown.`;
+      }
+      case 'collective': {
+        const target = rules.target ?? 30;
+        const total = Number(state.total ?? 0);
+        const deadlineDays = Number(rules.deadline_days ?? 0);
+        const daysLeft = deadlineDays
+          ? Math.max(0, Math.ceil((game.createdAt.getTime() + deadlineDays * 86_400_000 - Date.now()) / 86_400_000))
+          : null;
+        return `${game.name}: ${total} of ${target} kept days banked${daysLeft != null ? ` — ${daysLeft} day${daysLeft === 1 ? '' : 's'} left` : ''}.`;
+      }
+      default:
+        return `${game.name} is live.`;
+    }
+  }
+
+  // ── The clock ────────────────────────────────────────────────────────────────
+  // Games with windows and deadlines need time to pass IN the game, not just in
+  // the world. Called by the Inngest cron every 30 minutes.
+
+  private parseDurationMs(d: string): number | null {
+    const m = /^(\d+)(s|m|h|d)$/.exec(d);
+    if (!m) return null;
+    const unit = { s: 1_000, m: 60_000, h: 3_600_000, d: 86_400_000 }[m[2] as 's' | 'm' | 'h' | 'd'];
+    return Number(m[1]) * unit;
+  }
+
+  async tickGameClocks(): Promise<number> {
+    const games = await prisma.circleGame.findMany({ where: { status: 'active' } });
+    let ticked = 0;
+    for (const game of games) {
+      try {
+        if ((game as { spec?: unknown }).spec) ticked += await this.tickSpecTimers(game);
+        else ticked += await this.tickLegacyClock(game);
+      } catch (err) {
+        logger.warn(`Game clock tick failed for ${game.id}:`, err);
+      }
+    }
+    if (ticked > 0) logger.info(`Game clocks: ${ticked} timer event(s) fired`);
+    return ticked;
+  }
+
+  /**
+   * Fire due spec timers as timer.elapsed events. An anchored timer re-arms
+   * whenever its anchor moves (relay: dropping resets baton_held_since), so we
+   * record WHICH anchor value a firing consumed under state.__timer_fired and
+   * only refire when the anchor changes (or, for repeating timers, a full
+   * duration after the last firing).
+   */
+  private async tickSpecTimers(game: any): Promise<number> {
+    const spec = game.spec as { timers?: { id: string; anchor?: string; duration: string; repeats?: boolean }[] };
+    let state = (game.state ?? {}) as Record<string, any>;
+    const fired: Record<string, number> = { ...(state.__timer_fired ?? {}) };
+    let count = 0;
+
+    for (const t of spec.timers ?? []) {
+      const dur = this.parseDurationMs(t.duration);
+      if (!dur) continue;
+      const anchorMs = t.anchor ? Number(state[t.anchor]) : new Date(game.createdAt).getTime();
+      if (!Number.isFinite(anchorMs) || Date.now() < anchorMs + dur) continue;
+      const last = fired[t.id];
+      if (t.repeats ? last != null && Date.now() < last + dur : last === anchorMs) continue;
+
+      const res = await runSpecEvent({ ...game, state }, { type: 'timer.elapsed', timerId: t.id, at: new Date().toISOString() });
+      fired[t.id] = t.repeats ? Date.now() : anchorMs;
+      state = { ...(res.state as Record<string, any>), __timer_fired: fired };
+      await prisma.circleGame.update({ where: { id: game.id }, data: { state: state as object } });
+      await this.emitSpecBeats(game, res);
+      count++;
+      if (res.ended) break;
+    }
+    return count;
+  }
+
+  /** Legacy games: enforce the relay window and the collective deadline. */
+  private async tickLegacyClock(game: any): Promise<number> {
+    const state = { ...(game.state as Record<string, any>) };
+    const rules = game.rules as Record<string, any>;
+
+    if (game.templateType === 'relay') {
+      const heldMs = state.baton_held_since ? Date.parse(state.baton_held_since) : NaN;
+      const windowMs = Number(rules.window_hours ?? 24) * 3_600_000;
+      const holderId: string | null = state.current_holder_id ?? null;
+      if (!holderId || !Number.isFinite(heldMs) || Date.now() < heldMs + windowMs) return 0;
+
+      // Window blown in silence — same consequence as a logged miss.
+      const { updatedState, note } = await this.processRelayEvent(game, holderId, false, state);
+      await prisma.$transaction([
+        prisma.circleGameEvent.create({
+          data: { gameId: game.id, userId: holderId, eventType: 'baton_timeout', payload: {}, note },
+        }),
+        prisma.circleGame.update({ where: { id: game.id }, data: { state: updatedState } }),
+      ]);
+
+      const names = await this.memberNames(game.circleId);
+      const name = (id: string | null) => (id ? names.get(id) ?? 'someone' : 'someone');
+      const next = updatedState.current_holder_id as string | null;
+      const lives = Number(updatedState.lives_remaining ?? 0);
+      const msg = lives > 0
+        ? `${name(holderId)}'s baton window closed — a life lost, ${lives} left. ${name(next)} picks it up.`
+        : `${name(holderId)}'s baton window closed — that was the last life. The relay is over; ${state.passes ?? 0} passes was the run.`;
+      this.announceBeat(game.circleId, msg, {
+        gameId: game.id,
+        personal: lives > 0 && next ? { userId: next, message: `The baton's yours — the window ran out on ${name(holderId)}. Keep today and steady the room.`, notify: true } : undefined,
+      }).catch(() => {});
+      return 1;
+    }
+
+    if (game.templateType === 'collective' && rules.deadline_days) {
+      const deadline = game.createdAt.getTime() + Number(rules.deadline_days) * 86_400_000;
+      if (Date.now() < deadline) return 0;
+      const target = rules.target ?? 30;
+      const total = Number(state.total ?? 0);
+      if (total >= target) return 0; // won at the wire; win path already handled it
+
+      await this.completeGame(game.id);
+      await prisma.circleGameEvent.create({
+        data: { gameId: game.id, userId: null, eventType: 'game_lost', payload: state, note: `Deadline passed at ${total}/${target}.` },
+      });
+      this.announceBeat(game.circleId, `Time's up on ${game.name} — the room banked ${total} of ${target}. Short this sprint, but the number's real and it resets clean. New game with the next sprint.`, { gameId: game.id }).catch(() => {});
+      return 1;
+    }
+
+    return 0;
+  }
+
+  // ── Ivy the game master ──────────────────────────────────────────────────────
+
+  /**
+   * Seed the sprint's game so every circle has one without anyone lifting a
+   * finger: The 80% Pact — the room holding 80% of member-days for a sprint,
+   * the same number the weekly pulse already speaks. Called at circle
+   * formation and at every sprint roll (session close); a no-op when a game
+   * is already running or the room is too small.
+   */
+  async seedSprintPact(circleId: string): Promise<{ id: string } | null> {
+    const existing = await prisma.circleGame.findFirst({
+      where: { circleId, status: 'active' },
+      select: { id: true },
+    });
+    if (existing) return null;
+
+    const memberCount = await prisma.ivyCircleMember.count({ where: { circleId, isActive: true } });
+    if (memberCount < 2) return null;
+
+    const days = CircleGameService.PACT_SPRINT_DAYS;
+    const target = Math.ceil(memberCount * days * CircleGameService.PACT_RATE);
+
+    // The reigning crown carries over as narrative, not mechanics.
+    const names = await this.memberNames(circleId);
+    const lastWin = await prisma.circleGameEvent.findFirst({
+      where: { eventType: 'game_won', game: { circleId } },
+      orderBy: { createdAt: 'desc' },
+      select: { userId: true, payload: true },
+    });
+    const champId = (lastWin?.payload as { winner_id?: string; winner?: string } | null)?.winner_id
+      ?? (lastWin?.payload as { winner?: string } | null)?.winner ?? lastWin?.userId;
+    const champName = champId ? names.get(champId) : undefined;
+
+    const game = await this.createGame(circleId, {
+      name: 'The 80% Pact',
+      description: `${memberCount} of you, one number: ${target} kept days in ${days} — the room holding 80% together. Everyone counts or nobody crowns.`,
+      templateType: 'collective',
+      rules: { target, deadline_days: days },
+      ivyInstruction: `The circle is running The 80% Pact: ${target} kept days in ${days} days — that's the whole room holding 80% together. Every armed morning adds one. Mention the running total when it fits naturally, celebrate contributions, and if the pace slips say what's needed per day without pressure. When the target lands, make it a moment.${champName ? ` ${champName} wears the crown from the last game — a light nod to the reigning champion is fair game.` : ''}`,
+    });
+
+    await this.announceBeat(circleId, `New game on the table: The 80% Pact. ${target} kept days in the next ${days} — that's this room holding 80% together. Every armed morning counts, and I'm keeping score.${champName ? ` ${champName} defends the crown.` : ''}`, { gameId: game.id });
+    logger.info(`Sprint pact seeded for circle ${circleId}: target ${target} over ${days}d (${memberCount} members)`);
+    return game;
   }
 
   async getGameContextForUser(userId: string): Promise<{
@@ -649,6 +1007,7 @@ export function specStateSummary(
   spec: { state?: Record<string, { type: string; perMember?: boolean }> },
   state: Record<string, any>,
   userId: string,
+  names?: Record<string, string>,
 ): string {
   const decls = spec.state ?? {};
   const parts: string[] = [];
@@ -658,7 +1017,8 @@ export function specStateSummary(
     if (decl.perMember && typeof val === 'object') {
       parts.push(`your ${labelize(name)}: ${(val as Record<string, unknown>)[userId] ?? 0}`);
     } else if (decl.type === 'userRef') {
-      parts.push(`${labelize(name)}: ${val === userId ? 'you' : String(val)}`);
+      // Ivy speaks this — a first name, never a user id.
+      parts.push(`${labelize(name)}: ${val === userId ? 'you' : names?.[String(val)] ?? 'a circle-mate'}`);
     } else if (decl.type === 'int' || decl.type === 'number' || decl.type === 'string' || decl.type === 'bool') {
       parts.push(`${labelize(name)}: ${val}`);
     }

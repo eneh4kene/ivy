@@ -405,6 +405,11 @@ export async function enforceArmingDeadline(userId: string, date: Date): Promise
     logger.warn(`Deadline: could not link workout ${workout.id} to cycle`, err),
   )
 
+  // A blown deadline is the game's miss event too (non-blocking).
+  import('./circle-game.service')
+    .then(({ default: circleGameService }) => circleGameService.processArmingEvent(userId, false))
+    .catch((err) => logger.warn(`Deadline: circle game event failed for ${userId}`, err))
+
   logger.info(
     `Deadline enforced for user ${userId}: workout ${workout.id} → MISSED / FORFEITED`,
   )

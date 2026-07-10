@@ -79,7 +79,7 @@ export async function runSpecEvent(game: CircleGameRow, event: GameEvent): Promi
   const prevState = (game.state ?? {}) as Record<string, unknown>;
   const result = applyEvent(spec, prevState, event);
 
-  const actor = event.userId ?? 'system';
+  const actor = event.userId ?? null; // null = system event (timer tick)
   const note = result.notes.length ? result.notes.join(' ') : null;
 
   // One row for the triggering event (carrying the human-readable note), plus a
