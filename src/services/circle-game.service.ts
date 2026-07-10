@@ -787,12 +787,18 @@ class CircleGameService {
       const win = await prisma.circleGameEvent.findFirst({
         where: { eventType: 'game_won', createdAt: { gte: weekAgo }, game: { circleId } },
         orderBy: { createdAt: 'desc' },
-        select: { userId: true, payload: true, game: { select: { name: true } } },
+        select: { userId: true, payload: true, game: { select: { name: true, templateType: true } } },
       });
       if (!win) return '';
       const winnerId = (win.payload as { winner_id?: string; winner?: string } | null)?.winner_id
-        ?? (win.payload as { winner?: string } | null)?.winner ?? win.userId;
-      if (!winnerId) return '';
+        ?? (win.payload as { winner?: string } | null)?.winner
+        ?? (win.game?.templateType === 'collective' ? null : win.userId);
+      if (!winnerId) {
+        // A collective win belongs to the whole room.
+        return win.game?.templateType === 'collective'
+          ? `The room took ${win.game?.name ?? 'the game'} together last sprint. 🏆`
+          : '';
+      }
       const names = await this.memberNames(circleId);
       const winnerName = names.get(winnerId);
       return winnerName ? `${winnerName} wears the ${win.game?.name ?? 'game'} crown from last sprint. 👑` : '';

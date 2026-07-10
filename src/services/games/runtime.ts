@@ -102,11 +102,14 @@ export async function runSpecEvent(game: CircleGameRow, event: GameEvent): Promi
       where: { id: game.id },
       data: { status: 'completed', completedAt: new Date() },
     });
+    // 'game_won' only when there is something to crown — a loss is 'game_over'
+    // (the crown lookup in circlePulseLine/seedSprintPact reads game_won).
+    const won = result.ended.outcome === 'win' || (result.ended.outcome === 'complete' && !!result.ended.winner);
     await prisma.circleGameEvent.create({
       data: {
         gameId: game.id,
         userId: result.ended.winner ?? actor,
-        eventType: 'game_won',
+        eventType: won ? 'game_won' : 'game_over',
         payload: { outcome: result.ended.outcome, winner: result.ended.winner ?? null },
         note: `Game ${result.ended.outcome}${result.ended.winner ? ` — winner ${result.ended.winner}` : ''}.`,
       },
