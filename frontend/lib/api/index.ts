@@ -402,6 +402,10 @@ export const circlesApi = {
     const response = await client.post<ApiResponse<CircleCurrentSession | null>>('/api/circles/session/share', { win, struggle })
     return response.data.data ?? null
   },
+  getSessionNudge: async (): Promise<{ win: string; struggle: string }> => {
+    const response = await client.post<ApiResponse<{ win: string; struggle: string }>>('/api/circles/session/nudge', {})
+    return response.data.data!
+  },
   getSessions: async (circleId: string): Promise<CircleSession[]> => {
     const response = await client.get<ApiResponse<CircleSession[]>>(`/api/circles/${circleId}/sessions`)
     return response.data.data ?? []

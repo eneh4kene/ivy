@@ -40,6 +40,15 @@ router.post('/session/share', async (req: AuthRequest, res: Response, next: Next
   } catch (err) { next(err) }
 })
 
+// POST /api/circles/session/nudge — Ivy drafts a candidate win + struggle from
+// the member's real sprint record. Editable text only; never auto-submitted.
+router.post('/session/nudge', async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const draft = await circleSessionService.draftShareNudge(req.user!.id)
+    res.json({ success: true, data: draft })
+  } catch (err) { next(err) }
+})
+
 // GET /api/circles/:id — members only (a circle's roster is not public to
 // every authenticated user). 404 rather than 403 so we don't confirm a circle
 // exists to non-members.

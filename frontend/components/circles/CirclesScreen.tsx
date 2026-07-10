@@ -86,6 +86,25 @@ function SessionCard({ session, onUpdate }: {
   const [struggle, setStruggle] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  const [nudgeBusy, setNudgeBusy] = useState(false)
+  const [nudgeNote, setNudgeNote] = useState('')
+
+  // Ivy drafts from the member's real sprint record; only empty fields are
+  // filled so a half-written thought is never clobbered. Always editable.
+  const nudge = async () => {
+    setNudgeBusy(true)
+    setNudgeNote('')
+    try {
+      const draft = await circlesApi.getSessionNudge()
+      if (!win.trim()) setWin(draft.win)
+      if (!struggle.trim()) setStruggle(draft.struggle)
+      setNudgeNote('Drafted from your sprint — edit it into your own words before you step in.')
+    } catch (err: any) {
+      setNudgeNote(err.message ?? "Couldn't draft anything — say it in your own words.")
+    } finally {
+      setNudgeBusy(false)
+    }
+  }
 
   const submit = async () => {
     setBusy(true)
@@ -141,6 +160,17 @@ function SessionCard({ session, onUpdate }: {
             placeholder="One win from this sprint…" className={inputClass} />
           <textarea value={struggle} onChange={(e) => setStruggle(e.target.value)} rows={2} maxLength={500}
             placeholder="One honest struggle…" className={inputClass} />
+          {(!win.trim() || !struggle.trim()) && (
+            <button
+              onClick={nudge}
+              disabled={nudgeBusy || busy}
+              className="w-full flex items-center justify-center gap-1.5 py-1.5 text-xs text-periwinkle-300 hover:text-periwinkle-200 transition-colors disabled:opacity-60"
+            >
+              <Sparkles className={`w-3 h-3 ${nudgeBusy ? 'animate-pulse' : ''}`} />
+              {nudgeBusy ? 'Ivy is thinking back over your sprint…' : 'Blank? Let Ivy draft it from your sprint'}
+            </button>
+          )}
+          {nudgeNote && <p className="text-2xs text-ink-400 text-center leading-relaxed">{nudgeNote}</p>}
           <button
             onClick={submit}
             disabled={busy || !win.trim() || !struggle.trim()}
