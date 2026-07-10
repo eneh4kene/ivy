@@ -10,6 +10,7 @@
 import Link from 'next/link'
 import { ArrowRight, PhoneCall, Bell, Mic, Banknote, Link2, Sparkles } from 'lucide-react'
 import { Logo } from '@/components/brand/Logo'
+import { HeroVideoBackdrop } from '@/components/marketing/HeroVideoBackdrop'
 
 const WHAT_IVY_DOES = [
   {
@@ -67,8 +68,9 @@ export default function ForCoachesPage() {
         </div>
       </nav>
 
-      {/* Hero */}
+      {/* Hero — coach-side footage: a trainer actually working a client */}
       <section className="relative pt-28 pb-14 px-4">
+        <HeroVideoBackdrop sources={['/videos/hero-coach.mp4']} />
         <div
           className="pointer-events-none absolute top-10 left-1/2 -translate-x-1/2 w-[36rem] h-[36rem] rounded-full opacity-50"
           style={{ background: 'radial-gradient(circle, rgba(70,240,200,0.1) 0%, transparent 70%)' }}

@@ -21,6 +21,7 @@ import {
 import { IVY_PRICE, STAKE_MIN_WEEKLY, CURRENCY_SYMBOL, type Currency } from '@/lib/pricing'
 import { Logo } from '@/components/brand/Logo'
 import { IvyVine, type VineDay } from '@/components/living/IvyVine'
+import { HeroVideoBackdrop } from '@/components/marketing/HeroVideoBackdrop'
 
 // The hero plant — an illustrative week, four days kept, tonight budding.
 const DEMO_WEEK: VineDay[] = [
@@ -142,8 +143,18 @@ export default function LandingPage() {
         </div>
       </nav>
 
-      {/* Hero — the vine IS the pitch */}
+      {/* Hero — the vine IS the pitch. The backdrop slow-cycles all four
+          tracks (fitness → focus → sleep → balance): Ivy is ultitrack, and the
+          footage says it without a word of copy. */}
       <section className="relative pt-24 sm:pt-28 pb-16 px-4">
+        <HeroVideoBackdrop
+          sources={[
+            '/videos/hero-fitness.mp4',
+            '/videos/hero-focus.mp4',
+            '/videos/hero-sleep.mp4',
+            '/videos/hero-balance.mp4',
+          ]}
+        />
         <div
           className="pointer-events-none absolute top-10 left-1/2 -translate-x-1/2 w-[36rem] h-[36rem] rounded-full opacity-50"
           style={{ background: 'radial-gradient(circle, rgba(70,240,200,0.1) 0%, transparent 70%)' }}
