@@ -106,6 +106,11 @@ class ChatService {
     const user = await prisma.user.findUnique({ where: { id: userId }, select: { subscriptionTier: true } })
     if (user?.subscriptionTier === 'COACH') {
       appliedNote = await this.applyCoachProgrammeChanges(userId, text)
+    } else {
+      // Winner's spoils: a member who just won their circle's game holds the
+      // right to set the room's next pledge — and Ivy promised "tell me here
+      // and I'll hold everyone to it". Make that promise true.
+      appliedNote = await this.applyWinnerPledge(userId, text)
     }
 
     const reply = await this.generateReply(userId, appliedNote)
@@ -142,6 +147,107 @@ class ChatService {
         .join('\n')
     } catch (err) {
       logger.warn(`Coach chat programme extraction failed for ${coachId}:`, err)
+      return undefined
+    }
+  }
+
+  /**
+   * If this user holds an unclaimed pledge right (won their circle's game in
+   * the last 14 days, pledge not yet set), try to read their message as the
+   * pledge. On a hit: set the sprint goal, mark the right claimed on the game,
+   * tell the room, and return a note so Ivy's reply confirms what actually
+   * happened. Cheap by construction: the DB gate runs on every consumer
+   * message, the model call only for a reigning winner with the right open.
+   */
+  private async applyWinnerPledge(userId: string, text: string): Promise<string | undefined> {
+    try {
+      const membership = await prisma.ivyCircleMember.findFirst({
+        where: { userId, isActive: true },
+        select: { circleId: true },
+      })
+      if (!membership) return undefined
+
+      // The right: most recent crown in this circle, won by this user, unclaimed.
+      const since = new Date(Date.now() - 14 * 86_400_000)
+      const wins = await prisma.circleGameEvent.findMany({
+        where: { eventType: 'game_won', createdAt: { gte: since }, game: { circleId: membership.circleId } },
+        orderBy: { createdAt: 'desc' },
+        take: 3,
+        select: { userId: true, payload: true, game: { select: { id: true, name: true, state: true } } },
+      })
+      const win = wins.find((w) => {
+        const p = w.payload as { winner_id?: string; winner?: string } | null
+        return (p?.winner_id ?? p?.winner ?? w.userId) === userId
+      })
+      if (!win || (win.game.state as Record<string, unknown> | null)?.pledge_claimed === true) return undefined
+
+      // Is this message the pledge? Only a model can tell — but only a
+      // reigning winner ever pays for this call.
+      if (!this.client) return undefined
+      const res = await this.client.messages.create({
+        model: MODEL,
+        max_tokens: 150,
+        system: `A member just won their accountability circle's game. Their prize: they name the group's pledge for the next sprint — one short commitment the whole room will be held to (e.g. "Everyone armed before 8am, every day").
+
+Read their message. If it states (or clearly proposes) that pledge, return it tightened to one imperative line under 140 characters, keeping their words where possible. If the message is anything else — a question, chit-chat, a reaction — it is NOT the pledge.
+
+Return ONLY raw JSON: {"pledge": "..."} or {"pledge": null}`,
+        messages: [{ role: 'user', content: text }],
+      })
+      logUsage('anthropic', 'haiku_tokens', (res.usage?.input_tokens ?? 0) + (res.usage?.output_tokens ?? 0), userId, { op: 'winner_pledge' }).catch(() => {})
+      const raw = res.content[0]?.type === 'text' ? res.content[0].text.trim() : null
+      if (!raw) return undefined
+      const { parseModelJson } = await import('../utils/model-json')
+      const pledge = parseModelJson<{ pledge?: unknown }>(raw).pledge
+      if (typeof pledge !== 'string' || !pledge.trim()) return undefined
+      const cleanPledge = pledge.trim().slice(0, 140)
+
+      // Next sprint = one past whatever the circle has seen (goal or session).
+      const [latestGoal, latestSession] = await Promise.all([
+        prisma.circleSprintGoal.findFirst({
+          where: { circleId: membership.circleId },
+          orderBy: { sprintNumber: 'desc' },
+          select: { sprintNumber: true },
+        }),
+        prisma.circleSprintSession.findFirst({
+          where: { circleId: membership.circleId, sprintNumber: { not: null } },
+          orderBy: { sprintNumber: 'desc' },
+          select: { sprintNumber: true },
+        }),
+      ])
+      const sprintNumber = Math.max(latestGoal?.sprintNumber ?? 0, latestSession?.sprintNumber ?? 0) + 1
+
+      const circleService = (await import('./circle.service')).default
+      await circleService.setSprintGoal(membership.circleId, {
+        sprintNumber,
+        pledge: cleanPledge,
+        setByUserId: userId,
+      })
+      await prisma.circleGame.update({
+        where: { id: win.game.id },
+        data: { state: { ...(win.game.state as object), pledge_claimed: true, pledge: cleanPledge } },
+      })
+
+      // The room hears the decree; the winner hears it from Ivy's reply.
+      const [winner, others] = await Promise.all([
+        prisma.user.findUnique({ where: { id: userId }, select: { firstName: true } }),
+        prisma.ivyCircleMember.findMany({
+          where: { circleId: membership.circleId, isActive: true, userId: { not: userId } },
+          select: { userId: true },
+        }),
+      ])
+      for (const m of others) {
+        this.postIvyMessage(
+          m.userId,
+          `The crown has spoken. ${winner?.firstName ?? 'Your circle-mate'} won the ${win.game.name} and named the room's pledge for sprint ${sprintNumber}: "${cleanPledge}". I'll be holding all of you to it.`,
+          { messageType: 'circle_game', metadata: { circleId: membership.circleId }, notify: false },
+        ).catch((err) => logger.warn(`Pledge decree failed for ${m.userId}:`, err))
+      }
+
+      logger.info(`Winner pledge set for circle ${membership.circleId} sprint ${sprintNumber} by ${userId}: "${cleanPledge}"`)
+      return `Their pledge is SET as the room's sprint ${sprintNumber} pledge: "${cleanPledge}". The circle has been told.`
+    } catch (err) {
+      logger.warn(`Winner pledge extraction failed for ${userId}:`, err)
       return undefined
     }
   }
@@ -189,9 +295,13 @@ class ChatService {
 
       const isB2B = user?.subscriptionTier === 'B2B'
       ctx.comm_preference = user?.commStyle ?? ctx.comm_preference
-      const system = user?.subscriptionTier === 'COACH'
+      let system = user?.subscriptionTier === 'COACH'
         ? await this.buildCoachChatSystem(userId, user.firstName ?? 'Coach', appliedNote)
         : promptService.buildSystemPrompt('CHAT', ctx, isB2B)
+      if (appliedNote && user?.subscriptionTier !== 'COACH') {
+        // Winner's pledge just applied — Ivy confirms a done deed, precisely.
+        system += `\n\nJUST APPLIED (already saved — the room has been told): ${appliedNote}\nConfirm it as done in your own words — the decree is in effect. Do not ask them to confirm, do not promise to set it later, do not restate the mechanics.`
+      }
 
       const messages = history.map((m) => ({
         role: (m.direction === 'INBOUND' ? 'user' : 'assistant') as 'user' | 'assistant',
