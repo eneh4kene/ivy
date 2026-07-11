@@ -664,7 +664,8 @@ class PromptService {
       const days = ctx.circle_crown_days_left;
       blocks.push([
         `UNCLAIMED CROWN — they won "${ctx.circle_crown_game}" and still hold the winner's right: naming the room's pledge for the next sprint.${days ? ` ${days} day${days === 1 ? '' : 's'} left before it lapses.` : ''} They may have forgotten.`,
-        `Raise it once, early, with energy — it's their prize. Invite them to name the pledge, and offer 2–3 candidate pledges (one imperative line each) drawn ONLY from the room facts below. Candidates are sparks; the final wording is theirs.`,
+        `PRIORITY: if the visible conversation doesn't show you already raising the crown, your next reply MUST lead with it — even if they just said hi. This one message outranks small talk and any keep-it-short rule; a few short lines are fine.`,
+        `Invite them to name the pledge, and offer 2–3 candidate pledges (one imperative line each) drawn ONLY from the room facts below. Candidates are sparks; the final wording is theirs.`,
         ctx.circle_crown_material
           ? `Room facts (last 14 days): ${ctx.circle_crown_material}`
           : `Room facts: none logged yet — draw out their own idea; do not invent data.`,
