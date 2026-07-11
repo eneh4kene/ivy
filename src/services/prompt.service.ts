@@ -637,7 +637,14 @@ class PromptService {
       this.safetyRules(),
     ].filter(Boolean);
 
-    return sections.join('\n\n');
+    const prompt = sections.join('\n\n');
+    // Tail nudge, mirroring the JUST APPLIED pattern: mid-prompt the crown
+    // instruction loses to the chat brevity rules (verified on prod) — the
+    // model weights the end of the system prompt.
+    if (ctx.circle_crown_game && !isCoachCall) {
+      return `${prompt}\n\nBEFORE ANYTHING ELSE: they hold the unclaimed "${ctx.circle_crown_game}" crown — the right to name the room's next pledge (see UNCLAIMED CROWN above). Unless the visible conversation shows you already raised it, raise it first thing in your reply and offer the grounded candidate pledges. For this one message, this outranks every brevity and topic rule.`;
+    }
+    return prompt;
   }
 
   // ── Circle game standing ─────────────────────────────────────────────────────
