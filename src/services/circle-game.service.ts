@@ -374,7 +374,7 @@ class CircleGameService {
         // Winner's spoils: victory buys influence, not just bragging rights.
         this.announceBeat(game.circleId, `${name(winner[0])} takes the ${game.name} crown with ${winner[1]} points. 👑 Spoils of victory: ${name(winner[0])} names the room's pledge for the next sprint.`, {
           gameId: game.id,
-          personal: { userId: winner[0], message: `The crown is yours — ${winner[1]} points. 👑 Your spoils: you name the room's pledge for the next sprint. Tell me here and I'll hold everyone to it.`, notify: true },
+          personal: { userId: winner[0], message: `The crown is yours — ${winner[1]} points. 👑 Your spoils: you name the room's pledge for the next sprint. Tell me here and I'll hold everyone to it. Want ideas? Ask me — I've been watching where the room slips.`, notify: true },
         }).catch(() => {});
       }
     }
@@ -424,7 +424,7 @@ class CircleGameService {
         this.announceBeat(game.circleId, msg, {
           gameId: game.id,
           personal: res.ended.outcome === 'win' && res.ended.winner
-            ? { userId: res.ended.winner, message: `The ${game.name} crown is yours. 👑 Your spoils: name the room's pledge for the next sprint — tell me here and I'll hold everyone to it.`, notify: true }
+            ? { userId: res.ended.winner, message: `The ${game.name} crown is yours. 👑 Your spoils: name the room's pledge for the next sprint — tell me here and I'll hold everyone to it. Want ideas? Ask me — I've been watching where the room slips.`, notify: true }
             : undefined,
         }).catch(() => {});
       }
@@ -987,17 +987,108 @@ class CircleGameService {
     return game;
   }
 
-  async getGameContextForUser(userId: string): Promise<{
-    circle_game_name: string;
-    circle_game_state_summary: string;
-    circle_game_ivy_instruction: string;
+  /**
+   * The unclaimed crown: this user won their circle's game in the last 14 days
+   * and hasn't spent the winner's right to name the room's next pledge. Same
+   * gate applyWinnerPledge (chat.service) checks silently before extraction —
+   * surfaced here so chat/call Ivy can raise the prize proactively instead of
+   * the right lapsing because one push notification went unread.
+   */
+  private async getUnclaimedCrownForUser(userId: string): Promise<{
+    circleId: string;
+    gameName: string;
+    daysLeft: number;
   } | null> {
-    const result = await this.getActiveGameForUser(userId);
-    if (!result) return null;
+    const membership = await prisma.ivyCircleMember.findFirst({
+      where: { userId, isActive: true },
+      select: { circleId: true },
+    });
+    if (!membership) return null;
+
+    const since = new Date(Date.now() - 14 * 86_400_000);
+    const wins = await prisma.circleGameEvent.findMany({
+      where: { eventType: 'game_won', createdAt: { gte: since }, game: { circleId: membership.circleId } },
+      orderBy: { createdAt: 'desc' },
+      take: 3,
+      select: { userId: true, createdAt: true, payload: true, game: { select: { name: true, state: true } } },
+    });
+    const win = wins.find((w) => {
+      const p = w.payload as { winner_id?: string; winner?: string } | null;
+      return (p?.winner_id ?? p?.winner ?? w.userId) === userId;
+    });
+    if (!win || (win.game.state as Record<string, unknown> | null)?.pledge_claimed === true) return null;
+
+    const daysLeft = Math.max(1, Math.ceil((win.createdAt.getTime() + 14 * 86_400_000 - Date.now()) / 86_400_000));
+    return { circleId: membership.circleId, gameName: win.game.name, daysLeft };
+  }
+
+  /**
+   * Room facts for pledge-drafting — where the circle actually slipped in the
+   * last 14 days, so the candidates Ivy offers a crowned winner are grounded
+   * instead of generic. Aggregate only: no member is named for their misses.
+   */
+  private async pledgeMaterial(circleId: string): Promise<string> {
+    const members = await prisma.ivyCircleMember.findMany({
+      where: { circleId, isActive: true },
+      select: { userId: true },
+    });
+    if (members.length === 0) return '';
+
+    const since = new Date(Date.now() - 14 * 86_400_000);
+    const workouts = await prisma.workout.findMany({
+      where: { userId: { in: members.map((m) => m.userId) }, plannedDate: { gte: since } },
+      select: { status: true, armedAt: true, skippedReason: true, plannedDate: true },
+    });
+    if (workouts.length === 0) return '';
+
+    const kept = workouts.filter((w) =>
+      w.status === 'COMPLETED' || w.status === 'PARTIAL' ||
+      (!!w.armedAt && w.status !== 'MISSED' && w.status !== 'SKIPPED'),
+    ).length;
+    const misses = workouts.filter((w) => w.status === 'MISSED' || w.status === 'SKIPPED');
+
+    const parts = [
+      `the room kept ${kept} of ${workouts.length} member-days (${Math.round((kept / workouts.length) * 100)}%)`,
+    ];
+    if (misses.length > 0) {
+      const byDay = new Map<string, number>();
+      for (const m of misses) {
+        const day = m.plannedDate.toLocaleDateString('en-GB', { weekday: 'long' });
+        byDay.set(day, (byDay.get(day) ?? 0) + 1);
+      }
+      const worst = [...byDay.entries()].sort((a, b) => b[1] - a[1])[0];
+      parts.push(`${misses.length} day${misses.length === 1 ? '' : 's'} lost to misses/skips${worst[1] > 1 ? `, most on ${worst[0]}s` : ''}`);
+      const reasons = [...new Set(misses.map((m) => m.skippedReason?.trim()).filter((r): r is string => !!r))].slice(0, 2);
+      if (reasons.length) parts.push(`reasons given: ${reasons.map((r) => `"${r.slice(0, 60)}"`).join(', ')}`);
+    }
+    return `${parts.join('; ')}.`;
+  }
+
+  async getGameContextForUser(userId: string): Promise<{
+    circle_game_name: string | null;
+    circle_game_state_summary: string | null;
+    circle_game_ivy_instruction: string | null;
+    circle_crown_game?: string;
+    circle_crown_days_left?: number;
+    circle_crown_material?: string;
+  } | null> {
+    // The crown check runs regardless of an active game: the next sprint's
+    // pact auto-seeds at session close, so a fresh game and an unclaimed
+    // crown from the previous one routinely coexist.
+    const [result, crown] = await Promise.all([
+      this.getActiveGameForUser(userId),
+      this.getUnclaimedCrownForUser(userId).catch(() => null),
+    ]);
+    if (!result && !crown) return null;
     return {
-      circle_game_name: result.game.name,
-      circle_game_state_summary: result.stateSummary,
-      circle_game_ivy_instruction: result.game.ivyInstruction,
+      circle_game_name: result?.game.name ?? null,
+      circle_game_state_summary: result?.stateSummary ?? null,
+      circle_game_ivy_instruction: result?.game.ivyInstruction ?? null,
+      ...(crown ? {
+        circle_crown_game: crown.gameName,
+        circle_crown_days_left: crown.daysLeft,
+        circle_crown_material: await this.pledgeMaterial(crown.circleId).catch(() => ''),
+      } : {}),
     };
   }
 }

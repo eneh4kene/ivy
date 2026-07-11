@@ -630,7 +630,7 @@ class PromptService {
       this.memoryBlock(ctx, callType),
       this.behaviouralAdapter(ctx),
       brief ?? this.resolveFlow(callType, ctx),
-      this.gameStanding(ctx),
+      this.gameStanding(ctx, callType),
       this.coachEscalation(callType, ctx),
       isCoachCall ? '' : this.pauseProtocol(),
       isCoachCall ? coachDeliveryRules() : this.standingRules(ctx),
@@ -647,14 +647,33 @@ class PromptService {
   // Lives outside the flow/brief slot so it survives when a Haiku brief replaces
   // the flow. On outbound it complements the brief (which handles tone) by giving
   // the model the exact standing so it can't invent scores.
-  private gameStanding(ctx: Record<string, any>): string {
-    if (!ctx.circle_game_name) return '';
-    return [
-      `CIRCLE GAME — ${ctx.circle_game_name}`,
-      `Standing: ${ctx.circle_game_state_summary}`,
-      ctx.circle_game_ivy_instruction ? `How to weave it in: ${ctx.circle_game_ivy_instruction}` : '',
-      `Reference it naturally only if it fits — one aside, not a lecture. Never invent scores or standings; use only the standing above.`,
-    ].filter(Boolean).join('\n');
+  private gameStanding(ctx: Record<string, any>, callType?: string): string {
+    const blocks: string[] = [];
+    if (ctx.circle_game_name) {
+      blocks.push([
+        `CIRCLE GAME — ${ctx.circle_game_name}`,
+        `Standing: ${ctx.circle_game_state_summary}`,
+        ctx.circle_game_ivy_instruction ? `How to weave it in: ${ctx.circle_game_ivy_instruction}` : '',
+        `Reference it naturally only if it fits — one aside, not a lecture. Never invent scores or standings; use only the standing above.`,
+      ].filter(Boolean).join('\n'));
+    }
+    // The winner's unclaimed pledge right. They likely saw one push and forgot;
+    // Ivy is the only one who can bring the prize back — with material, not a
+    // blank page. Candidates must come from the room facts, never invented.
+    if (ctx.circle_crown_game) {
+      const days = ctx.circle_crown_days_left;
+      blocks.push([
+        `UNCLAIMED CROWN — they won "${ctx.circle_crown_game}" and still hold the winner's right: naming the room's pledge for the next sprint.${days ? ` ${days} day${days === 1 ? '' : 's'} left before it lapses.` : ''} They may have forgotten.`,
+        `Raise it once, early, with energy — it's their prize. Invite them to name the pledge, and offer 2–3 candidate pledges (one imperative line each) drawn ONLY from the room facts below. Candidates are sparks; the final wording is theirs.`,
+        ctx.circle_crown_material
+          ? `Room facts (last 14 days): ${ctx.circle_crown_material}`
+          : `Room facts: none logged yet — draw out their own idea; do not invent data.`,
+        callType === 'CHAT'
+          ? `The moment they state their pledge here, it is set automatically and the room is told — don't ask them to confirm elsewhere.`
+          : `The pledge becomes official when they send it to you in the app chat — land on the idea together, then ask them to text it to you right after the call.`,
+      ].join('\n'));
+    }
+    return blocks.join('\n\n');
   }
 
   // ── Flow resolution ──────────────────────────────────────────────────────────
