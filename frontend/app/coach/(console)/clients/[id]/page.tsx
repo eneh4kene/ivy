@@ -12,7 +12,7 @@ import { useState, use, useEffect } from 'react'
 import Link from 'next/link'
 import {
   ArrowLeft, Flame, Phone, PhoneOff, Save, AlertTriangle, Trash2, Check,
-  Plus, X, MessageCircle, Shield, Target, TrendingUp,
+  Plus, X, MessageCircle, Shield, Target, TrendingUp, Sparkles,
 } from 'lucide-react'
 import { useVisualViewport } from '@/hooks/useVisualViewport'
 import { coachApi } from '@/lib/api'
@@ -106,6 +106,8 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
   const [saving, setSaving] = useState(false)
   const [confirmRemove, setConfirmRemove] = useState(false)
   const [removed, setRemoved] = useState(false)
+  const [draftBusy, setDraftBusy] = useState(false)
+  const [draftNote, setDraftNote] = useState('')
 
   // iOS keyboard awareness for the notes textarea
   const { keyboardOffset } = useVisualViewport()
@@ -136,6 +138,23 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
       setTimeout(() => setSaved(false), 2000)
     } finally {
       setSaving(false)
+    }
+  }
+
+  // Ivy drafts starter notes from the client's real record. Only fills an
+  // empty box, so a coach's half-written note is never clobbered; always
+  // editable before saving.
+  const draftNotes = async () => {
+    setDraftBusy(true)
+    setDraftNote('')
+    try {
+      const draft = await coachApi.draftClientNotes(id)
+      setNotes(draft.notes)
+      setDraftNote('Drafted from what Ivy knows — edit it into your own words before saving.')
+    } catch (err: any) {
+      setDraftNote(err.message ?? "Couldn't draft notes — write what you know in your own words.")
+    } finally {
+      setDraftBusy(false)
     }
   }
 
@@ -352,6 +371,17 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
                   "
                   style={{ paddingBottom: keyboardOffset > 0 ? `${keyboardOffset + 8}px` : undefined }}
                 />
+                {!notes.trim() && (
+                  <button
+                    onClick={draftNotes}
+                    disabled={draftBusy}
+                    className="w-full mt-2 flex items-center justify-center gap-1.5 py-1.5 text-xs text-gold-300 hover:text-gold-200 transition-colors disabled:opacity-60"
+                  >
+                    <Sparkles className={`w-3 h-3 ${draftBusy ? 'animate-pulse' : ''}`} />
+                    {draftBusy ? `Ivy is reading back over ${client.firstName}'s calls…` : 'Blank? Let Ivy draft it from what she knows'}
+                  </button>
+                )}
+                {draftNote && <p className="text-2xs text-ink-400 mt-1.5 leading-relaxed">{draftNote}</p>}
               </div>
               <button
                 onClick={handleSave}

@@ -693,6 +693,10 @@ export const coachApi = {
   updateClientNotes: async (id: string, coachNotes: string): Promise<void> => {
     await client.patch(`/api/coach/clients/${id}/notes`, { coachNotes })
   },
+  draftClientNotes: async (id: string): Promise<{ notes: string }> => {
+    const response = await client.post<ApiResponse<{ notes: string }>>(`/api/coach/clients/${id}/draft-notes`, {})
+    return response.data.data!
+  },
   inviteClient: async (email: string): Promise<{ status: string; email: string }> => {
     const response = await client.post<ApiResponse<{ status: string; email: string }>>('/api/coach/clients/invite', { email })
     return response.data.data!

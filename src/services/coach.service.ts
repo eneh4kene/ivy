@@ -1,9 +1,29 @@
+import Anthropic from '@anthropic-ai/sdk';
 import prisma from '../utils/prisma';
 import logger from '../utils/logger';
 import { NotFoundError, BadRequestError } from '../utils/errors';
+import { parseModelJson } from '../utils/model-json';
 import authService from './auth.service';
+import { logUsage } from './usage.service';
 import { inngest } from '../inngest/client';
 import crypto from 'crypto';
+
+/**
+ * Drafts starter notes a coach keeps on a client, for Ivy to read before every
+ * call. The coach is staring at a blank box; Ivy has been running the client's
+ * daily accountability and knows their record. Groundedness is the hard rule —
+ * these notes steer real calls, so an invented injury or preference would put a
+ * lie in front of the client. Everything else is style.
+ */
+const DRAFT_NOTES_SYSTEM = `You draft starter notes a coach keeps on one of their clients. These notes are read by Ivy — the AI that runs the client's daily accountability (morning voice notes, evening check-ins, the money on the line) — before every call. The coach is looking at a blank notes box; you've been running this client's accountability and know their record.
+
+Rules:
+- Ground every claim strictly in the data provided (their goal, track, call history, what Ivy remembers). Never invent injuries, numbers, events, or preferences that aren't supported. If the client is new with little history, keep it short and factual rather than padding.
+- Write in the coach's own voice, as practical notes ABOUT the client for Ivy to act on — not a message to the client, not a report back to the coach. Plain and useful, a few short sentences or lines.
+- Where the data supports it, cover: what they're working toward, how they respond or what motivates them, any pattern worth watching (a weak day, missed calls, a recurring obstacle), and anything to avoid.
+- These are an editable starting point the coach will refine before saving. Aim for true and useful over polished. No hype, no emoji, no headings.
+
+Return ONLY raw JSON, no markdown, no explanation: {"notes": "..."}`;
 
 export interface CoachProfileInput {
   programmeName: string;
@@ -18,6 +38,10 @@ export interface CoachProfileInput {
 }
 
 class CoachService {
+  private anthropic: Anthropic | null = process.env.ANTHROPIC_API_KEY
+    ? new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+    : null;
+
   // ── Profile ────────────────────────────────────────────────────────────────
 
   async getProfile(coachId: string) {
@@ -113,6 +137,80 @@ class CoachService {
     const client = await prisma.user.findFirst({ where: { id: clientId, coachId } });
     if (!client) throw new NotFoundError('Client not found');
     return prisma.user.update({ where: { id: clientId }, data: { coachNotes } });
+  }
+
+  /**
+   * "Draft with Ivy" — seed the blank client-notes box from what Ivy already
+   * knows about the client (goal, track, recent calls, what she remembers).
+   * Editable text only; the coach reviews and saves. Refuses when there's no
+   * real history yet, rather than inventing a client.
+   */
+  async draftClientNotes(coachId: string, clientId: string): Promise<{ notes: string }> {
+    if (!this.anthropic) throw new BadRequestError('Drafting is not available right now — write what you know in your own words.');
+
+    const client = await prisma.user.findFirst({
+      where: { id: clientId, coachId },
+      include: {
+        streaks: { select: { currentStreak: true } },
+        calls: {
+          where: { scheduledAt: { gte: new Date(Date.now() - 28 * 24 * 60 * 60 * 1000) } },
+          orderBy: { scheduledAt: 'desc' },
+          take: 12,
+          select: { status: true, sentiment: true, callSummary: true, callInsights: true, scheduledAt: true },
+        },
+        callMemories: {
+          orderBy: { createdAt: 'desc' },
+          take: 8,
+          select: { content: true, category: true },
+        },
+      },
+    });
+    if (!client) throw new NotFoundError('Client not found');
+
+    const completed = client.calls.filter((c) => c.status === 'COMPLETED');
+    const missedCount = client.calls.filter((c) => c.status === 'NO_ANSWER').length;
+    const summaries = completed.map((c) => c.callSummary?.trim()).filter((s): s is string => !!s).slice(0, 4);
+
+    const insightLines = client.calls.flatMap((c) => {
+      const ins = c.callInsights as { key_insight?: string; obstacles_mentioned?: string[]; emotional_state?: string } | null;
+      if (!ins) return [];
+      const parts: string[] = [];
+      if (ins.key_insight) parts.push(ins.key_insight);
+      if (ins.obstacles_mentioned?.length) parts.push(`obstacles: ${ins.obstacles_mentioned.join('; ')}`);
+      if (ins.emotional_state) parts.push(`mood: ${ins.emotional_state}`);
+      return parts.length ? [`${c.scheduledAt?.toISOString().slice(0, 10)}: ${parts.join(' · ')}`] : [];
+    });
+    const memoryLines = client.callMemories.map((m) => `[${m.category}] ${m.content}`);
+
+    // Nothing real to draw from → refuse rather than invent a client history.
+    if (!client.goal && summaries.length === 0 && insightLines.length === 0 && memoryLines.length === 0) {
+      throw new BadRequestError('Not enough history to draft from yet — Ivy will have more to go on after a few calls with this client.');
+    }
+
+    const brief = [
+      `Client: ${client.firstName} ${client.lastName ?? ''} · track: ${client.track ?? 'unknown'} · goal: ${client.goal || 'not set yet'}`,
+      `Last 28 days: ${completed.length} completed call${completed.length === 1 ? '' : 's'}${missedCount ? `, ${missedCount} missed` : ''}; current streak ${client.streaks?.currentStreak ?? 0} days.`,
+      summaries.length ? `Recent call summaries:\n${summaries.map((s) => `- ${s.slice(0, 200)}`).join('\n')}` : '',
+      insightLines.length ? `From Ivy's call insights:\n${insightLines.join('\n')}` : '',
+      memoryLines.length ? `Things Ivy remembers about them:\n${memoryLines.join('\n')}` : '',
+    ].filter(Boolean).join('\n\n');
+
+    const res = await this.anthropic.messages.create({
+      model: 'claude-haiku-4-5',
+      max_tokens: 400,
+      system: [{ type: 'text', text: DRAFT_NOTES_SYSTEM, cache_control: { type: 'ephemeral' } }] as any,
+      messages: [{ role: 'user', content: brief }],
+    });
+    logUsage('anthropic', 'haiku_tokens', (res.usage?.input_tokens ?? 0) + (res.usage?.output_tokens ?? 0), coachId, { op: 'coach_notes_draft' }).catch(() => {});
+
+    const raw = res.content[0]?.type === 'text' ? res.content[0].text.trim() : null;
+    if (!raw) throw new BadRequestError("Couldn't draft notes — write what you know in your own words.");
+    const parsed = parseModelJson<{ notes?: unknown }>(raw);
+    const notes = typeof parsed.notes === 'string' ? parsed.notes.trim().slice(0, 1500) : '';
+    if (!notes) throw new BadRequestError("Couldn't draft notes — write what you know in your own words.");
+
+    logger.info(`Client notes drafted for coach ${coachId} client ${clientId} (summaries: ${summaries.length}, insights: ${insightLines.length}, memories: ${memoryLines.length})`);
+    return { notes };
   }
 
   // ── Shareable invite link ──────────────────────────────────────────────────

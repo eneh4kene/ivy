@@ -39,6 +39,23 @@ Rules:
 
 Return ONLY raw JSON, no markdown, no explanation: {"win": "...", "struggle": "..."}`;
 
+/**
+ * Drafts the facilitator's room brief, posted when a session opens. The person
+ * who started the circle is a peer, not a professional coach — so this is a
+ * light, optional read on where the room is, framed as conversation starters,
+ * never a mandate to run the meeting. Same groundedness rule as the nudge: the
+ * facilitator will act on this in front of the room, so it must be TRUE.
+ */
+const FACILITATOR_SYSTEM = `You brief the member who started an accountability circle, just as the group's fortnightly session opens. They're a peer who happened to start the room, not a professional coach — so this is a friendly, optional read on where the room is, so they can nudge the conversation if they feel like it.
+
+Rules:
+- Ground every claim strictly in the data provided. Never invent numbers, names, days, or events. If the data is thin, keep it short and general rather than padding.
+- Speak TO the facilitator ABOUT the room. Warm, plain, a little dry — a friend passing on what they noticed. No coach-speak, no hype, no emoji, no headings.
+- 2-3 short lines. Each line is either something the room did well worth celebrating, or a real friction the session could talk about: a weekday that keeps costing the room, a common obstacle, or a member who's gone quiet.
+- Frame frictions as gentle conversation starters ("might be worth asking the room how weekends are landing"), never as orders. Never single out a member for blame — if someone's gone quiet, suggest checking in on them warmly.
+
+Return ONLY raw JSON, no markdown, no explanation: {"brief": "..."}`;
+
 export interface SessionShareView {
   firstName: string;
   isYou: boolean;
@@ -66,7 +83,7 @@ class CircleSessionService {
 
       const members = await prisma.ivyCircleMember.findMany({
         where: { circleId: session.circleId!, isActive: true },
-        select: { userId: true },
+        select: { userId: true, role: true },
       });
 
       const chatService = (await import('./chat.service')).default;
@@ -77,6 +94,25 @@ class CircleSessionService {
           { messageType: 'circle_session', metadata: { sessionId: session.id, action: 'session_open' } },
         ).catch((err) => logger.warn(`Session-open message failed for ${m.userId}:`, err));
       }
+
+      // The member who started the circle gets a light, optional read on the
+      // room going into the session — a friend's brief, grounded in the real
+      // fortnight, never a mandate to run the meeting. Best-effort: a failed or
+      // empty brief just means no extra message.
+      const facilitator = members.find((m) => m.role === 'facilitator');
+      if (facilitator) {
+        this.draftFacilitatorBrief(session.circleId!)
+          .then((brief) => {
+            if (!brief) return;
+            return chatService.postIvyMessage(
+              facilitator.userId,
+              `You started ${session.circle?.name ?? 'this circle'}, so here's a quick read on the room going into this session — nudge the conversation if you feel like it:\n\n${brief}`,
+              { messageType: 'circle_session', metadata: { sessionId: session.id, action: 'facilitator_brief' }, notify: false },
+            );
+          })
+          .catch((err) => logger.warn(`Facilitator brief post failed for session ${session.id}:`, err));
+      }
+
       logger.info(`Circle session ${session.id} opened (${members.length} members invited)`);
     }
     return due.length;
@@ -310,6 +346,89 @@ class CircleSessionService {
 
     logger.info(`Circle nudge drafted for ${userId} (days: ${dayLines.length}, insights: ${insightLines.length}, memories: ${memoryLines.length})`);
     return { win, struggle };
+  }
+
+  /**
+   * Draft the facilitator's room brief from the circle's real fortnight —
+   * consistency, the weekday that keeps costing the room, who's gone quiet,
+   * the standing pledge and any live game. Returns null (never throws) when
+   * there's nothing grounded to say, so the caller can simply skip the post.
+   */
+  async draftFacilitatorBrief(circleId: string): Promise<string | null> {
+    if (!this.anthropic) return null;
+
+    const members = await prisma.ivyCircleMember.findMany({
+      where: { circleId, isActive: true },
+      select: { userId: true, user: { select: { firstName: true } } },
+    });
+    if (members.length < 2) return null;
+
+    const since = subDays(new Date(), 14);
+    const workouts = await prisma.workout.findMany({
+      where: { userId: { in: members.map((m) => m.userId) }, plannedDate: { gte: since } },
+      select: { userId: true, status: true, armedAt: true, skippedReason: true, plannedDate: true },
+    });
+    if (workouts.length === 0) return null;
+
+    const keptBy = new Map<string, number>(members.map((m) => [m.userId, 0]));
+    const missByDay = new Map<string, number>();
+    const reasons: string[] = [];
+    let kept = 0;
+    for (const w of workouts) {
+      const isKept =
+        w.status === 'COMPLETED' || w.status === 'PARTIAL' ||
+        (!!w.armedAt && w.status !== 'MISSED' && w.status !== 'SKIPPED');
+      if (isKept) {
+        kept++;
+        keptBy.set(w.userId, (keptBy.get(w.userId) ?? 0) + 1);
+      } else if (w.status === 'MISSED' || w.status === 'SKIPPED') {
+        const day = w.plannedDate.toLocaleDateString('en-GB', { weekday: 'long' });
+        missByDay.set(day, (missByDay.get(day) ?? 0) + 1);
+        if (w.skippedReason?.trim()) reasons.push(w.skippedReason.trim());
+      }
+    }
+
+    const rate = Math.round((kept / workouts.length) * 100);
+    const worstDay = [...missByDay.entries()].sort((a, b) => b[1] - a[1])[0];
+    const quiet = members.filter((m) => (keptBy.get(m.userId) ?? 0) === 0).map((m) => m.user.firstName);
+
+    const [goal, gameLine] = await Promise.all([
+      prisma.circleSprintGoal.findFirst({
+        where: { circleId },
+        orderBy: { sprintNumber: 'desc' },
+        select: { pledge: true },
+      }),
+      import('./circle-game.service')
+        .then(({ default: g }) => g.circlePulseLine(circleId))
+        .catch(() => ''),
+    ]);
+
+    const facts = [
+      `The room kept ${kept} of ${workouts.length} member-days (${rate}%) over the last fortnight.`,
+      worstDay && worstDay[1] > 1 ? `Misses cluster on ${worstDay[0]}s (${worstDay[1]} this fortnight).` : '',
+      reasons.length ? `Reasons members gave for missing: ${[...new Set(reasons)].slice(0, 3).map((r) => `"${r.slice(0, 60)}"`).join(', ')}.` : '',
+      quiet.length ? `Gone quiet (no kept days this fortnight): ${quiet.slice(0, 3).join(', ')}.` : '',
+      goal?.pledge ? `The room's standing pledge: "${goal.pledge}".` : '',
+      gameLine ? `Game standing: ${gameLine}` : '',
+    ].filter(Boolean).join('\n');
+
+    try {
+      const res = await this.anthropic.messages.create({
+        model: 'claude-haiku-4-5',
+        max_tokens: 260,
+        system: [{ type: 'text', text: FACILITATOR_SYSTEM, cache_control: { type: 'ephemeral' } }] as any,
+        messages: [{ role: 'user', content: facts }],
+      });
+      logUsage('anthropic', 'haiku_tokens', (res.usage?.input_tokens ?? 0) + (res.usage?.output_tokens ?? 0), undefined, { op: 'facilitator_brief' }).catch(() => {});
+      const raw = res.content[0]?.type === 'text' ? res.content[0].text.trim() : null;
+      if (!raw) return null;
+      const parsed = parseModelJson<{ brief?: unknown }>(raw);
+      const brief = typeof parsed.brief === 'string' ? parsed.brief.trim().slice(0, 600) : '';
+      return brief || null;
+    } catch (err) {
+      logger.warn(`Facilitator brief draft failed for circle ${circleId}:`, err);
+      return null;
+    }
   }
 
   /** Put your win + struggle in — unlocks the room. Upsert (edits allowed while open). */
