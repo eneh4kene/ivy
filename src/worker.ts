@@ -1,4 +1,4 @@
-import { initSentry } from './lib/sentry';
+import { initSentry, Sentry } from './lib/sentry';
 initSentry();
 
 import { config } from './config';
@@ -22,6 +22,22 @@ import {
 
 logger.info(`Worker process started — env: ${config.server.env}`);
 
+// Registered unconditionally — previously these lived inside registerCronJobs(),
+// which only runs when Inngest is disabled. In Inngest mode (the active mode)
+// that meant the worker had NO crash handling at all: an uncaught exception
+// died silently, no Sentry event, no Telegram page, nothing.
+process.on('uncaughtException', (error: Error) => {
+  process.stdout.write(`[FATAL] Uncaught Exception: ${error.message}\n${error.stack}\n`);
+  Sentry.captureException(error);
+  sendTelegramAdmin(`💀 Ivy worker crashed (uncaughtException)\n\n${error.message}`).catch(() => {});
+  Sentry.flush(2000).finally(() => process.exit(1));
+});
+
+process.on('unhandledRejection', (reason: unknown) => {
+  process.stdout.write(`[WARN] Unhandled Rejection: ${String(reason)}\n`);
+  Sentry.captureException(reason instanceof Error ? reason : new Error(String(reason)));
+});
+
 // Exclusive cutover: when Inngest drives the schedule, the legacy node-cron jobs
 // stand down so exactly one scheduler runs. Call/message delivery is no longer
 // here at all — Phase 2 moved it to Inngest events (call/scheduled,
@@ -37,16 +53,6 @@ if (config.inngest.enabled) {
 }
 
 function registerCronJobs(): void {
-
-process.on('uncaughtException', (error: Error) => {
-  process.stdout.write(`[FATAL] Uncaught Exception: ${error.message}\n${error.stack}\n`);
-  sendTelegramAdmin(`💀 Ivy worker crashed (uncaughtException)\n\n${error.message}`).catch(() => {});
-  process.exit(1);
-});
-
-process.on('unhandledRejection', (reason: unknown) => {
-  process.stdout.write(`[WARN] Unhandled Rejection: ${String(reason)}\n`);
-});
 
 // Every Sunday at 9am UTC — weekly accountability buddy digests
 cron.schedule('0 9 * * 0', async () => {

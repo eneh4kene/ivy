@@ -1,0 +1,39 @@
+name: Uptime watch
+
+# Runs on GitHub's infra, not Fly or Vercel — the whole point is to notice
+# when either of those platforms (or the region, or DNS) is down, which
+# nothing hosted ON them can ever detect about itself.
+on:
+  schedule:
+    - cron: '*/5 * * * *'
+  workflow_dispatch: {}
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check API health
+        id: api
+        run: |
+          code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 https://ivykeeps-api.fly.dev/health || echo "000")
+          echo "code=$code" >> "$GITHUB_OUTPUT"
+
+      - name: Check frontend
+        id: web
+        run: |
+          code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 https://www.ivykeeps.life || echo "000")
+          echo "code=$code" >> "$GITHUB_OUTPUT"
+
+      - name: Alert on failure
+        if: steps.api.outputs.code != '200' || steps.web.outputs.code != '200'
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          ADMIN_TELEGRAM_CHAT_ID: ${{ secrets.ADMIN_TELEGRAM_CHAT_ID }}
+        run: |
+          msg="🔴 Ivy uptime check failed
+          API https://ivykeeps-api.fly.dev/health → ${{ steps.api.outputs.code }}
+          Web https://www.ivykeeps.life → ${{ steps.web.outputs.code }}
+          Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+            --data-urlencode "chat_id=${ADMIN_TELEGRAM_CHAT_ID}" \
+            --data-urlencode "text=${msg}"

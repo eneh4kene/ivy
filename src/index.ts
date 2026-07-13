@@ -1,6 +1,6 @@
 process.stdout.write('[BOOT] index.ts loaded\n');
 
-import { initSentry } from './lib/sentry';
+import { initSentry, Sentry } from './lib/sentry';
 process.stdout.write('[BOOT] sentry import done\n');
 initSentry(); // must be first
 process.stdout.write('[BOOT] sentry init done\n');
@@ -13,18 +13,25 @@ import logger from './utils/logger';
 process.stdout.write('[BOOT] logger import done\n');
 import prisma from './utils/prisma';
 process.stdout.write('[BOOT] prisma import done\n');
+import { sendTelegramAdmin } from './utils/telegram-admin';
 
 const PORT = config.server.port;
 
 // Register exception handlers BEFORE listen so server errors are caught
 process.on('uncaughtException', (error: Error) => {
   process.stdout.write(`[FATAL] Uncaught Exception: ${error.message}\n${error.stack}\n`);
-  process.exit(1);
+  // Sentry.captureException sends async — process.exit(1) right after would
+  // race the network call and the event can be dropped on exactly the crashes
+  // most worth seeing. Flush (2s cap) before exiting.
+  Sentry.captureException(error);
+  sendTelegramAdmin(`💀 Ivy API crashed (uncaughtException)\n\n${error.message}`).catch(() => {});
+  Sentry.flush(2000).finally(() => process.exit(1));
 });
 
 process.on('unhandledRejection', (reason: unknown) => {
   process.stdout.write(`[WARN] Unhandled Rejection: ${String(reason)}\n`);
   // Do not re-throw — Prisma and Bull emit internal rejections on connection drops
+  Sentry.captureException(reason instanceof Error ? reason : new Error(String(reason)));
 });
 
 process.stdout.write(`[BOOT] calling app.listen on port ${PORT}\n`);

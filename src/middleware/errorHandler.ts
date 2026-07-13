@@ -3,6 +3,7 @@ import { AppError } from '../utils/errors';
 import { sendError } from '../utils/response';
 import logger from '../utils/logger';
 import { config } from '../config';
+import { Sentry } from '../lib/sentry';
 
 export const errorHandler = (
   err: Error | AppError,
@@ -18,6 +19,14 @@ export const errorHandler = (
     url: req.url,
     method: req.method,
   });
+
+  // Only genuine server-side failures go to Sentry — expected 4xx (AppError,
+  // Zod validation) would drown real bugs in noise. Prisma/unhandled errors
+  // are exactly the "silent failure" class this exists to catch.
+  const isExpectedClientError = err instanceof AppError || err.name === 'ZodError';
+  if (!isExpectedClientError) {
+    Sentry.captureException(err, { extra: { url: req.url, method: req.method } });
+  }
 
   // Handle known AppError
   if (err instanceof AppError) {
