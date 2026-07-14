@@ -3,6 +3,7 @@ import { config } from '../config';
 import { CreateUserInput, UpdateUserInput } from '../types/user.schema';
 import { BadRequestError, ConflictError, NotFoundError } from '../utils/errors';
 import logger from '../utils/logger';
+import { opsAlert } from '../lib/ops-alert';
 // IMPACT_WALLET_MONTHLY import removed in Phase 5: bundled wallet allocation retired (§8).
 import seasonService from './season.service';
 import circleService from './circle.service';
@@ -261,12 +262,25 @@ class UserService {
     // member must have a Streak + Impact Wallet row. Idempotent (upsert), so it's
     // safe even if createUser already seeded them. Non-blocking.
     this.initializeUserResources(userId, fullUser?.subscriptionTier ?? 'FREE')
-      .catch((err) => logger.warn(`Failed to initialize resources for ${userId}:`, err));
+      .catch((err) => opsAlert({
+        severity: 'warn',
+        source: 'onboarding',
+        title: 'resource_init_failed',
+        detail: 'streak/wallet rows missing — home surfaces may 404 for this new user',
+        userId,
+        error: err,
+      }));
 
     // Create Season 1 from the user's goal (non-blocking)
     if (fullUser?.goal) {
       seasonService.createSeason(userId, { goal: fullUser.goal, title: 'Season 1' })
-        .catch((err) => logger.warn(`Failed to create Season 1 for ${userId}:`, err));
+        .catch((err) => opsAlert({
+          severity: 'warn',
+          source: 'onboarding',
+          title: 'season1_create_failed',
+          userId,
+          error: err,
+        }));
     }
 
     // Day Zero: kick off the new-user experience. The welcome half (circle +
@@ -275,8 +289,17 @@ class UserService {
     // Foundation Run stake hold) waits inside for a card on file and is
     // re-triggered by the subscription-created webhook. Idempotent + non-blocking.
     this.startDayZeroExperience(userId)
-      .catch((err) => logger.warn(`Day-Zero experience failed for ${userId}:`, err));
+      .catch((err) => opsAlert({
+        severity: 'warn',
+        source: 'onboarding',
+        title: 'day_zero_failed',
+        detail: 'new member finished onboarding but Day-Zero (circle + welcome handoff) did not start',
+        userId,
+        error: err,
+      }));
 
+    const { serverAnalytics } = await import('../lib/analytics');
+    serverAnalytics.onboardingCompletedServer(userId, fullUser?.subscriptionTier ?? 'FREE');
     logger.info(`User onboarded: ${user.id}`);
 
     return user;
@@ -326,7 +349,13 @@ class UserService {
           const callService = (await import('./call.service')).default;
           await callService.scheduleCall(userId, 'ONBOARDING', new Date(Date.now() + 2 * 60 * 1000));
           logger.info(`Coach welcome call scheduled for ${userId}`);
-        })().catch((err) => logger.warn(`Coach welcome call scheduling failed for ${userId}:`, err));
+        })().catch((err) => opsAlert({
+          severity: 'warn',
+          source: 'onboarding',
+          title: 'coach_welcome_call_failed',
+          userId,
+          error: err,
+        }));
       }
       return;
     }
@@ -341,6 +370,9 @@ class UserService {
 
     const hasCard = !!user.stripeSubscriptionId;
 
+    const { serverAnalytics } = await import('../lib/analytics');
+    serverAnalytics.dayZeroTriggered(userId, hasCard);
+
     // ── WELCOME HALF (no card needed) ──────────────────────────────────────────
 
     // 1) Circle — idempotent.
@@ -348,7 +380,13 @@ class UserService {
       .then((res) => {
         if (res) logger.info(`Circle assignment for ${userId}: ${res.circleId} (created=${res.created})`);
       })
-      .catch((err) => logger.warn(`Failed to auto-assign circle for ${userId}:`, err));
+      .catch((err) => opsAlert({
+        severity: 'warn',
+        source: 'onboarding',
+        title: 'circle_assign_failed',
+        userId,
+        error: err,
+      }));
 
     // 2) Welcome handoff — instead of silently booking a call, Ivy MESSAGES the
     // new member in chat the moment they're onboarded, offering agency: call now,
@@ -377,7 +415,14 @@ class UserService {
         logger.info(`Onboarding handoff message posted for user ${userId}`);
       }
     } catch (err) {
-      logger.warn(`Failed to post onboarding handoff for ${userId}:`, err);
+      await opsAlert({
+        severity: 'warn',
+        source: 'onboarding',
+        title: 'handoff_post_failed',
+        detail: "the welcome message never reached the new member's chat — Ivy looks absent on day one",
+        userId,
+        error: err,
+      });
     }
 
     // ── MONEY HALF (needs a card on file) ──────────────────────────────────────
@@ -407,11 +452,19 @@ class UserService {
             logger.info(`Foundation Run for ${userId} deferred to Monday opener (too few days before reset)`);
           } else {
             await openFoundationCycle(userId, window);
+            serverAnalytics.foundationRunOpened(userId, window.daysInCycle);
             logger.info(`Foundation Run opened for ${userId} (days=${window.daysInCycle})`);
           }
         }
       } catch (err) {
-        logger.warn(`Failed to open Foundation Run for ${userId}:`, err);
+        await opsAlert({
+          severity: 'critical',
+          source: 'onboarding',
+          title: 'foundation_run_open_failed',
+          detail: "user has a card on file but their first stake cycle never opened — the product's core loop is off for them",
+          userId,
+          error: err,
+        });
       }
     }
   }

@@ -1,5 +1,6 @@
 import prisma from '../utils/prisma';
 import logger from '../utils/logger';
+import { opsAlert } from '../lib/ops-alert';
 import { sendPushToUser, pushTemplates } from './push.service';
 
 class SeasonService {
@@ -120,7 +121,14 @@ class SeasonService {
         });
         if (season) {
           await this.onSprintEnd(season.userId, sprint.seasonId, sprint.id).catch((err) =>
-            logger.warn(`Sprint-end events failed for sprint ${sprint.id}:`, err)
+            opsAlert({
+              severity: 'warn',
+              source: 'season-advance',
+              title: 'sprint_end_events_failed',
+              userId: season.userId,
+              entity: { type: 'sprint', id: sprint.id },
+              error: err,
+            })
           );
         }
       }
@@ -141,7 +149,15 @@ class SeasonService {
       // Schedule Season Close call for each user
       for (const season of closingSeasons) {
         await this.onSeasonEnd(season.userId, season.id).catch((err) =>
-          logger.warn(`Season Close scheduling failed for ${season.userId}:`, err)
+          opsAlert({
+            severity: 'warn',
+            source: 'season-advance',
+            title: 'season_close_schedule_failed',
+            detail: "user's season ended but the Season Close ceremony was never scheduled",
+            userId: season.userId,
+            entity: { type: 'season', id: season.id },
+            error: err,
+          })
         );
       }
     }

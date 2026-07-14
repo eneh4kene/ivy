@@ -1,5 +1,7 @@
 import prisma from '../utils/prisma';
 import logger from '../utils/logger';
+import { opsAlert } from '../lib/ops-alert';
+import { serverAnalytics } from '../lib/analytics';
 import { sendPushToUser, pushTemplates } from './push.service';
 import { createSpecGame as persistSpecGame, runSpecEvent } from './games/runtime';
 import { compileGame, validateSpec } from './games/compiler';
@@ -334,6 +336,9 @@ class CircleGameService {
       }),
     ]);
 
+    serverAnalytics.circleGameEvent(userId, game.id, eventType);
+    if (extraEventType) serverAnalytics.circleGameEvent(userId, game.id, extraEventType);
+
     // ── Beats + win conditions ─────────────────────────────────────────────
     const names = await this.memberNames(game.circleId);
     const name = (id: string | null | undefined) => (id ? names.get(id) ?? 'someone' : 'someone');
@@ -371,6 +376,7 @@ class CircleGameService {
         await prisma.circleGameEvent.create({
           data: { gameId: game.id, userId: winner[0], eventType: 'game_won', payload: { winner_id: winner[0], score: winner[1] }, note: `${name(winner[0])} won the race with ${winner[1]} points!` },
         });
+        serverAnalytics.circleGameEvent(winner[0], game.id, 'game_won');
         // Winner's spoils: victory buys influence, not just bragging rights.
         this.announceBeat(game.circleId, `${name(winner[0])} takes the ${game.name} crown with ${winner[1]} points. 👑 Spoils of victory: ${name(winner[0])} names the room's pledge for the next sprint.`, {
           gameId: game.id,
@@ -850,7 +856,14 @@ class CircleGameService {
         if ((game as { spec?: unknown }).spec) ticked += await this.tickSpecTimers(game);
         else ticked += await this.tickLegacyClock(game);
       } catch (err) {
-        logger.warn(`Game clock tick failed for ${game.id}:`, err);
+        await opsAlert({
+          severity: 'warn',
+          source: 'circle-game-clock',
+          title: 'game_tick_failed',
+          detail: 'time is passing in the world but not in this game',
+          entity: { type: 'circleGame', id: game.id },
+          error: err,
+        });
       }
     }
     if (ticked > 0) logger.info(`Game clocks: ${ticked} timer event(s) fired`);

@@ -2,6 +2,8 @@ import Stripe from 'stripe';
 import prisma from '../utils/prisma';
 import { config } from '../config';
 import logger from '../utils/logger';
+import { opsAlert } from '../lib/ops-alert';
+import { serverAnalytics } from '../lib/analytics';
 import { NotFoundError, BadRequestError } from '../utils/errors';
 import { SubscriptionTier } from '@prisma/client';
 import { getStripePriceId, type Currency } from '../config/pricing';
@@ -313,7 +315,13 @@ class PaymentService {
     const tier = subscription.metadata.tier as SubscriptionTier;
 
     if (!userId || !tier) {
-      logger.error('Missing metadata in subscription', { subscription: subscription.id });
+      await opsAlert({
+        severity: 'critical',
+        source: 'webhook:stripe',
+        title: 'subscription_missing_metadata',
+        detail: `subscription ${subscription.id} created with no userId/tier metadata — someone paid and got nothing provisioned`,
+        entity: { type: 'stripeSubscription', id: subscription.id },
+      });
       return;
     }
 
@@ -326,7 +334,14 @@ class PaymentService {
     // Fire-and-forget; never block the webhook.
     const { default: userService } = await import('./user.service');
     userService.startDayZeroExperience(userId).catch((err) =>
-      logger.warn(`Day-Zero trigger failed for ${userId}:`, err)
+      opsAlert({
+        severity: 'warn',
+        source: 'payments',
+        title: 'day_zero_trigger_failed',
+        detail: 'trial started but the Day-Zero experience did not kick off (backstop runs at first payment)',
+        userId,
+        error: err,
+      })
     );
 
     // Send confirmation email — non-blocking
@@ -353,7 +368,13 @@ class PaymentService {
       });
 
       if (!user) {
-        logger.error('Cannot find user for subscription', { subscription: subscription.id });
+        await opsAlert({
+          severity: 'critical',
+          source: 'webhook:stripe',
+          title: 'subscription_user_not_found',
+          detail: `subscription ${subscription.id} updated but no matching user — subscription state is drifting`,
+          entity: { type: 'stripeSubscription', id: subscription.id },
+        });
         return;
       }
 
@@ -397,7 +418,13 @@ class PaymentService {
       });
 
       if (!user) {
-        logger.error('Cannot find user for subscription', { subscription: subscription.id });
+        await opsAlert({
+          severity: 'critical',
+          source: 'webhook:stripe',
+          title: 'subscription_user_not_found',
+          detail: `subscription ${subscription.id} deleted but no matching user — a cancellation was not recorded`,
+          entity: { type: 'stripeSubscription', id: subscription.id },
+        });
         return;
       }
 
@@ -449,7 +476,14 @@ class PaymentService {
       if (isFirstRealPayment) {
         const { dispatchPendingDonationsForUser } = await import('./every-org.service');
         dispatchPendingDonationsForUser(user.id).catch((err) =>
-          logger.error(`Failed to dispatch pilot donations for ${user.id}:`, err)
+          opsAlert({
+            severity: 'critical',
+            source: 'payments',
+            title: 'pilot_donation_dispatch_failed',
+            detail: 'first real payment landed but accumulated pilot donations were not dispatched',
+            userId: user.id,
+            error: err,
+          })
         );
 
         // Backstop: ensure the Day-Zero experience (circle + onboarding call +
@@ -460,10 +494,18 @@ class PaymentService {
         // See docs/foundation-run-and-day-zero.md.
         const { default: userService } = await import('./user.service');
         userService.startDayZeroExperience(user.id).catch((err) =>
-          logger.warn(`Day-Zero backstop failed for ${user.id}:`, err)
+          opsAlert({
+            severity: 'critical',
+            source: 'payments',
+            title: 'day_zero_backstop_failed',
+            detail: 'both the trial-start trigger and the first-payment backstop failed — user has no Day-Zero setup',
+            userId: user.id,
+            error: err,
+          })
         );
       }
 
+      serverAnalytics.paymentSucceeded(user.id, amountPaid / 100, invoice.currency ?? 'gbp');
       logger.info(`Payment succeeded for user ${user.id} - invoice ${invoice.id} - amount: ${amountPaid}`);
     }
   }
@@ -489,7 +531,14 @@ class PaymentService {
         data: { subscriptionStatus: 'PAST_DUE' },
       });
 
-      logger.error(`Payment failed for user ${user.id} - invoice ${invoice.id}`);
+      serverAnalytics.paymentFailed(user.id, invoice.id ?? 'unknown');
+      await opsAlert({
+        severity: 'warn',
+        source: 'webhook:stripe',
+        title: 'invoice_payment_failed',
+        detail: `invoice ${invoice.id} failed — user now PAST_DUE`,
+        userId: user.id,
+      });
 
       emailService.sendPaymentFailed({
         id: user.id,

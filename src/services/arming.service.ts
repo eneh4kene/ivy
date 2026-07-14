@@ -35,6 +35,8 @@ import { sendPushToUser, type PushPayload } from './push.service'
 import messagingService from './messaging.service'
 import callService from './call.service'
 import { CURRENCY_SYMBOL, type Currency } from '../config/pricing'
+import { opsAlert, opsBatch } from '../lib/ops-alert'
+import { serverAnalytics } from '../lib/analytics'
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -227,6 +229,11 @@ async function ensureChaseCap(
  * Deliver an arming nudge: web push if the user has an active subscription,
  * otherwise SMS (if a phone + copy is available). Used by every stage so a
  * push-less user still gets the full ladder over SMS instead of one morning text.
+ *
+ * Push counts as delivered only when the provider accepted at least one send —
+ * "has subscriptions" is not delivery. If every push send fails we fall through
+ * to SMS; if that's impossible too, the dead end pages ops (a user silently
+ * missing a nudge breaks the product's core promise).
  */
 async function deliverArmingNudge(
   userId: string,
@@ -235,23 +242,39 @@ async function deliverArmingNudge(
   phone: string | null,
   label: string,
 ): Promise<void> {
-  const pushSubs = await prisma.pushSubscription.count({
-    where: { userId, isActive: true },
-  })
+  const push = await sendPushToUser(userId, payload)
 
-  if (pushSubs > 0) {
-    await sendPushToUser(userId, payload)
+  if (push.delivered > 0) {
     logger.info(`Arming ${label} (push) sent to user ${userId}`)
+    serverAnalytics.armingNudgeSent(userId, label, 'push')
     return
+  }
+
+  if (push.attempted > 0) {
+    await opsAlert({
+      severity: 'warn',
+      source: 'arming-nudge',
+      title: 'push_all_failed',
+      detail: `${label}: all ${push.attempted} push sends failed${smsText && phone ? '; falling back to SMS' : ''}`,
+      userId,
+    })
   }
 
   if (smsText && phone) {
     await messagingService.sendSMSMessage(userId, smsText, 'reminder')
     logger.info(`Arming ${label} (SMS fallback) sent to user ${userId}`)
+    serverAnalytics.armingNudgeSent(userId, label, 'sms')
     return
   }
 
-  logger.warn(`Arming ${label}: no delivery channel available for user ${userId}`)
+  serverAnalytics.nudgeDeliveryFailed(userId, label, push.attempted > 0 ? 'push_failed_no_sms' : 'no_channel')
+  await opsAlert({
+    severity: 'critical',
+    source: 'arming-nudge',
+    title: 'no_delivery_channel',
+    detail: `${label}: no working push subscription and no SMS channel — user got nothing`,
+    userId,
+  })
 }
 
 const RECORD_URL = () => `${process.env.FRONTEND_URL ?? 'https://www.ivykeeps.life'}/daily?action=record`
@@ -410,6 +433,7 @@ export async function enforceArmingDeadline(userId: string, date: Date): Promise
     .then(({ default: circleGameService }) => circleGameService.processArmingEvent(userId, false))
     .catch((err) => logger.warn(`Deadline: circle game event failed for ${userId}`, err))
 
+  serverAnalytics.armingDeadlineMissed(userId)
   logger.info(
     `Deadline enforced for user ${userId}: workout ${workout.id} → MISSED / FORFEITED`,
   )
@@ -586,6 +610,9 @@ export async function runArmingForStage(stage: ArmingStage, now: Date): Promise<
   })
 
   let actioned = 0
+  // DEADLINE failures mean the forfeit ledger drifts (a miss that never became
+  // FORFEITED) — page as critical. Earlier stages are recoverable nudges.
+  const failures = opsBatch('arming-loop')
 
   for (const user of users) {
     try {
@@ -625,10 +652,16 @@ export async function runArmingForStage(stage: ArmingStage, now: Date): Promise<
 
       actioned++
     } catch (err) {
-      logger.warn(`Arming stage ${stage} error for user ${user.id}:`, err)
+      failures.add({
+        severity: stage === 'DEADLINE' ? 'critical' : 'warn',
+        title: `stage_${stage.toLowerCase()}_failed`,
+        userId: user.id,
+        error: err,
+      })
     }
   }
 
+  await failures.flush()
   logger.info(`Arming stage ${stage} complete — actioned ${actioned}/${users.length} users`)
 }
 
@@ -687,6 +720,7 @@ export async function runPreCommitReminders(now: Date): Promise<void> {
   })
 
   let sent = 0
+  const preCommitFailures = opsBatch('pre-commit-reminders')
 
   for (const w of workouts) {
     try {
@@ -711,10 +745,17 @@ export async function runPreCommitReminders(now: Date): Promise<void> {
       await deliverArmingNudge(w.user.id, payload, smsText, w.user.phone, 'pre-commit')
       sent++
     } catch (err) {
-      logger.warn(`Pre-commit reminder error for workout ${w.id}:`, err)
+      preCommitFailures.add({
+        severity: 'warn',
+        title: 'pre_commit_reminder_failed',
+        userId: w.user.id,
+        entity: { type: 'workout', id: w.id },
+        error: err,
+      })
     }
   }
 
+  await preCommitFailures.flush()
   logger.info(`Pre-commit reminders complete — sent ${sent}/${workouts.length} candidates`)
 }
 
@@ -747,6 +788,7 @@ export async function openStakeCyclesForActiveUsers(): Promise<void> {
 
   let opened = 0
   let skipped = 0
+  const openFailures = opsBatch('stakecycle-open')
 
   for (const user of users) {
     try {
@@ -768,12 +810,13 @@ export async function openStakeCyclesForActiveUsers(): Promise<void> {
       if (err?.message?.includes('already has an open stake cycle')) {
         skipped++
       } else {
-        logger.warn(`openStakeCycle failed for user ${user.id}:`, err)
+        openFailures.add({ severity: 'warn', title: 'open_cycle_failed', userId: user.id, error: err })
         skipped++
       }
     }
   }
 
+  await openFailures.flush()
   logger.info(`StakeCycle open run: opened=${opened}, skipped/errored=${skipped}`)
 }
 
@@ -796,16 +839,27 @@ export async function settleExpiredStakeCycles(): Promise<void> {
 
   let settled = 0
   let failed = 0
+  // Settlement is a real Stripe capture — a silent failure here is money
+  // either wrongly held or never captured. Always critical.
+  const settleFailures = opsBatch('stakecycle-settle')
 
   for (const cycle of overdueCycles) {
     try {
       await settleStakeCycle(cycle.id)
       settled++
     } catch (err) {
-      logger.error(`settleStakeCycle failed for cycle ${cycle.id} (user ${cycle.userId}):`, err)
+      settleFailures.add({
+        severity: 'critical',
+        title: 'settle_failed',
+        userId: cycle.userId,
+        entity: { type: 'stakeCycle', id: cycle.id },
+        error: err,
+      })
+      serverAnalytics.stakeSettlementFailed(cycle.userId, cycle.id)
       failed++
     }
   }
 
+  await settleFailures.flush()
   logger.info(`StakeCycle settle run: settled=${settled}, failed=${failed}`)
 }

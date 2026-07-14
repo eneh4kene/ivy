@@ -20,27 +20,27 @@ model User {
   updatedAt DateTime @updatedAt
 
   // Basic Info
-  email         String  @unique
-  phone         String? @unique
-  firstName     String
-  lastName      String
-  timezone      String  @default("Europe/London")
-  region        String  @default("GB") // "GB" or "US"
-  currency      String  @default("GBP") // "GBP" or "USD"
-  profileImage  String?
+  email        String  @unique
+  phone        String? @unique
+  firstName    String
+  lastName     String
+  timezone     String  @default("Europe/London")
+  region       String  @default("GB") // "GB" or "US"
+  currency     String  @default("GBP") // "GBP" or "USD"
+  profileImage String?
 
   // Subscription & Billing
-  subscriptionTier   SubscriptionTier @default(FREE)
-  subscriptionStatus String           @default("active") // active, paused, cancelled
-  stripeCustomerId   String?          @unique
-  stripeSubscriptionId String?        @unique
-  companyId          String?
+  subscriptionTier     SubscriptionTier @default(FREE)
+  subscriptionStatus   String           @default("active") // active, paused, cancelled
+  stripeCustomerId     String?          @unique
+  stripeSubscriptionId String?          @unique
+  companyId            String?
 
   // Communication Style
-  commStyle       CommStyle @default(ADAPTIVE)
+  commStyle CommStyle @default(ADAPTIVE)
 
   // Circle preference
-  circleOptIn     Boolean   @default(true)  // false = solo, true = wants a Circle // CALLS | TEXTS | ADAPTIVE
+  circleOptIn Boolean @default(true) // false = solo, true = wants a Circle // CALLS | TEXTS | ADAPTIVE
 
   // Schedule Preferences
   morningCallTime String? // HH:MM format (e.g., "07:00")
@@ -49,95 +49,95 @@ model User {
   preferredDays   String? // JSON array of days ["monday", "tuesday"]
 
   // Workout Preferences
-  track       String  // standard track: "fitness" | "focus" | "sleep" | "balance"
+  track       String // standard track: "fitness" | "focus" | "sleep" | "balance"
   trackDetail String? // personal specificity: "morning runs", "daily meditation", etc.
-  goal        String  // User's primary goal
+  goal        String // User's primary goal
   minimumMode String? // The minimum acceptable action
   giftFrame   String? // Who/what they're doing this for
 
   // Coach relationship (for COACH-managed clients)
-  coachId        String?   // ID of the coach User who manages this client
+  coachId        String? // ID of the coach User who manages this client
   coachNotes     String?   @db.Text // PT-written notes Ivy surfaces in calls
-  programmeAreas Json?     // Array of { id, area, instruction } — coach-defined per client
-  pendingCoachId String?   // coach invite awaiting user acceptance
+  programmeAreas Json? // Array of { id, area, instruction } — coach-defined per client
+  pendingCoachId String? // coach invite awaiting user acceptance
   coachLinkedAt  DateTime? // when the user accepted (or was created by) the coach
 
   // Charity Preferences
   preferredCharityId String?
 
   // Stake Config (Phase 1 — product-pricing-rework.md §2 + §3)
-  stakeWeeklyAmount  Decimal?    @db.Decimal(10, 2) // user-set; must be >= STAKE_CONFIG.minWeeklyStake
-  forfeitMode        ForfeitMode @default(MIDDLE)
-  dislikedCharityId  String?     // Savage mode: the anti-charity destination
-  armingWindowStart  String?     // HH:MM — user's chosen arming window open time
-  armingWindowEnd    String?     // HH:MM — user's chosen arming window deadline
+  stakeWeeklyAmount Decimal?    @db.Decimal(10, 2) // user-set; must be >= STAKE_CONFIG.minWeeklyStake
+  forfeitMode       ForfeitMode @default(MIDDLE)
+  dislikedCharityId String? // Savage mode: the anti-charity destination
+  armingWindowStart String? // HH:MM — user's chosen arming window open time
+  armingWindowEnd   String? // HH:MM — user's chosen arming window deadline
 
   // Arming-chase opt-in (Phase 3 — §5b-i, §9 decision 4b)
   // Live Ivy-calls-you chase when the user hasn't armed. Opt-in, capped 8/user/month.
-  armingChaseEnabled   Boolean   @default(false) // user opt-in; never defaulted true
-  chaseCallsThisMonth  Int       @default(0)     // resets at the start of each calendar month
-  chaseCapMonthStart   DateTime? // timestamp of when the current monthly window started
+  armingChaseEnabled  Boolean   @default(false) // user opt-in; never defaulted true
+  chaseCallsThisMonth Int       @default(0) // resets at the start of each calendar month
+  chaseCapMonthStart  DateTime? // timestamp of when the current monthly window started
 
   // Morning call is OPT-IN only — the default daily loop is the async VN, not a live morning call (§1c)
-  morningCallOptIn     Boolean   @default(false)
+  morningCallOptIn Boolean @default(false)
 
   // Calendar Integration (Elite+)
-  googleCalendarConnected    Boolean   @default(false)
-  googleCalendarRefreshToken String?
-  outlookCalendarConnected   Boolean   @default(false)
+  googleCalendarConnected     Boolean @default(false)
+  googleCalendarRefreshToken  String?
+  outlookCalendarConnected    Boolean @default(false)
   outlookCalendarRefreshToken String?
 
   // Behavioural intelligence
-  inferredProfile Json?  // Synthesized pattern profile from call history — see insight.service.ts
+  inferredProfile Json? // Synthesized pattern profile from call history — see insight.service.ts
 
   // Role
-  role           String  @default("user") // "user" | "superadmin"
+  role String @default("user") // "user" | "superadmin"
 
   // Messaging
-  telegramChatId     String?   @unique // set when user connects Telegram via deep link
+  telegramChatId String? @unique // set when user connects Telegram via deep link
 
   // Legal consent
-  tcpaConsent        Boolean   @default(false) // US users — TCPA consent for AI calls
-  tcpaConsentAt      DateTime? // timestamp of consent — required for TCPA compliance record
+  tcpaConsent   Boolean   @default(false) // US users — TCPA consent for AI calls
+  tcpaConsentAt DateTime? // timestamp of consent — required for TCPA compliance record
 
   // Status
-  isActive       Boolean @default(true)
-  isOnboarded    Boolean @default(false)
-  hasPaid        Boolean @default(false)
-  onboardedAt    DateTime?
-  lastCallAt     DateTime?
+  isActive    Boolean   @default(true)
+  isOnboarded Boolean   @default(false)
+  hasPaid     Boolean   @default(false)
+  onboardedAt DateTime?
+  lastCallAt  DateTime?
 
   // Relationships
-  company          Company?            @relation(fields: [companyId], references: [id])
-  preferredCharity Charity?            @relation("UserPreferredCharity", fields: [preferredCharityId], references: [id])
-  dislikedCharity  Charity?            @relation("UserDislikedCharity", fields: [dislikedCharityId], references: [id])
-  workouts         Workout[]
-  calls            Call[]
-  donations        Donation[]
-  impactWallet     ImpactWallet?
-  streaks          Streak?
+  company              Company?              @relation(fields: [companyId], references: [id])
+  preferredCharity     Charity?              @relation("UserPreferredCharity", fields: [preferredCharityId], references: [id])
+  dislikedCharity      Charity?              @relation("UserDislikedCharity", fields: [dislikedCharityId], references: [id])
+  workouts             Workout[]
+  calls                Call[]
+  donations            Donation[]
+  impactWallet         ImpactWallet?
+  streaks              Streak?
   transformationScores TransformationScore[]
-  lifeMarkers      LifeMarker[]
-  messages         Message[]
-  ivyCircles       IvyCircleMember[]
-  coachCircles     IvyCircle[]       @relation("CoachCircles")
-  circleSessionShares CircleSessionShare[]
-  seasons          Season[]
-  impactStories    ImpactStory[]
-  accountabilityBuddy AccountabilityBuddy?
-  pushSubscriptions   PushSubscription[]
-  charities           UserCharity[]
-  callMemories        CallMemory[]
-  circleGameEvents    CircleGameEvent[]
-  circleCatchups      CircleCatchup[]
-  stakeCycles         StakeCycle[]
-  voiceNotes          VoiceNote[]
-  phoneVerification   PhoneVerification?
-  coachProfile        CoachProfile?       // set if this user is a COACH
-  clients             User[]              @relation("CoachClients")
-  coach               User?               @relation("CoachClients", fields: [coachId], references: [id])
-  pendingClients      User[]              @relation("PendingCoachClients")
-  pendingCoach        User?               @relation("PendingCoachClients", fields: [pendingCoachId], references: [id])
+  lifeMarkers          LifeMarker[]
+  messages             Message[]
+  ivyCircles           IvyCircleMember[]
+  coachCircles         IvyCircle[]           @relation("CoachCircles")
+  circleSessionShares  CircleSessionShare[]
+  seasons              Season[]
+  impactStories        ImpactStory[]
+  accountabilityBuddy  AccountabilityBuddy?
+  pushSubscriptions    PushSubscription[]
+  charities            UserCharity[]
+  callMemories         CallMemory[]
+  circleGameEvents     CircleGameEvent[]
+  circleCatchups       CircleCatchup[]
+  stakeCycles          StakeCycle[]
+  voiceNotes           VoiceNote[]
+  phoneVerification    PhoneVerification?
+  coachProfile         CoachProfile? // set if this user is a COACH
+  clients              User[]                @relation("CoachClients")
+  coach                User?                 @relation("CoachClients", fields: [coachId], references: [id])
+  pendingClients       User[]                @relation("PendingCoachClients")
+  pendingCoach         User?                 @relation("PendingCoachClients", fields: [pendingCoachId], references: [id])
 
   @@index([email])
   @@index([companyId])
@@ -151,8 +151,8 @@ model User {
 model PhoneVerification {
   id        String   @id @default(uuid())
   userId    String   @unique
-  codeHash  String   // sha256 of the 6-digit code — never store plaintext
-  newPhone  String   // E.164, validated + uniqueness-checked at request time
+  codeHash  String // sha256 of the 6-digit code — never store plaintext
+  newPhone  String // E.164, validated + uniqueness-checked at request time
   attempts  Int      @default(0)
   expiresAt DateTime
   createdAt DateTime @default(now())
@@ -164,18 +164,18 @@ model PhoneVerification {
 }
 
 enum CommStyle {
-  CALLS    // Ivy always calls; text only as fallback
-  TEXTS    // Ivy always texts; asks before calling
+  CALLS // Ivy always calls; text only as fallback
+  TEXTS // Ivy always texts; asks before calling
   ADAPTIVE // Ivy reads the moment and decides
 }
 
 enum SubscriptionTier {
   FREE
-  PRO       // B2C: £42/mo - "Ivy" - the full system (one tier; display name "Ivy")
-  ELITE     // B2C: £99/mo - "Ivy Plus" - RETIRED (kept for migration; collapse to PRO in Phase 5)
+  PRO // B2C: £42/mo - "Ivy" - the full system (one tier; display name "Ivy")
+  ELITE // B2C: £99/mo - "Ivy Plus" - RETIRED (kept for migration; collapse to PRO in Phase 5)
   CONCIERGE // B2C: £149/mo - "Ivy Concierge" - RETIRED (kept for migration; collapse to PRO in Phase 5)
-  B2B       // Company-sponsored
-  COACH     // PT / personal coach account — manages clients
+  B2B // Company-sponsored
+  COACH // PT / personal coach account — manages clients
 }
 
 // ============================================
@@ -183,21 +183,21 @@ enum SubscriptionTier {
 // ============================================
 
 enum ForfeitMode {
-  MIDDLE  // Default: forfeits to a house charity the user did NOT choose
-  SAVAGE  // Opt-in: forfeits to a cause the user actively dislikes
+  MIDDLE // Default: forfeits to a house charity the user did NOT choose
+  SAVAGE // Opt-in: forfeits to a cause the user actively dislikes
 }
 
 enum StakeCycleStatus {
   AUTHORIZED // PaymentIntent authorised; no capture yet
-  SETTLED    // Cycle ended; forfeited slices captured, released slices voided
-  VOIDED     // Whole cycle voided (e.g. grace, error)
-  FAILED     // Auth or capture failed
+  SETTLED // Cycle ended; forfeited slices captured, released slices voided
+  VOIDED // Whole cycle voided (e.g. grace, error)
+  FAILED // Auth or capture failed
 }
 
 enum SliceOutcome {
-  RELEASED  // Day succeeded; slice returned to user (not captured)
+  RELEASED // Day succeeded; slice returned to user (not captured)
   FORFEITED // Day missed; slice captured and sent to forfeit destination
-  PENDING   // Cycle still open; outcome not yet determined
+  PENDING // Cycle still open; outcome not yet determined
 }
 
 // ============================================
@@ -209,21 +209,21 @@ model Company {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  name            String
-  contactEmail    String
-  contactName     String
+  name             String
+  contactEmail     String
+  contactName      String
   stripeCustomerId String? @unique
 
   // Season Configuration
-  currentSeason   Int      @default(1)
+  currentSeason   Int       @default(1)
   seasonStartDate DateTime?
   seasonEndDate   DateTime?
-  seasonDuration  Int      @default(8) // weeks
+  seasonDuration  Int       @default(8) // weeks
 
   // Company wellness season — top-down theme that flows into every employee's call
-  wellnessTheme   String? // e.g. "Move More May", "Mental Health Month"
-  wellnessGoal    String? // e.g. "Every employee hits 70% consistency this season"
-  wellnessSeason  Int     @default(1)
+  wellnessTheme  String? // e.g. "Move More May", "Mental Health Month"
+  wellnessGoal   String? // e.g. "Every employee hits 70% consistency this season"
+  wellnessSeason Int     @default(1)
 
   // Pricing
   platformFeePerUser  Decimal @default(15.00)
@@ -233,8 +233,8 @@ model Company {
   isActive Boolean @default(true)
 
   // Relationships
-  users       User[]
-  ivyCircles  IvyCircle[]
+  users      User[]
+  ivyCircles IvyCircle[]
 
   @@index([name])
   @@map("companies")
@@ -249,18 +249,18 @@ model Charity {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  name              String
-  description       String
-  category          String   // "health", "education", "environment", "poverty", "animals"
-  impactMetric      String   // e.g., "meals provided", "trees planted"
-  impactPerPound    String   // e.g., "2 meals per £1"
-  logoUrl           String?
-  website           String?
-  everyOrgSlug      String?  @unique // Every.org nonprofit slug for payment dispatch
+  name           String
+  description    String
+  category       String // "health", "education", "environment", "poverty", "animals"
+  impactMetric   String // e.g., "meals provided", "trees planted"
+  impactPerPound String // e.g., "2 meals per £1"
+  logoUrl        String?
+  website        String?
+  everyOrgSlug   String? @unique // Every.org nonprofit slug for payment dispatch
 
   // Filtering
-  regions  String @default("[\"global\"]") @db.Text // JSON: ["GB","US","global"]
-  tracks   String @default("[]")           @db.Text // JSON: ["fitness","focus","sleep","balance"]
+  regions  String  @default("[\"global\"]") @db.Text // JSON: ["GB","US","global"]
+  tracks   String  @default("[]") @db.Text // JSON: ["fitness","focus","sleep","balance"]
   featured Boolean @default(false) // pinned to top of curated list
 
   isActive Boolean @default(true)
@@ -269,11 +269,11 @@ model Charity {
   isHouseDefault Boolean @default(false)
 
   // Relationships
-  preferredByUsers  User[]        @relation("UserPreferredCharity")
-  dislikedByUsers   User[]        @relation("UserDislikedCharity")
-  donations         Donation[]
-  userCharities     UserCharity[]
-  sprintGoals       CircleSprintGoal[] @relation("SprintGoalCharity") // Phase 4b: collective charity goal
+  preferredByUsers User[]             @relation("UserPreferredCharity")
+  dislikedByUsers  User[]             @relation("UserDislikedCharity")
+  donations        Donation[]
+  userCharities    UserCharity[]
+  sprintGoals      CircleSprintGoal[] @relation("SprintGoalCharity") // Phase 4b: collective charity goal
 
   @@index([category])
   @@index([isHouseDefault])
@@ -310,12 +310,12 @@ model Workout {
   // Plan Details
   plannedDate DateTime
   plannedTime String? // HH:MM format
-  activity    String  // "30 min run", "yoga session", etc.
-  duration    Int?    // minutes
+  activity    String // "30 min run", "yoga session", etc.
+  duration    Int? // minutes
 
   // Completion Status
-  status       WorkoutStatus @default(PLANNED)
-  completedAt  DateTime?
+  status        WorkoutStatus @default(PLANNED)
+  completedAt   DateTime?
   skippedReason String?
 
   // Type
@@ -326,15 +326,15 @@ model Workout {
   reviewCallId   String?
 
   // Stake mechanic (Phase 1 — product-pricing-rework.md §2 + Phase 1 bullets)
-  armedAt          DateTime?    // when the morning VN was accepted (arming timestamp)
+  armedAt          DateTime? // when the morning VN was accepted (arming timestamp)
   voiceNoteId      String?      @unique // FK to the canonical arming VoiceNote for this day (1:1)
-  stakeCycleId     String?      // FK to StakeCycle this workout belongs to
+  stakeCycleId     String? // FK to StakeCycle this workout belongs to
   stakeSliceAmount Decimal?     @db.Decimal(10, 2) // daily stake slice (weeklyAmount / 7)
   sliceOutcome     SliceOutcome @default(PENDING)
 
   // Relationships
-  voiceNote    VoiceNote?  @relation("WorkoutArmedVoiceNote", fields: [voiceNoteId], references: [id])
-  stakeCycle   StakeCycle? @relation(fields: [stakeCycleId], references: [id])
+  voiceNote  VoiceNote?  @relation("WorkoutArmedVoiceNote", fields: [voiceNoteId], references: [id])
+  stakeCycle StakeCycle? @relation(fields: [stakeCycleId], references: [id])
 
   @@index([userId, plannedDate])
   @@index([status])
@@ -345,9 +345,9 @@ model Workout {
 enum WorkoutStatus {
   PLANNED
   COMPLETED
-  PARTIAL   // Did minimum/modified version
+  PARTIAL // Did minimum/modified version
   SKIPPED
-  MISSED    // No show, no communication
+  MISSED // No show, no communication
 }
 
 // ============================================
@@ -363,32 +363,32 @@ model Call {
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   // Call Details
-  callType     CallType
-  scheduledAt  DateTime
-  startedAt    DateTime?
-  endedAt      DateTime?
-  duration     Int?       // seconds
-  status       CallStatus @default(SCHEDULED)
+  callType    CallType
+  scheduledAt DateTime
+  startedAt   DateTime?
+  endedAt     DateTime?
+  duration    Int? // seconds
+  status      CallStatus @default(SCHEDULED)
 
   // Retell Integration
-  retellCallId   String? @unique
-  transcript     String? @db.Text
-  recordingUrl   String?
+  retellCallId String? @unique
+  transcript   String? @db.Text
+  recordingUrl String?
 
   // Call Outcome
-  outcome     String? // "completed", "no_answer", "voicemail", "error"
-  sentiment   String? // "positive", "neutral", "struggling"
+  outcome       String? // "completed", "no_answer", "voicemail", "error"
+  sentiment     String? // "positive", "neutral", "struggling"
   needsFollowUp Boolean @default(false)
 
   // Dynamic Variables (snapshot at call time)
-  contextSnapshot Json?  // JSON of user stats, streak, etc.
+  contextSnapshot Json? // JSON of user stats, streak, etc.
 
   // Behavioural intelligence
-  callInsights    Json?   // Structured insights extracted from transcript — see insight.service.ts
-  callSummary     String? @db.Text  // Ivy's 2-3 sentence narrative summary — surfaced in next call's prompt
+  callInsights Json? // Structured insights extracted from transcript — see insight.service.ts
+  callSummary  String? @db.Text // Ivy's 2-3 sentence narrative summary — surfaced in next call's prompt
 
   // Relationships
-  memories        CallMemory[]
+  memories CallMemory[]
 
   @@index([userId, scheduledAt])
   @@index([callType, status])
@@ -397,15 +397,15 @@ model Call {
 }
 
 enum CallType {
-  MORNING_PLANNING  // Plan today's workout (legacy / opt-in preference; async VN is the default)
-  EVENING_REVIEW    // Confirm completion
-  RESCUE            // User-initiated "I'm about to skip"
-  WEEKLY_PLANNING   // Sunday review + plan ahead
-  MONTHLY_CHECKIN   // Transformation tracking
-  ONBOARDING        // First call setup
-  SEASON_CLOSE      // Ceremonial end-of-season call
-  COACH_PONDER      // Biweekly Ivy → coach synthesis call
-  ARMING_CHASE      // Opt-in live chase call when user hasn't armed (capped per §5b-i)
+  MORNING_PLANNING // Plan today's workout (legacy / opt-in preference; async VN is the default)
+  EVENING_REVIEW // Confirm completion
+  RESCUE // User-initiated "I'm about to skip"
+  WEEKLY_PLANNING // Sunday review + plan ahead
+  MONTHLY_CHECKIN // Transformation tracking
+  ONBOARDING // First call setup
+  SEASON_CLOSE // Ceremonial end-of-season call
+  COACH_PONDER // Biweekly Ivy → coach synthesis call
+  ARMING_CHASE // Opt-in live chase call when user hasn't armed (capped per §5b-i)
 }
 
 enum CallStatus {
@@ -446,7 +446,7 @@ model Donation {
   streakDays Int?
 
   // Every.org dispatch tracking
-  dispatchStatus   String  @default("PENDING") // PENDING | DISPATCHED | FAILED
+  dispatchStatus   String    @default("PENDING") // PENDING | DISPATCHED | FAILED
   everyOrgChargeId String?
   dispatchError    String?
   dispatchedAt     DateTime?
@@ -462,19 +462,19 @@ model Donation {
 }
 
 enum DonationType {
-  COMPLETION     // £1-2 per workout completion (legacy wallet mechanic)
-  STREAK_7_DAY   // £3 bonus (legacy wallet mechanic)
-  STREAK_30_DAY  // £10 bonus (legacy wallet mechanic)
-  STREAK_90_DAY  // £25 bonus (legacy wallet mechanic)
-  MANUAL         // Admin-triggered
-  STAKE_SUCCESS  // Corporate-funded donation fired on a successful day
-  STAKE_FORFEIT  // User's own stake forfeited to charity on a missed/unarmed day
+  COMPLETION // £1-2 per workout completion (legacy wallet mechanic)
+  STREAK_7_DAY // £3 bonus (legacy wallet mechanic)
+  STREAK_30_DAY // £10 bonus (legacy wallet mechanic)
+  STREAK_90_DAY // £25 bonus (legacy wallet mechanic)
+  MANUAL // Admin-triggered
+  STAKE_SUCCESS // Corporate-funded donation fired on a successful day
+  STAKE_FORFEIT // User's own stake forfeited to charity on a missed/unarmed day
 }
 
 enum DonationSource {
-  USER_STAKE  // Comes from the user's own staked money (STAKE_FORFEIT)
-  CORPORATE   // Comes from a corporate/CSR sponsor pool (STAKE_SUCCESS)
-  SPONSOR     // Direct sponsor contribution (future Phase 6)
+  USER_STAKE // Comes from the user's own staked money (STAKE_FORFEIT)
+  CORPORATE // Comes from a corporate/CSR sponsor pool (STAKE_SUCCESS)
+  SPONSOR // Direct sponsor contribution (future Phase 6)
 }
 
 // ============================================
@@ -494,11 +494,11 @@ model ImpactWallet {
   dailyCap     Decimal @db.Decimal(10, 2) // £3-5 depending on tier
 
   // Current Month Tracking
-  currentMonthSpent Decimal  @db.Decimal(10, 2) @default(0)
+  currentMonthSpent Decimal  @default(0) @db.Decimal(10, 2)
   monthStartDate    DateTime
 
   // Lifetime Totals
-  lifetimeDonated Decimal @db.Decimal(10, 2) @default(0)
+  lifetimeDonated Decimal @default(0) @db.Decimal(10, 2)
 
   @@map("impact_wallets")
 }
@@ -520,12 +520,12 @@ model StakeCycle {
   periodEnd   DateTime
 
   // Stripe auth-and-capture
-  stakeAmount            Decimal          @db.Decimal(10, 2) // full weekly stake amount authorised
-  stripePaymentIntentId  String?          @unique            // the manual-capture PaymentIntent
-  capturedAmount         Decimal          @db.Decimal(10, 2) @default(0) // sum of forfeited slices actually captured
+  stakeAmount           Decimal @db.Decimal(10, 2) // full weekly stake amount authorised
+  stripePaymentIntentId String? @unique // the manual-capture PaymentIntent
+  capturedAmount        Decimal @default(0) @db.Decimal(10, 2) // sum of forfeited slices actually captured
 
   // Lifecycle
-  status      StakeCycleStatus @default(AUTHORIZED)
+  status StakeCycleStatus @default(AUTHORIZED)
 
   // Foundation Run — a brand-new user's FIRST cycle: a flat low starter stake
   // (STAKE_CONFIG.foundationFlatAmount) over a shorter-than-weekly window, so the
@@ -566,17 +566,17 @@ model VoiceNote {
   workoutId String? // nullable so an orphaned VN can be stored and matched later
 
   // Audio source — one of these will be set depending on ingestion channel
-  audioUrl        String? // URL to uploaded audio blob (PWA MediaRecorder path, per §1e)
-  telegramFileId  String? // Telegram file_id (stopgap beta path only — see §1e)
+  audioUrl       String? // URL to uploaded audio blob (PWA MediaRecorder path, per §1e)
+  telegramFileId String? // Telegram file_id (stopgap beta path only — see §1e)
 
   // Transcription (via Whisper / transcription.service.ts)
   transcript  String?  @db.Text
   recordedAt  DateTime
-  durationSec Int?     // seconds; populated from media metadata or Whisper response
+  durationSec Int? // seconds; populated from media metadata or Whisper response
 
   // Relationships
   // Virtual back-relation for Workout.voiceNote (1:1; FK lives on Workout.voiceNoteId)
-  armedWorkout  Workout? @relation("WorkoutArmedVoiceNote")
+  armedWorkout Workout? @relation("WorkoutArmedVoiceNote")
 
   @@index([userId, recordedAt])
   @@index([workoutId])
@@ -596,11 +596,11 @@ model Streak {
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   // Current Streak
-  currentStreak     Int      @default(0)
+  currentStreak      Int       @default(0)
   currentStreakStart DateTime?
 
   // Longest Streak
-  longestStreak      Int      @default(0)
+  longestStreak      Int       @default(0)
   longestStreakStart DateTime?
   longestStreakEnd   DateTime?
 
@@ -632,9 +632,9 @@ model TransformationScore {
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   // Scores (1-10)
-  energyScore         Int? // How energetic do you feel?
-  moodScore           Int? // Overall mood
-  healthConfidence    Int? // Confidence in health
+  energyScore      Int? // How energetic do you feel?
+  moodScore        Int? // Overall mood
+  healthConfidence Int? // Confidence in health
 
   // Context
   weekNumber Int // Week since user started
@@ -652,8 +652,8 @@ model LifeMarker {
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   // Qualitative transformation moments
-  marker      String @db.Text // e.g., "I took the stairs without thinking"
-  category    String // "physical", "mental", "social", "professional"
+  marker       String @db.Text // e.g., "I took the stairs without thinking"
+  category     String // "physical", "mental", "social", "professional"
   significance String // "small", "medium", "major"
 
   @@index([userId, createdAt])
@@ -674,15 +674,15 @@ model Message {
   // Message Details
   channel   MessageChannel
   direction MessageDirection
-  content   String         @db.Text
-  status    MessageStatus  @default(SENT)
+  content   String           @db.Text
+  status    MessageStatus    @default(SENT)
 
   // External IDs
-  twilioSid   String? @unique
-  whatsappId  String? @unique
+  twilioSid  String? @unique
+  whatsappId String? @unique
 
   // Context
-  messageType String? // "reminder", "nudge", "rescue_response", "quick_reply", "chat", "onboarding_handoff", "evening_checkin"
+  messageType   String? // "reminder", "nudge", "rescue_response", "quick_reply", "chat", "onboarding_handoff", "evening_checkin"
   relatedCallId String?
 
   // Structured payload for in-app chat (e.g. action-button cards on Ivy messages,
@@ -712,6 +712,7 @@ enum MessageDirection {
 }
 
 enum MessageStatus {
+  PENDING // outbound row created; Inngest send handler hasn't confirmed yet
   SENT
   DELIVERED
   READ
@@ -741,11 +742,11 @@ model IvyCircle {
   name        String
   description String?
   track       String  @default("fitness") // fitness | focus | sleep | balance
-  tier        String  @default("peer")    // peer | pro | celebrity
+  tier        String  @default("peer") // peer | pro | celebrity
 
   // Collective season layer — sits on top of individual goals
-  seasonTheme   String? // e.g. "Operation Ironman", "The Comeback Sprint"
-  seasonNumber  Int     @default(1)
+  seasonTheme  String? // e.g. "Operation Ironman", "The Comeback Sprint"
+  seasonNumber Int     @default(1)
 
   size    Int @default(0)
   maxSize Int @default(8) // 6-8 for peer, max 4 for Concierge
@@ -772,11 +773,11 @@ model CircleSprintGoal {
   sprintNumber Int
 
   // Set collectively at the sprint-start Circle session
-  pledge       String   // e.g. "We all hit 80% consistency this sprint"
-  theme        String?  // e.g. "Intensity sprint", "Sleep first sprint"
-  targetMetric String?  // e.g. "80% group consistency"
+  pledge       String // e.g. "We all hit 80% consistency this sprint"
+  theme        String? // e.g. "Intensity sprint", "Sleep first sprint"
+  targetMetric String? // e.g. "80% group consistency"
 
-  setByUserId String?  // facilitator who proposed it
+  setByUserId String? // facilitator who proposed it
 
   // Phase 4b — Collective charity goal (§4b mechanic 2): the circle nominates
   // a shared cause for this sprint.  When the linked collective game hits its
@@ -785,7 +786,7 @@ model CircleSprintGoal {
   // STAKE_SUCCESS which requires Phase 6 corporate funding.
   // TODO(phase6): wire STAKE_SUCCESS donations to this charity once corporate
   //               funding layer is live (product-pricing-rework.md §6).
-  collectiveCharityGoalId String?  // FK to Charity; the shared sprint cause
+  collectiveCharityGoalId String? // FK to Charity; the shared sprint cause
   collectiveGoalHitAt     DateTime? // set when collective game target is reached
 
   collectiveCharity Charity? @relation("SprintGoalCharity", fields: [collectiveCharityGoalId], references: [id], onDelete: SetNull)
@@ -805,8 +806,8 @@ model IvyCircleMember {
   userId String
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  role     String  @default("member") // "member" | "facilitator"
-  isActive Boolean @default(true)
+  role     String   @default("member") // "member" | "facilitator"
+  isActive Boolean  @default(true)
   joinedAt DateTime @default(now())
 
   // Phase 4b — Witnessed stakes (§4b mechanic 1): opt-in visibility flag.
@@ -825,12 +826,12 @@ model IvyCircleMember {
 // ============================================
 
 model MagicLink {
-  id        String   @id @default(uuid())
-  token     String   @unique
+  id        String    @id @default(uuid())
+  token     String    @unique
   email     String
   expiresAt DateTime
   usedAt    DateTime?
-  createdAt DateTime @default(now())
+  createdAt DateTime  @default(now())
 
   @@index([token])
   @@index([email])
@@ -846,25 +847,25 @@ model Season {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  number      Int      // Season 1, 2, 3...
-  title       String?  // "Operation Ironman", user-defined
-  goal        String   // Overarching 12-week goal
-  seasonType  String   @default("standard") // "standard" | "memorial" | "challenge"
-  startDate   DateTime
-  endDate     DateTime // startDate + 12 weeks
+  number     Int // Season 1, 2, 3...
+  title      String? // "Operation Ironman", user-defined
+  goal       String // Overarching 12-week goal
+  seasonType String   @default("standard") // "standard" | "memorial" | "challenge"
+  startDate  DateTime
+  endDate    DateTime // startDate + 12 weeks
 
-  status      SeasonStatus @default(ACTIVE)
-  closedAt    DateTime?
-  closingCallId String?    // Call ID of the Season Close ceremony
+  status        SeasonStatus @default(ACTIVE)
+  closedAt      DateTime?
+  closingCallId String? // Call ID of the Season Close ceremony
 
   // Season Close output
-  arcSummary  String? @db.Text // AI-generated arc review
+  arcSummary          String? @db.Text // AI-generated arc review
   nextGoalSuggestions String? @db.Text // JSON array of AI suggestions
 
-  sprints     Sprint[]
+  sprints Sprint[]
 
   @@index([userId, status])
   @@map("seasons")
@@ -872,7 +873,7 @@ model Season {
 
 enum SeasonStatus {
   ACTIVE
-  CLOSING  // Season Close ceremony scheduled/in-progress
+  CLOSING // Season Close ceremony scheduled/in-progress
   CLOSED
 }
 
@@ -881,14 +882,14 @@ model Sprint {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  seasonId  String
-  season    Season   @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  seasonId String
+  season   Season @relation(fields: [seasonId], references: [id], onDelete: Cascade)
 
-  number    Int      // Sprint 1, 2, 3 within the season
+  number    Int // Sprint 1, 2, 3 within the season
   startDate DateTime
   endDate   DateTime // startDate + 4 weeks
 
-  status    SprintStatus @default(ACTIVE)
+  status      SprintStatus @default(ACTIVE)
   completedAt DateTime?
 
   // Sprint Close
@@ -914,19 +915,19 @@ model ImpactStory {
   id        String   @id @default(uuid())
   createdAt DateTime @default(now())
 
-  userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   // Content (tier-gated)
-  textNote    String  @db.Text
-  photoUrl    String?    // PRO+
-  audioUrl    String?    // ELITE+
-  videoUrl    String?    // CONCIERGE only
+  textNote String  @db.Text
+  photoUrl String? // PRO+
+  audioUrl String? // ELITE+
+  videoUrl String? // CONCIERGE only
 
   // Context
   charityName  String
   totalDonated Decimal @db.Decimal(10, 2)
-  season       Int?    // Which season number
+  season       Int? // Which season number
 
   @@index([userId])
   @@map("impact_stories")
@@ -941,8 +942,8 @@ model AccountabilityBuddy {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  userId    String   @unique
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   buddyName  String
   buddyEmail String?
@@ -963,16 +964,16 @@ model PushSubscription {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  userId   String
-  user     User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   endpoint  String  @unique
-  p256dh    String  // Public key
-  auth      String  // Auth secret
+  p256dh    String // Public key
+  auth      String // Auth secret
   userAgent String? // Device hint for display
 
-  isActive  Boolean  @default(true)
-  lastUsed  DateTime?
+  isActive Boolean   @default(true)
+  lastUsed DateTime?
 
   @@index([userId])
   @@map("push_subscriptions")
@@ -996,7 +997,7 @@ model CircleSprintSession {
   conductedAt  DateTime?
   durationMins Int?
 
-  status       String @default("scheduled") // "scheduled", "completed", "cancelled"
+  status String @default("scheduled") // "scheduled", "completed", "cancelled"
 
   // Linked circle (persistent group)
   circleId String?
@@ -1032,7 +1033,7 @@ model CircleSessionShare {
   sessionId String
   session   CircleSprintSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
   userId    String
-  user      User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user      User                @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   win      String @db.Text
   struggle String @db.Text
@@ -1055,10 +1056,10 @@ model CoachProfile {
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   // Programme identity
-  programmeName   String   // e.g. "12-week Fat Loss", "Marathon Prep"
-  discipline      String?  // coach type for discovery + Ivy's framing: "fitness" | "wellness" | "nutrition" | "mindset" | "physio" | "other"
-  coachingStyle   String?  // e.g. "direct and data-driven", "nurturing, long-term mindset"
-  programmeNotes  String?  @db.Text // general instructions for all clients
+  programmeName  String // e.g. "12-week Fat Loss", "Marathon Prep"
+  discipline     String? // coach type for discovery + Ivy's framing: "fitness" | "wellness" | "nutrition" | "mindset" | "physio" | "other"
+  coachingStyle  String? // e.g. "direct and data-driven", "nurturing, long-term mindset"
+  programmeNotes String? @db.Text // general instructions for all clients
 
   // White-labelling (optional, coach decides)
   whitelabelEnabled Boolean @default(false)
@@ -1069,10 +1070,10 @@ model CoachProfile {
   inviteToken String? @unique // random token; /invite/[token] is the public landing page
 
   // Alert preferences
-  alertOnMissedCalls Int @default(3) // notify coach after N consecutive missed calls
+  alertOnMissedCalls  Int     @default(3) // notify coach after N consecutive missed calls
   weeklyDigestEnabled Boolean @default(true)
   ponderCallEnabled   Boolean @default(false)
-  ponderCallDay       Int?    // 0=Sun 1=Mon 2=Tue 3=Wed 4=Thu 5=Fri 6=Sat
+  ponderCallDay       Int? // 0=Sun 1=Mon 2=Tue 3=Wed 4=Thu 5=Fri 6=Sat
   ponderCallTime      String? // HH:MM
   ponderCallFrequency String  @default("weekly") // "weekly" | "fortnightly"
 
@@ -1087,20 +1088,20 @@ model CircleCatchup {
   id        String   @id @default(uuid())
   createdAt DateTime @default(now())
 
-  userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   sessionId String
   session   CircleSprintSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
 
   // What Ivy needs to cover in the catch-up call
-  sprintNumber    Int
-  collectivePledge String   @db.Text
-  highlights      String?  @db.Text // key moments from the session
+  sprintNumber     Int
+  collectivePledge String  @db.Text
+  highlights       String? @db.Text // key moments from the session
 
   // Cleared once Ivy covers it in a call, or after 48h (stale)
-  coveredAt  DateTime?
-  expiresAt  DateTime  // createdAt + 48h
+  coveredAt DateTime?
+  expiresAt DateTime // createdAt + 48h
 
   @@unique([userId, sessionId])
   @@index([userId, coveredAt])
@@ -1116,9 +1117,9 @@ model GameSuggestion {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  title       String
-  description String   // one-liner shown in the card
-  templateType String  @default("custom") // relay | points_race | collective | custom
+  title        String
+  description  String // one-liner shown in the card
+  templateType String @default("custom") // relay | points_race | collective | custom
 
   // Pre-written Ivy instruction — circles can adopt as-is or edit
   ivyInstruction String @db.Text
@@ -1145,11 +1146,11 @@ model CircleGame {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  circleId  String
-  circle    IvyCircle @relation(fields: [circleId], references: [id], onDelete: Cascade)
+  circleId String
+  circle   IvyCircle @relation(fields: [circleId], references: [id], onDelete: Cascade)
 
-  sprintId  String?
-  sprint    Sprint?   @relation(fields: [sprintId], references: [id], onDelete: SetNull)
+  sprintId String?
+  sprint   Sprint? @relation(fields: [sprintId], references: [id], onDelete: SetNull)
 
   // Identity
   name        String
@@ -1181,8 +1182,8 @@ model CircleGame {
   // collective:{ total: Int, target: Int, contributors: [userId] }
   // custom:   freeform, set by the game creator
 
-  status    String   @default("active") // active | completed | paused
-  startedAt DateTime @default(now())
+  status      String    @default("active") // active | completed | paused
+  startedAt   DateTime  @default(now())
   completedAt DateTime?
 
   events CircleGameEvent[]
@@ -1205,7 +1206,7 @@ model CircleGameEvent {
 
   // workout_completed | workout_missed | baton_passed | baton_timeout | points_awarded | streak_extended | game_won | game_lost
   eventType String
-  payload   Json   @default("{}")
+  payload   Json    @default("{}")
   note      String? // plain sentence Ivy can surface in a call
 
   @@index([gameId, createdAt])
@@ -1221,16 +1222,16 @@ model CallMemory {
   id        String   @id @default(uuid())
   createdAt DateTime @default(now())
 
-  userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId String
+  user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
   // Nullable: chat-derived memories have no originating call. Voice memories still
   // link their Call; chat memories carry callId = null and source = 'chat'.
-  callId    String?
-  call      Call?    @relation(fields: [callId], references: [id], onDelete: Cascade)
+  callId String?
+  call   Call?   @relation(fields: [callId], references: [id], onDelete: Cascade)
 
-  content   String   @db.Text  // memorable fact as Ivy observed it
-  category  String             // motivation | life_event | personal_detail | struggle | breakthrough
-  source    String   @default("call") // call | chat — which channel this memory came from
+  content  String @db.Text // memorable fact as Ivy observed it
+  category String // motivation | life_event | personal_detail | struggle | breakthrough
+  source   String @default("call") // call | chat — which channel this memory came from
 
   @@index([userId, createdAt])
   @@map("call_memories")
@@ -1245,14 +1246,53 @@ model ApiUsageLog {
   createdAt DateTime @default(now())
 
   userId    String?
-  service   String  // "retell" | "twilio" | "sendgrid" | "whatsapp"
-  operation String  // "call" | "sms" | "email" | "whatsapp_message"
-  units     Float   // seconds for calls, count for messages
-  costGbp   Float   // estimated cost in GBP
+  service   String // "retell" | "twilio" | "sendgrid" | "whatsapp"
+  operation String // "call" | "sms" | "email" | "whatsapp_message"
+  units     Float // seconds for calls, count for messages
+  costGbp   Float // estimated cost in GBP
   metadata  String? @db.Text // JSON — call ID, message ID, etc.
 
   @@index([userId])
   @@index([service, createdAt])
   @@index([createdAt])
   @@map("api_usage_logs")
+}
+
+// ============================================
+// OPS OBSERVABILITY (nothing fails silently)
+// ============================================
+
+// One row per ops alert occurrence (rolled up by count when deduped).
+// Deliberately NO relation to User: ops history must survive user deletion
+// and never join-load user data.
+model OpsEvent {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
+
+  severity   String // info | warn | critical
+  source     String // 'arming-loop' | 'webhook:stripe' | 'inngest:<fn>' | ...
+  title      String // stable failure name — part of the dedup key
+  detail     String? @db.Text
+  userId     String?
+  entityType String? // 'call' | 'stakeCycle' | 'message' | ...
+  entityId   String?
+  count      Int     @default(1) // rollup count when deduped in-window
+
+  @@index([createdAt])
+  @@index([severity, createdAt])
+  @@index([source, title, createdAt])
+  @@map("ops_events")
+}
+
+// One row per scheduled job (upserted every run) — powers the watchdog and
+// /health/jobs. History lives in OpsEvent + Sentry, so this never grows.
+model JobHeartbeat {
+  jobName        String    @id // inngest function id, e.g. 'arming-loop'
+  lastStartedAt  DateTime
+  lastFinishedAt DateTime?
+  lastStatus     String    @default("RUNNING") // RUNNING | SUCCESS | FAILED
+  lastError      String?   @db.Text
+  updatedAt      DateTime  @updatedAt
+
+  @@map("job_heartbeats")
 }

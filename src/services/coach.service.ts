@@ -1,6 +1,8 @@
 import Anthropic from '@anthropic-ai/sdk';
 import prisma from '../utils/prisma';
 import logger from '../utils/logger';
+import { opsAlert } from '../lib/ops-alert';
+import { serverAnalytics } from '../lib/analytics';
 import { NotFoundError, BadRequestError } from '../utils/errors';
 import { parseModelJson } from '../utils/model-json';
 import authService from './auth.service';
@@ -264,6 +266,7 @@ class CoachService {
   async joinViaInviteToken(token: string, email: string): Promise<void> {
     const info = await this.resolveInviteToken(token);
     const coachId = info.coachId;
+    serverAnalytics.coachInviteJoinRequested(`email:${email.toLowerCase()}`, coachId);
 
     const { emailService } = await import('./email.service');
     const profile = await prisma.coachProfile.findUnique({
@@ -407,6 +410,8 @@ class CoachService {
         pendingCoachId: null,
       },
     });
+
+    serverAnalytics.coachClientLinked(userId, user.pendingCoachId, 'invite_accept');
 
     // An already-onboarded user linking to a coach can be the activation that
     // tips the book over the coach-circle threshold — check now, since their
@@ -604,7 +609,7 @@ class CoachService {
 
     for (const coach of coaches) {
       await this.sendCoachDigest(coach).catch((err) =>
-        logger.warn(`Coach digest failed for ${coach.id}`, err)
+        opsAlert({ severity: 'warn', source: 'coach-digest', title: 'digest_send_failed', userId: coach.id, error: err })
       );
     }
   }
@@ -810,7 +815,14 @@ class CoachService {
       }
 
       await this.initiateCoachPonderCall(coach as { id: string; firstName: string; phone: string }).catch((err) =>
-        logger.warn(`Ponder call failed for coach ${coach.id}:`, err)
+        opsAlert({
+          severity: 'warn',
+          source: 'ponder-scheduler',
+          title: 'ponder_call_failed',
+          detail: 'a coach expected their ponder call this window and it was not initiated',
+          userId: coach.id,
+          error: err,
+        })
       );
     }
   }
@@ -838,6 +850,7 @@ class CoachService {
     });
 
     logger.info(`Coach ponder call initiated for coach ${coach.id} — call ${call.id}`);
+    serverAnalytics.ponderCallScheduled(coach.id);
     return call;
   }
 
@@ -875,7 +888,14 @@ class CoachService {
       });
       text = msg.content[0].type === 'text' ? msg.content[0].text.trim() : '[]';
     } catch (err) {
-      logger.error(`Ponder: programme-update extraction failed for coach ${coachId} — updates from this call were NOT applied`, err);
+      await opsAlert({
+        severity: 'critical',
+        source: 'coach-ponder',
+        title: 'programme_extraction_failed',
+        detail: 'updates the coach stated on this call were NOT applied to any client',
+        userId: coachId,
+        error: err,
+      });
       return [];
     }
 
@@ -886,7 +906,13 @@ class CoachService {
     try {
       updates = JSON.parse(jsonText);
     } catch {
-      logger.error(`Ponder: could not parse programme updates for coach ${coachId} — raw model output: ${text.slice(0, 300)}`);
+      await opsAlert({
+        severity: 'critical',
+        source: 'coach-ponder',
+        title: 'programme_parse_failed',
+        detail: `updates NOT applied — raw model output: ${text.slice(0, 300)}`,
+        userId: coachId,
+      });
       return [];
     }
     if (!Array.isArray(updates) || updates.length === 0) return [];
@@ -919,12 +945,14 @@ class CoachService {
     }
 
     for (const clientId of touchedClients) {
+      serverAnalytics.programmeUpdated(clientId, source);
       inngest.send({
         name: 'programme/updated',
         data: { clientId, coachId, source },
       }).catch((err) => logger.warn(`programme/updated event failed for ${clientId}:`, err));
     }
 
+    if (source === 'ponder') serverAnalytics.ponderCompleted(coachId, applied.length);
     logger.info(`Programme updates (${source}): applied ${applied.length} for coach ${coachId}`);
     return applied;
   }

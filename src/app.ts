@@ -108,6 +108,59 @@ app.get('/health', (_req, res) => {
   });
 });
 
+// Job-pipeline health — hard invariants an external uptime pinger can watch.
+// Computed from domain tables, deliberately NOT from Inngest, so this detects
+// "Inngest entirely down" (signing key rot, deploy break) from the outside.
+// 200 = promises being kept; 503 = a time-based promise has been broken.
+app.get('/health/jobs', async (req, res) => {
+  if (config.ops.healthToken && req.query.token !== config.ops.healthToken) {
+    res.status(401).json({ error: 'invalid token' });
+    return;
+  }
+  try {
+    const prisma = (await import('./utils/prisma')).default;
+    const now = Date.now();
+
+    // A SCHEDULED call whose time passed >30 min ago means the Inngest
+    // dispatcher never fired (or died before placing it).
+    const stuckScheduledCalls = await prisma.call.count({
+      where: { status: 'SCHEDULED', scheduledAt: { lt: new Date(now - 30 * 60 * 1000) } },
+    });
+
+    // An AUTHORIZED cycle >12h past periodEnd means nightly settlement missed —
+    // a user's auth hold is lingering on their card.
+    const overdueSettlements = await prisma.stakeCycle.count({
+      where: { status: 'AUTHORIZED', periodEnd: { lt: new Date(now - 12 * 60 * 60 * 1000) } },
+    });
+
+    // Heartbeat staleness for the frequent crons — including the watchdog
+    // itself, so this endpoint is the layer that watches the watcher.
+    // Missing rows are tolerated (first deploy); staleness pages via 503.
+    const { JOB_REGISTRY } = await import('./inngest/watchdog');
+    const heartbeats = await prisma.jobHeartbeat.findMany().catch(() => []);
+    const staleJobs: Record<string, { staleMinutes: number; allowed: number }> = {};
+    for (const hb of heartbeats) {
+      const spec = JOB_REGISTRY[hb.jobName];
+      if (!spec) continue;
+      const staleMin = Math.round((now - hb.lastStartedAt.getTime()) / 60000);
+      if (staleMin > spec.maxStalenessMin) {
+        staleJobs[hb.jobName] = { staleMinutes: staleMin, allowed: spec.maxStalenessMin };
+      }
+    }
+
+    const checks = {
+      stuckScheduledCalls: { count: stuckScheduledCalls, ok: stuckScheduledCalls === 0 },
+      overdueSettlements: { count: overdueSettlements, ok: overdueSettlements === 0 },
+      staleJobs: { jobs: staleJobs, ok: Object.keys(staleJobs).length === 0 },
+    };
+    const ok = Object.values(checks).every((c) => c.ok);
+    res.status(ok ? 200 : 503).json({ status: ok ? 'ok' : 'failing', timestamp: new Date().toISOString(), checks });
+  } catch (err) {
+    logger.error('/health/jobs failed', err);
+    res.status(503).json({ status: 'error', error: 'health check itself failed' });
+  }
+});
+
 // API Documentation
 app.use(
   '/api-docs',

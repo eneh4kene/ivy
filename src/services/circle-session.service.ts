@@ -15,6 +15,8 @@ import Anthropic from '@anthropic-ai/sdk';
 import { subDays } from 'date-fns';
 import prisma from '../utils/prisma';
 import logger from '../utils/logger';
+import { opsAlert } from '../lib/ops-alert';
+import { serverAnalytics } from '../lib/analytics';
 import { NotFoundError, BadRequestError } from '../utils/errors';
 import { parseModelJson } from '../utils/model-json';
 import { logUsage } from './usage.service';
@@ -92,7 +94,15 @@ class CircleSessionService {
           m.userId,
           `Your ${session.circle?.name ?? 'circle'} session is open — drop one win and one honest struggle from this sprint. You'll see everyone else's the moment yours is in. The room closes in ${OPEN_WINDOW_HOURS} hours.`,
           { messageType: 'circle_session', metadata: { sessionId: session.id, action: 'session_open' } },
-        ).catch((err) => logger.warn(`Session-open message failed for ${m.userId}:`, err));
+        ).catch((err) => opsAlert({
+          severity: 'warn',
+          source: 'circle-session',
+          title: 'open_invite_failed',
+          detail: 'member never learned their session opened',
+          userId: m.userId,
+          entity: { type: 'session', id: session.id },
+          error: err,
+        }));
       }
 
       // The member who started the circle gets a light, optional read on the
@@ -113,6 +123,7 @@ class CircleSessionService {
           .catch((err) => logger.warn(`Facilitator brief post failed for session ${session.id}:`, err));
       }
 
+      serverAnalytics.circleSessionOpened(session.circleId!, members.length);
       logger.info(`Circle session ${session.id} opened (${members.length} members invited)`);
     }
     return due.length;
@@ -179,7 +190,14 @@ class CircleSessionService {
       }
 
       await circleCatchupService.createCatchupsForAbsentees(session.id)
-        .catch((err) => logger.warn(`Catch-up creation failed for session ${session.id}:`, err));
+        .catch((err) => opsAlert({
+          severity: 'warn',
+          source: 'circle-session',
+          title: 'catchup_creation_failed',
+          detail: 'absentees will never get their catch-up for this session',
+          entity: { type: 'session', id: session.id },
+          error: err,
+        }));
 
       // Session close = the sprint rolls — seed the next sprint's game if the
       // room doesn't already have one running.
@@ -187,6 +205,7 @@ class CircleSessionService {
         .then(({ default: circleGameService }) => circleGameService.seedSprintPact(session.circleId!))
         .catch((err) => logger.warn(`Sprint pact seed failed for circle ${session.circleId}:`, err));
 
+      serverAnalytics.circleSessionClosed(session.circleId!, sharerIds.length, memberCount - sharerIds.length);
       logger.info(`Circle session ${session.id} completed: ${sharerIds.length}/${memberCount} shared`);
     }
     return expired.length;

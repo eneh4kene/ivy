@@ -175,6 +175,8 @@ export async function handleMissedCall(userId: string): Promise<void> {
 
   await messagingService.sendMessage(userId, message, 'nudge')
   logger.info(`Missed call fallback text sent to ${userId}`)
+  const { serverAnalytics } = await import('../lib/analytics')
+  serverAnalytics.missedCallFollowupSent(userId, 'message')
 }
 
 // ─── Private helpers ────────────────────────────────────────────────────────

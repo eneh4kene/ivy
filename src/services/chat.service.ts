@@ -16,6 +16,7 @@
 import Anthropic from '@anthropic-ai/sdk'
 import prisma from '../utils/prisma'
 import logger from '../utils/logger'
+import { opsAlert } from '../lib/ops-alert'
 import callService from './call.service'
 import { promptService } from './prompt.service'
 import * as pushService from './push.service'
@@ -322,7 +323,16 @@ Return ONLY raw JSON: {"pledge": "..."} or {"pledge": null}`,
       logUsage('anthropic', 'haiku_tokens', (res.usage?.input_tokens ?? 0) + (res.usage?.output_tokens ?? 0), userId, { op: 'chat_reply' }).catch(() => {})
       return reply || FALLBACK
     } catch (err) {
-      logger.error(`Ivy chat reply failed for ${userId}:`, err)
+      // User gets the canned FALLBACK line — fine once, product-breaking if
+      // it's every message. Throttling collapses repeats into one page.
+      await opsAlert({
+        severity: 'warn',
+        source: 'chat',
+        title: 'ivy_reply_failed',
+        detail: 'model call failed — user received the fallback line',
+        userId,
+        error: err,
+      })
       return FALLBACK
     }
   }

@@ -67,7 +67,7 @@ jest.mock('../utils/prisma', () => ({
 }))
 
 jest.mock('../services/push.service', () => ({
-  sendPushToUser: jest.fn().mockResolvedValue(undefined),
+  sendPushToUser: jest.fn().mockResolvedValue({ attempted: 1, delivered: 1 }),
   pushTemplates: {
     batonPassed: jest.fn().mockReturnValue({ title: 'Baton passed', body: 'Your turn' }),
   },

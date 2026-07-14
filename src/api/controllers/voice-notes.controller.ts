@@ -192,6 +192,11 @@ router.post(
         }
       }
 
+      if (workoutId) {
+        const { serverAnalytics } = await import('../../lib/analytics')
+        serverAnalytics.workoutArmed(userId, 'voice_note')
+      }
+
       logger.info(
         `VoiceNote ${voiceNote.id} created for user ${userId}` +
         (workoutId ? ` — workout ${workoutId} armed` : ' — no workout linked yet') +

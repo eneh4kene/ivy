@@ -92,6 +92,14 @@ const envSchema = z.object({
   // Logging
   LOG_LEVEL: z.enum(['error', 'warn', 'info', 'debug']).default('info'),
 
+  // Ops alerting — see src/lib/ops-alert.ts
+  // Minutes that identical alerts (severity:source:title) collapse into one roll-up.
+  OPS_ALERT_THROTTLE_MIN: z.string().transform(Number).default('15'),
+  // Kill switch for day-one noise: mutes Telegram only; Sentry/logs/analytics keep flowing.
+  OPS_ALERTS_MUTED: z.string().transform((val) => val === 'true').default('false'),
+  // Token guarding GET /health/jobs so an external uptime pinger can hit it unauthenticated.
+  OPS_HEALTH_TOKEN: z.string().optional(),
+
   // Inngest — durable cron/event backbone (replaces the always-on node-cron worker).
   // INNGEST_ENABLED=true is the exclusive cutover switch: when set, the legacy
   // node-cron jobs in worker.ts stand down and Inngest Cloud drives the schedule.

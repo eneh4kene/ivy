@@ -15,6 +15,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import callService from './call.service';
 import prisma from '../utils/prisma';
 import logger from '../utils/logger';
+import { opsAlert } from '../lib/ops-alert';
 
 const MIN_DELAY_MIN = 5;        // ignore "call me right now" — that's what rescue is for
 const MAX_DELAY_MIN = 12 * 60;  // cap at 12h so a misparse can't book days out
@@ -76,9 +77,20 @@ class CallbackService {
         resumes_interrupted_call: true,
       });
       logger.info(`Callback honoured: ${call.id} for user ${userId} in ${clamped}m (${scheduledAt.toISOString()})`);
+      const { serverAnalytics } = await import('../lib/analytics');
+      serverAnalytics.callbackDetected(userId, clamped);
+      serverAnalytics.callbackCallScheduled(userId, resumeType as string);
     } catch (err) {
-      // Daily cap or no-phone etc. — log and move on; the promise just can't be kept.
-      logger.warn(`Callback schedule failed for ${userId}:`, err);
+      // Daily cap or no-phone etc. — the promise Ivy made on the call can't be
+      // kept, and the user is waiting for a callback that won't come. Page it.
+      await opsAlert({
+        severity: 'critical',
+        source: 'callback',
+        title: 'callback_schedule_failed',
+        detail: 'user asked to be called back on the call and the callback was never scheduled',
+        userId,
+        error: err,
+      });
     }
   }
 

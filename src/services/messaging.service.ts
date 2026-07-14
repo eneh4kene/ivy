@@ -1,6 +1,7 @@
 import prisma from '../utils/prisma';
 import { inngest } from '../inngest/client';
 import logger from '../utils/logger';
+import { opsAlert } from '../lib/ops-alert';
 import { NotFoundError } from '../utils/errors';
 import { config } from '../config';
 
@@ -34,8 +35,11 @@ class MessagingService {
       return this.sendSMSMessage(userId, content, messageType);
     }
 
+    // PENDING until the Inngest send handler confirms — an optimistic 'SENT'
+    // here would make a lost event invisible (the sweeper watches for stuck
+    // PENDING rows).
     const message = await prisma.message.create({
-      data: { userId, channel: 'TELEGRAM', direction: 'OUTBOUND', content, messageType, status: 'SENT' },
+      data: { userId, channel: 'TELEGRAM', direction: 'OUTBOUND', content, messageType, status: 'PENDING' },
     });
 
     await inngest.send({
@@ -53,7 +57,7 @@ class MessagingService {
     if (!user?.phone) throw new NotFoundError('User not found or has no phone number');
 
     const message = await prisma.message.create({
-      data: { userId, channel: 'SMS', direction: 'OUTBOUND', content, messageType, status: 'SENT' },
+      data: { userId, channel: 'SMS', direction: 'OUTBOUND', content, messageType, status: 'PENDING' },
     });
 
     await inngest.send({
@@ -159,7 +163,14 @@ class MessagingService {
       await callService.scheduleCall(userId, callType, new Date(Date.now() + 2 * 60 * 1000));
       await this.sendTelegramRaw(chatId, "On my way — I'll call you in 2 minutes.");
     } catch (err) {
-      logger.error(`Failed to schedule callback call for user ${userId}:`, err);
+      await opsAlert({
+        severity: 'critical',
+        source: 'messaging',
+        title: 'callback_call_schedule_failed',
+        detail: 'user was promised a call back in 2 minutes and it was never scheduled',
+        userId,
+        error: err,
+      });
     }
   }
 

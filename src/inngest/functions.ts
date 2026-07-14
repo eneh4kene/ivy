@@ -33,9 +33,22 @@ import {
 } from '../services/arming.service';
 import { callFunctions } from './calls';
 import { messagingFunctions } from './messaging';
+import { functionFailedAlert } from './failure-alert';
+import { opsWatchdog } from './watchdog';
+import { opsInvariantSweep } from './invariants';
+import { opsBatch } from '../lib/ops-alert';
+import { withHeartbeat } from './with-heartbeat';
+
+// createFunction + heartbeat, for CRON functions only. The heartbeat rows feed
+// the watchdog (watchdog.ts) and /health/jobs. Event-driven functions (which
+// may sleep for hours) must keep using inngest.createFunction directly.
+const cronFunction = (
+  opts: Parameters<typeof inngest.createFunction>[0] & { id: string },
+  handler: (ctx: any) => Promise<unknown>,
+) => inngest.createFunction(opts as any, withHeartbeat(opts.id, handler) as any);
 
 // Every Sunday at 9am UTC — weekly accountability buddy digests
-const weeklyBuddyDigest = inngest.createFunction(
+const weeklyBuddyDigest = cronFunction(
   { id: 'weekly-buddy-digest', name: 'Weekly buddy digest', triggers: { cron: '0 9 * * 0' } },
   async ({ step }) => {
     await step.run('send-weekly-digests', () => buddyService.sendWeeklyDigests());
@@ -44,7 +57,7 @@ const weeklyBuddyDigest = inngest.createFunction(
 );
 
 // Every Monday at 8am UTC — weekly coach client digest
-const weeklyCoachDigest = inngest.createFunction(
+const weeklyCoachDigest = cronFunction(
   { id: 'weekly-coach-digest', name: 'Weekly coach digest', triggers: { cron: '0 8 * * 1' } },
   async ({ step }) => {
     await step.run('send-coach-digests', () => coachService.sendWeeklyDigestToAllCoaches());
@@ -53,7 +66,7 @@ const weeklyCoachDigest = inngest.createFunction(
 );
 
 // Every 30 minutes — schedule ponder calls for due coaches
-const ponderScheduler = inngest.createFunction(
+const ponderScheduler = cronFunction(
   { id: 'ponder-scheduler', name: 'Ponder call scheduler', triggers: { cron: '*/30 * * * *' } },
   async ({ step }) => {
     await step.run('schedule-ponder-calls', () => coachService.schedulePonderCallsForDueCoaches());
@@ -64,7 +77,7 @@ const ponderScheduler = inngest.createFunction(
 // Every 30 minutes — circle session lifecycle: open sessions whose time has
 // come (members invited to drop win + struggle), close sessions past their
 // 72h window (room sealed, absentees handed to the catch-up service).
-const circleSessionLifecycle = inngest.createFunction(
+const circleSessionLifecycle = cronFunction(
   { id: 'circle-session-lifecycle', name: 'Circle session lifecycle', triggers: { cron: '*/30 * * * *' } },
   async ({ step }) => {
     const { default: circleSessionService } = await import('../services/circle-session.service');
@@ -77,7 +90,7 @@ const circleSessionLifecycle = inngest.createFunction(
 // Every 30 minutes — the game clock: fire due spec-game timers (baton windows,
 // deadlines) and enforce legacy relay windows / collective deadlines. Without
 // this, time passes in the world but not in the game.
-const circleGameClock = inngest.createFunction(
+const circleGameClock = cronFunction(
   { id: 'circle-game-clock', name: 'Circle game clock', triggers: { cron: '*/30 * * * *' } },
   async ({ step }) => {
     const { default: circleGameService } = await import('../services/circle-game.service');
@@ -87,7 +100,7 @@ const circleGameClock = inngest.createFunction(
 );
 
 // Every Monday at 8:30am UTC — the week's group number to every circle member
-const circleMemberPulse = inngest.createFunction(
+const circleMemberPulse = cronFunction(
   { id: 'circle-member-pulse', name: 'Weekly circle member pulse', triggers: { cron: '30 8 * * 1' } },
   async ({ step }) => {
     const { default: circleService } = await import('../services/circle.service');
@@ -139,7 +152,7 @@ const programmeUpdatedNotify = inngest.createFunction(
 );
 
 // 1st of every month at 2am UTC — dispatch accumulated wallet donations to charities
-const monthlyDonationDispatch = inngest.createFunction(
+const monthlyDonationDispatch = cronFunction(
   { id: 'monthly-donation-dispatch', name: 'Monthly charity donation dispatch', triggers: { cron: '0 2 1 * *' } },
   async ({ step }) => {
     await step.run('dispatch-pending-donations', () => dispatchPendingDonations());
@@ -149,7 +162,7 @@ const monthlyDonationDispatch = inngest.createFunction(
 
 // Every day at midnight UTC — schedule today's EVENING calls for all active users.
 // (Morning live call replaced by VN arming loop for everyone — §1c.)
-const dailyEveningCalls = inngest.createFunction(
+const dailyEveningCalls = cronFunction(
   { id: 'daily-evening-calls', name: 'Schedule daily evening calls', triggers: { cron: '0 0 * * *' } },
   async ({ step }) => {
     const userIds = await step.run('find-active-users', async () => {
@@ -162,15 +175,17 @@ const dailyEveningCalls = inngest.createFunction(
 
     const scheduled = await step.run('schedule-calls', async () => {
       const today = new Date();
+      const failures = opsBatch('daily-evening-calls');
       let count = 0;
       for (const id of userIds) {
         try {
           await callService.scheduleDailyCalls(id, today);
           count++;
         } catch (err) {
-          logger.warn(`Failed to schedule calls for ${id}:`, err);
+          failures.add({ severity: 'warn', title: 'schedule_calls_failed', userId: id, error: err });
         }
       }
+      await failures.flush();
       return count;
     });
 
@@ -182,7 +197,7 @@ const dailyEveningCalls = inngest.createFunction(
 // Every day at 3am UTC — distil that day's in-app chats into long-term memory.
 // One Haiku extraction per user who has un-extracted chat messages → callMemory,
 // the same store calls read. Keeps chat-Ivy and call-Ivy on one shared memory.
-const dailyChatMemory = inngest.createFunction(
+const dailyChatMemory = cronFunction(
   { id: 'daily-chat-memory', name: 'Daily chat memory extraction', triggers: { cron: '0 3 * * *' } },
   async ({ step }) => {
     const userIds = await step.run('find-users-with-new-chat', async () => {
@@ -195,14 +210,16 @@ const dailyChatMemory = inngest.createFunction(
     });
 
     const memories = await step.run('extract-chat-memory', async () => {
+      const failures = opsBatch('daily-chat-memory');
       let count = 0;
       for (const id of userIds) {
         try {
           count += await insightService.extractChatMemory(id);
         } catch (err) {
-          logger.warn(`Chat memory extraction failed for ${id}:`, err);
+          failures.add({ severity: 'info', title: 'memory_extraction_failed', userId: id, error: err });
         }
       }
+      await failures.flush();
       return count;
     });
 
@@ -222,7 +239,7 @@ const dailyChatMemory = inngest.createFunction(
 //   REMINDER     — fires at S + 75 min (if still unarmed)
 //   FINAL_NOTICE — fires at E − 15 min (if still unarmed)
 //   DEADLINE     — fires at E (unarmed → MISSED + FORFEITED)
-const armingLoop = inngest.createFunction(
+const armingLoop = cronFunction(
   { id: 'arming-loop', name: 'Morning VN arming loop', triggers: { cron: '*/15 * * * *' } },
   async ({ step }) => {
     // Pin `now` in a step so it's memoized once. Inngest replays the handler
@@ -244,7 +261,7 @@ const armingLoop = inngest.createFunction(
 // Opens a new weekly StakeCycle for all eligible users. Runs 5 min after
 // midnight to let the daily call scheduler run first. openStakeCycle() guards
 // against duplicate open cycles — safe to re-run.
-const stakeCycleOpen = inngest.createFunction(
+const stakeCycleOpen = cronFunction(
   { id: 'stakecycle-open', name: 'Open weekly StakeCycles', triggers: { cron: '5 0 * * 1' } },
   async ({ step }) => {
     await step.run('open-stake-cycles', () => openStakeCyclesForActiveUsers());
@@ -258,7 +275,7 @@ const stakeCycleOpen = inngest.createFunction(
 // has actually passed, so weekly cycles still settle on their Sunday.
 // SAFETY: real Stripe capture — never run against production until Phase 2
 // money-flow checkpoint is cleared (§ Phase 2 ✋).
-const stakeCycleSettle = inngest.createFunction(
+const stakeCycleSettle = cronFunction(
   { id: 'stakecycle-settle', name: 'Settle expired StakeCycles', triggers: { cron: '55 23 * * *' } },
   async ({ step }) => {
     await step.run('settle-expired-stake-cycles', () => settleExpiredStakeCycles());
@@ -267,7 +284,7 @@ const stakeCycleSettle = inngest.createFunction(
 );
 
 // Every day at 1am UTC — advance sprint and season statuses based on current date
-const seasonAdvance = inngest.createFunction(
+const seasonAdvance = cronFunction(
   { id: 'season-advance', name: 'Advance sprint and season statuses', triggers: { cron: '0 1 * * *' } },
   async ({ step }) => {
     await step.run('advance-statuses', () => seasonService.advanceStatuses());
@@ -276,7 +293,7 @@ const seasonAdvance = inngest.createFunction(
 );
 
 // Every day at 3am UTC — recover calls stuck in IN_PROGRESS (Retell outage safety net)
-const stuckCallRecovery = inngest.createFunction(
+const stuckCallRecovery = cronFunction(
   { id: 'stuck-call-recovery', name: 'Recover stuck IN_PROGRESS calls', triggers: { cron: '0 3 * * *' } },
   async ({ step }) => {
     const recovered = await step.run('recover-stuck-calls', async () => {
@@ -293,7 +310,7 @@ const stuckCallRecovery = inngest.createFunction(
 );
 
 // Every day at 9am UTC — check yesterday's platform spend, alert if over threshold
-const dailyCostAlert = inngest.createFunction(
+const dailyCostAlert = cronFunction(
   { id: 'daily-cost-alert', name: 'Daily platform spend alert', triggers: { cron: '0 9 * * *' } },
   async ({ step }) => {
     await step.run('check-daily-spend', async () => {
@@ -328,6 +345,11 @@ export const functions = [
   // Ops mission control (cost guard + weekly product pulse → admin Telegram)
   opsDailyGuard,
   opsWeeklyPulse,
+  // Fleet-wide terminal failure pager (inngest/function.failed)
+  functionFailedAlert,
+  // Job watchdog (heartbeat staleness) + outcome invariant sweeper
+  opsWatchdog,
+  opsInvariantSweep,
   // Cron backbone (Phase 1)
   weeklyBuddyDigest,
   weeklyCoachDigest,

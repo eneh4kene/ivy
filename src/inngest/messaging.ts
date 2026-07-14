@@ -68,6 +68,8 @@ export async function sendSmsHandler({ event, step }: { event: any; step: StepLi
     return step.run('send-sms', async () => {
       if (!config.twilio.accountSid || !config.twilio.authToken) {
         logger.warn(`Twilio not configured — SMS ${messageId} not sent`);
+        // Mark FAILED so the row doesn't sit PENDING forever (sweeper backstop).
+        await prisma.message.update({ where: { id: messageId }, data: { status: 'FAILED' } }).catch(() => {});
         return { skipped: true };
       }
 

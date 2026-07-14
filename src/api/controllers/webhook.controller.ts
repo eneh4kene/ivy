@@ -11,6 +11,7 @@ import insightService from '../../services/insight.service';
 import callbackService from '../../services/callback.service';
 import { logUsage } from '../../services/usage.service';
 import { serverAnalytics } from '../../lib/analytics';
+import { opsAlert } from '../../lib/ops-alert';
 import { handleMissedCall as handleMissedCallComms, handleDroppedCall } from '../../services/communication.service';
 import circleCatchupService from '../../services/circle-catchup.service';
 import coachService from '../../services/coach.service';
@@ -118,8 +119,17 @@ class WebhookController {
           // Dropped call detection: short duration + abnormal disconnect reason
           const normalEndings = ['user_hangup', 'agent_hangup', 'max_duration_reached', 'call_transfer'];
           if (dbUserId && durationSecs < 45 && !normalEndings.includes(reason)) {
+            serverAnalytics.callDropped(dbUserId, durationSecs, reason);
             handleDroppedCall(dbUserId, dbCallType).catch((err) =>
-              logger.error('Dropped call follow-up failed:', err)
+              opsAlert({
+                severity: 'warn',
+                source: 'webhook:retell',
+                title: 'dropped_call_followup_failed',
+                detail: `call dropped (${reason}, ${durationSecs}s) and the follow-up did not go out`,
+                userId: dbUserId,
+                entity: dbCallId ? { type: 'call', id: dbCallId } : undefined,
+                error: err,
+              })
             );
           }
           break;
@@ -154,17 +164,38 @@ class WebhookController {
               call.transcript,
               dbCallType,
               dbUserId,
-            ).catch((err) => logger.error('Insight extraction error:', err));
+            ).catch((err) => opsAlert({
+              severity: 'warn',
+              source: 'webhook:retell',
+              title: 'insight_extraction_failed',
+              userId: dbUserId,
+              entity: { type: 'call', id: dbCallId },
+              error: err,
+            }));
 
             // Keep Ivy's word: if the user asked to be called back, schedule it.
             callbackService.detectAndSchedule(dbUserId, call.transcript, dbCallType)
-              .catch((err) => logger.error('Callback detection error:', err));
+              .catch((err) => opsAlert({
+                severity: 'warn',
+                source: 'webhook:retell',
+                title: 'callback_detection_failed',
+                detail: 'a callback the user may have asked for was never evaluated',
+                userId: dbUserId,
+                entity: { type: 'call', id: dbCallId },
+                error: err,
+              }));
           }
 
           // Clear any pending circle catch-up — Ivy covered it in this call
           if (dbUserId) {
             circleCatchupService.markCovered(dbUserId)
-              .catch((err) => logger.warn('Catch-up clear failed', err));
+              .catch((err) => opsAlert({
+                severity: 'warn',
+                source: 'webhook:retell',
+                title: 'catchup_clear_failed',
+                userId: dbUserId,
+                error: err,
+              }));
           }
 
           // Ponder call post-processing: apply the programme changes the coach
@@ -183,15 +214,35 @@ class WebhookController {
 
                   const chatService = (await import('../../services/chat.service')).default;
                   await chatService.postIvyMessage(dbUserId, content, { messageType: 'ponder_summary' })
-                    .catch((err) => logger.warn('Ponder in-app summary failed:', err));
+                    .catch((err) => opsAlert({
+                      severity: 'warn',
+                      source: 'webhook:retell',
+                      title: 'ponder_summary_post_failed',
+                      userId: dbUserId,
+                      error: err,
+                    }));
 
                   const coach = await prisma.user.findUnique({ where: { id: dbUserId }, select: { phone: true } });
                   if (coach?.phone) {
                     messagingService.sendMessage(dbUserId, `Ivy ${content}`)
-                      .catch((err) => logger.warn('Ponder summary message failed:', err));
+                      .catch((err) => opsAlert({
+                        severity: 'warn',
+                        source: 'webhook:retell',
+                        title: 'ponder_summary_message_failed',
+                        userId: dbUserId,
+                        error: err,
+                      }));
                   }
                 })
-                .catch((err) => logger.warn('Ponder programme update failed:', err));
+                .catch((err) => opsAlert({
+                  severity: 'critical',
+                  source: 'webhook:retell',
+                  title: 'ponder_programme_update_failed',
+                  detail: 'programme changes the coach stated on the ponder call were NOT applied to clients',
+                  userId: dbUserId,
+                  entity: dbCallId ? { type: 'call', id: dbCallId } : undefined,
+                  error: err,
+                }));
             }
           }
           break;
@@ -324,7 +375,14 @@ class WebhookController {
           }
           event = stripe.webhooks.constructEvent(rawBody, sig, config.stripe.webhookSecret);
         } catch (err) {
-          logger.error('Stripe webhook signature verification failed:', err);
+          // A bad STRIPE_WEBHOOK_SECRET rejects EVERY payment event — page it.
+          await opsAlert({
+            severity: 'critical',
+            source: 'webhook:stripe',
+            title: 'signature_verification_failed',
+            detail: 'Stripe event rejected — if this repeats, the webhook secret is wrong and all payment events are being dropped',
+            error: err,
+          });
           res.status(400).send('Webhook signature verification failed');
           return;
         }
@@ -385,6 +443,16 @@ class WebhookController {
 
       sendSuccess(res, { received: true });
     } catch (error) {
+      // A failed Stripe event handler means payment state drifted from Stripe's
+      // reality (subscription not recorded, cycle not authorized…). Stripe will
+      // retry on the 500, but page immediately — money paths don't wait.
+      await opsAlert({
+        severity: 'critical',
+        source: 'webhook:stripe',
+        title: 'event_handler_failed',
+        detail: `handler for ${req.body?.type ?? 'unknown event'} threw`,
+        error,
+      });
       next(error);
     }
   }
@@ -452,7 +520,13 @@ class WebhookController {
 
       // Non-blocking — don't hold Twilio's webhook waiting for the full processing chain
       messagingService.handleIncomingMessage(from, body.trim(), 'SMS').catch((err) =>
-        logger.error('SMS inbound processing failed', err)
+        opsAlert({
+          severity: 'warn',
+          source: 'webhook:twilio-sms',
+          title: 'inbound_sms_processing_failed',
+          detail: `a user texted Ivy and got silence (from ${from.slice(0, 6)}…)`,
+          error: err,
+        })
       );
 
       // Twilio expects a valid TwiML response — empty means no auto-reply

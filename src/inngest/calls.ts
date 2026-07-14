@@ -17,6 +17,7 @@ import { flattenContext } from '../utils/retell';
 import prisma from '../utils/prisma';
 import { config } from '../config';
 import logger from '../utils/logger';
+import { serverAnalytics } from '../lib/analytics';
 
 function getAgentId(_callType: string, isB2B: boolean): string {
   if (isB2B) return config.retell.agentIds.b2b || config.retell.agentIds.b2c || '';
@@ -135,6 +136,8 @@ export async function initiateCallHandler({ event, step }: { event: any; step: S
         // Store the concrete cause (e.g. "Retell 402: Payment Required …") so the
         // failure is diagnosable from the call row, not just a generic 'error'.
         await callService.updateCallStatus(callId, 'FAILED', { outcome: `error: ${reason}`.slice(0, 500) });
+        serverAnalytics.callInitiateFailed(event.data.userId, event.data.callType, reason.slice(0, 120));
+        // Rethrow → Inngest retries (3x); terminal failure pages via failure-alert.
         throw error;
       }
     });

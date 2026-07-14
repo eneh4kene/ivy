@@ -71,6 +71,9 @@ class CircleCatchupService {
       )
     );
 
+    const { serverAnalytics } = await import('../lib/analytics');
+    for (const userId of absentees) serverAnalytics.circleCatchupCreated(userId, session.circleId);
+
     logger.info(`Circle catch-ups created for ${absentees.length} absentee(s) — session ${sessionId}`);
   }
 
@@ -101,10 +104,14 @@ class CircleCatchupService {
    * Called after a completed call where Ivy covered the session.
    */
   async markCovered(userId: string): Promise<void> {
-    await prisma.circleCatchup.updateMany({
+    const result = await prisma.circleCatchup.updateMany({
       where: { userId, coveredAt: null },
       data: { coveredAt: new Date() },
     });
+    if (result.count > 0) {
+      const { serverAnalytics } = await import('../lib/analytics');
+      serverAnalytics.circleCatchupCovered(userId);
+    }
   }
 }
 

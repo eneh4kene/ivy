@@ -68,4 +68,68 @@ router.delete('/game-suggestions/:id', requireSuperAdmin, async (req: Request, r
   } catch (err) { next(err); }
 });
 
+// ── Ops (superadmin only) ─────────────────────────────────────────────────────
+
+// GET /api/admin/ops/events — recent ops alerts (severity/source filterable)
+router.get('/ops/events', requireSuperAdmin, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const prisma = (await import('../../utils/prisma')).default;
+    const { severity, source, before } = req.query as Record<string, string | undefined>;
+    const limit = Math.min(Number(req.query.limit ?? 50), 200);
+    const events = await prisma.opsEvent.findMany({
+      where: {
+        ...(severity ? { severity } : {}),
+        ...(source ? { source } : {}),
+        ...(before ? { createdAt: { lt: new Date(before) } } : {}),
+      },
+      orderBy: { createdAt: 'desc' },
+      take: limit,
+    });
+    res.json({ success: true, data: events });
+  } catch (err) { next(err); }
+});
+
+// GET /api/admin/ops/jobs — heartbeat table + watchdog verdicts
+router.get('/ops/jobs', requireSuperAdmin, async (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    const prisma = (await import('../../utils/prisma')).default;
+    const { JOB_REGISTRY } = await import('../../inngest/watchdog');
+    const rows = await prisma.jobHeartbeat.findMany({ orderBy: { jobName: 'asc' } });
+    const byName = new Map(rows.map((r) => [r.jobName, r]));
+    const now = Date.now();
+    const jobs = Object.entries(JOB_REGISTRY).map(([jobName, spec]) => {
+      const hb = byName.get(jobName);
+      const staleMinutes = hb ? Math.round((now - hb.lastStartedAt.getTime()) / 60000) : null;
+      return {
+        jobName,
+        allowedStalenessMin: spec.maxStalenessMin,
+        staleMinutes,
+        lastStatus: hb?.lastStatus ?? 'NEVER_RAN',
+        lastStartedAt: hb?.lastStartedAt ?? null,
+        lastFinishedAt: hb?.lastFinishedAt ?? null,
+        lastError: hb?.lastError ?? null,
+        verdict: !hb ? 'never_ran' : staleMinutes! > spec.maxStalenessMin ? 'overdue' : 'ok',
+      };
+    });
+    res.json({ success: true, data: jobs });
+  } catch (err) { next(err); }
+});
+
+
+// POST /api/admin/ops/test-alert — smoke-test the alert pipeline end to end
+// (Winston + Sentry + Telegram unless OPS_ALERTS_MUTED). Body: { severity? }.
+router.post('/ops/test-alert', requireSuperAdmin, async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const { opsAlert } = await import('../../lib/ops-alert');
+    const severity = req.body?.severity === 'critical' ? 'critical' as const : 'warn' as const;
+    await opsAlert({
+      severity,
+      source: 'ops-test',
+      title: 'test_alert',
+      detail: `fired by ${req.user!.email} at ${new Date().toISOString()}`,
+    });
+    res.json({ success: true, data: { severity, muted: process.env.OPS_ALERTS_MUTED === 'true' } });
+  } catch (err) { next(err); }
+});
+
 export default router;

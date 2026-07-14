@@ -1,6 +1,7 @@
 import prisma from '../utils/prisma';
 import { inngest } from '../inngest/client';
 import logger from '../utils/logger';
+import { serverAnalytics } from '../lib/analytics';
 import { NotFoundError } from '../utils/errors';
 import { addMinutes, isBefore, differenceInDays, startOfMonth, startOfDay, endOfDay, subDays } from 'date-fns';
 import { fromZonedTime } from 'date-fns-tz';
@@ -87,6 +88,11 @@ class CallService {
     });
 
     logger.info(`Call scheduled: ${call.id} for user ${userId} at ${scheduledAt.toISOString()}`);
+    serverAnalytics.callScheduled(
+      userId,
+      callType,
+      Math.max(0, Math.round((scheduledAt.getTime() - Date.now()) / 60000)),
+    );
 
     return call;
   }

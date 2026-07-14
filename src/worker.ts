@@ -52,29 +52,55 @@ if (config.inngest.enabled) {
   registerCronJobs();
 }
 
+// Mirror of the Inngest withHeartbeat wrapper for the node-cron rollback path,
+// so the watchdog and /health/jobs keep working when Inngest is disabled.
+// Best-effort writes — a missing job_heartbeats table must not break a job.
+function scheduleWithHeartbeat(jobName: string, expr: string, fn: () => Promise<void>): void {
+  cron.schedule(expr, async () => {
+    await prisma.jobHeartbeat.upsert({
+      where: { jobName },
+      update: { lastStartedAt: new Date(), lastStatus: 'RUNNING', lastError: null },
+      create: { jobName, lastStartedAt: new Date(), lastStatus: 'RUNNING' },
+    }).catch(() => {});
+    try {
+      await fn();
+      await prisma.jobHeartbeat.update({
+        where: { jobName },
+        data: { lastFinishedAt: new Date(), lastStatus: 'SUCCESS' },
+      }).catch(() => {});
+    } catch (err: any) {
+      await prisma.jobHeartbeat.update({
+        where: { jobName },
+        data: { lastFinishedAt: new Date(), lastStatus: 'FAILED', lastError: String(err?.message ?? err).slice(0, 2000) },
+      }).catch(() => {});
+      logger.error(`Cron ${jobName} failed:`, err);
+    }
+  });
+}
+
 function registerCronJobs(): void {
 
 // Every Sunday at 9am UTC — weekly accountability buddy digests
-cron.schedule('0 9 * * 0', async () => {
+scheduleWithHeartbeat('weekly-buddy-digest', '0 9 * * 0', async () => {
   logger.info('Running weekly buddy digest...');
   await buddyService.sendWeeklyDigests().catch((err) => logger.error('Buddy digest error:', err));
 });
 
 // Every Monday at 8am UTC — weekly coach client digest
-cron.schedule('0 8 * * 1', async () => {
+scheduleWithHeartbeat('weekly-coach-digest', '0 8 * * 1', async () => {
   logger.info('Running weekly coach digest...');
   await coachService.sendWeeklyDigestToAllCoaches().catch((err) => logger.error('Coach digest error:', err));
 });
 
 // Every 30 minutes — schedule ponder calls for due coaches
-cron.schedule('*/30 * * * *', async () => {
+scheduleWithHeartbeat('ponder-scheduler', '*/30 * * * *', async () => {
   await coachService.schedulePonderCallsForDueCoaches().catch((err) =>
     logger.warn('Ponder scheduler error:', err)
   );
 });
 
 // 1st of every month at 2am UTC — dispatch accumulated wallet donations to charities
-cron.schedule('0 2 1 * *', async () => {
+scheduleWithHeartbeat('monthly-donation-dispatch', '0 2 1 * *', async () => {
   logger.info('Running monthly charity donation dispatch...');
   await dispatchPendingDonations().catch((err) => logger.error('Donation dispatch error:', err));
 });
@@ -83,7 +109,7 @@ cron.schedule('0 2 1 * *', async () => {
 // (Morning live call replaced by VN arming loop for everyone — §1c.
 //  scheduleDailyCalls now only schedules the evening review call.
 //  Morning MORNING_PLANNING is opt-in preference only; arming = VN for all.)
-cron.schedule('0 0 * * *', async () => {
+scheduleWithHeartbeat('daily-evening-calls', '0 0 * * *', async () => {
   logger.info('Scheduling daily evening calls...');
   try {
     const users = await prisma.user.findMany({
@@ -124,7 +150,7 @@ cron.schedule('0 0 * * *', async () => {
 // §1e: Push primary; SMS fallback for PROMPT only if no push subscription.
 // §9 d4b: ARMING_CHASE capped at 8/user/month, opt-in only.
 
-cron.schedule('*/15 * * * *', async () => {
+scheduleWithHeartbeat('arming-loop', '*/15 * * * *', async () => {
   const now = new Date();
   await runArmingForStage('PROMPT', now).catch((err) =>
     logger.error('Arming PROMPT stage error:', err)
@@ -147,7 +173,7 @@ cron.schedule('*/15 * * * *', async () => {
 // Opens a new weekly StakeCycle for all eligible users.
 // Runs 5 min after midnight to let the daily call scheduler run first.
 // openStakeCycle() guards against duplicate open cycles — safe to re-run.
-cron.schedule('5 0 * * 1', async () => {
+scheduleWithHeartbeat('stakecycle-open', '5 0 * * 1', async () => {
   logger.info('Opening weekly StakeCycles...');
   await openStakeCyclesForActiveUsers().catch((err) =>
     logger.error('StakeCycle open job error:', err)
@@ -161,7 +187,7 @@ cron.schedule('5 0 * * 1', async () => {
 // settleStakeCycle() captures forfeited slices and releases the rest.
 // SAFETY: real Stripe capture — never run against production until Phase 2
 // money-flow checkpoint is cleared (§ Phase 2 ✋).
-cron.schedule('55 23 * * *', async () => {
+scheduleWithHeartbeat('stakecycle-settle', '55 23 * * *', async () => {
   logger.info('Settling expired StakeCycles...');
   await settleExpiredStakeCycles().catch((err) =>
     logger.error('StakeCycle settle job error:', err)
@@ -169,13 +195,13 @@ cron.schedule('55 23 * * *', async () => {
 });
 
 // Every day at 1am UTC — advance sprint and season statuses based on current date
-cron.schedule('0 1 * * *', async () => {
+scheduleWithHeartbeat('season-advance', '0 1 * * *', async () => {
   logger.info('Advancing sprint and season statuses...');
   await seasonService.advanceStatuses().catch((err) => logger.error('Season advance error:', err));
 });
 
 // Every day at 3am UTC — recover calls stuck in IN_PROGRESS (Retell outage safety net)
-cron.schedule('0 3 * * *', async () => {
+scheduleWithHeartbeat('stuck-call-recovery', '0 3 * * *', async () => {
   try {
     const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000);
     const result = await prisma.call.updateMany({
@@ -192,7 +218,7 @@ cron.schedule('0 3 * * *', async () => {
 
 // Every day at 3am UTC — distil that day's in-app chats into long-term memory
 // (one Haiku extraction per user with new chat → callMemory, the store calls read).
-cron.schedule('0 3 * * *', async () => {
+scheduleWithHeartbeat('daily-chat-memory', '0 3 * * *', async () => {
   try {
     const rows = await prisma.message.findMany({
       where: { channel: 'IN_APP', direction: 'INBOUND', memoryExtractedAt: null },
@@ -210,7 +236,7 @@ cron.schedule('0 3 * * *', async () => {
 });
 
 // Every day at 9am UTC — check yesterday's platform spend, alert if over threshold
-cron.schedule('0 9 * * *', async () => {
+scheduleWithHeartbeat('daily-cost-alert', '0 9 * * *', async () => {
   try {
     const threshold = parseFloat(process.env.COST_ALERT_THRESHOLD_GBP ?? '15');
     const summary = await getServiceCostSummary(1);

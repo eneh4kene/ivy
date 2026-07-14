@@ -38,7 +38,7 @@ jest.mock('../utils/prisma', () => ({
 }))
 
 jest.mock('../services/push.service', () => ({
-  sendPushToUser: jest.fn().mockResolvedValue(undefined),
+  sendPushToUser: jest.fn().mockResolvedValue({ attempted: 1, delivered: 1 }),
   armingPushTemplates: {},
 }))
 
@@ -120,6 +120,8 @@ const MOCK_USER_BASE = {
 
 beforeEach(() => {
   jest.clearAllMocks()
+  // Push "delivery" is now the provider-accepted send count, not a sub count.
+  mockSendPush.mockResolvedValue({ attempted: 1, delivered: 1 })
   ;(mockPrisma.user.findUnique as jest.Mock).mockResolvedValue(MOCK_USER_BASE)
   ;(mockPrisma.pushSubscription.count as jest.Mock).mockResolvedValue(1)
   ;(mockPrisma.workout.findFirst as jest.Mock).mockResolvedValue({
@@ -135,8 +137,8 @@ beforeEach(() => {
 // A1 — sendArmingPrompt: sends push when subscriptions exist
 // ---------------------------------------------------------------------------
 describe('sendArmingPrompt', () => {
-  it('A1: sends push notification when user has active push subscriptions', async () => {
-    ;(mockPrisma.pushSubscription.count as jest.Mock).mockResolvedValue(2)
+  it('A1: sends push notification when push delivery succeeds', async () => {
+    mockSendPush.mockResolvedValue({ attempted: 2, delivered: 2 })
 
     await sendArmingPrompt('user-1')
 
@@ -147,13 +149,12 @@ describe('sendArmingPrompt', () => {
     expect(mockSendSMS).not.toHaveBeenCalled()
   })
 
-  // A2 — SMS fallback when no push subscriptions
-  it('A2: falls back to SMS when user has no push subscriptions', async () => {
-    ;(mockPrisma.pushSubscription.count as jest.Mock).mockResolvedValue(0)
+  // A2 — SMS fallback when push delivers nothing (no subs, or all sends failed)
+  it('A2: falls back to SMS when push delivers to no device', async () => {
+    mockSendPush.mockResolvedValue({ attempted: 0, delivered: 0 })
 
     await sendArmingPrompt('user-1')
 
-    expect(mockSendPush).not.toHaveBeenCalled()
     expect(mockSendSMS).toHaveBeenCalledTimes(1)
     const [calledUserId, msgText, msgType] = mockSendSMS.mock.calls[0]
     expect(calledUserId).toBe('user-1')
@@ -161,16 +162,15 @@ describe('sendArmingPrompt', () => {
     expect(msgType).toBe('reminder')
   })
 
-  // A3 — No push, no phone
-  it('A3: sends nothing when no push subscriptions and no phone number', async () => {
-    ;(mockPrisma.pushSubscription.count as jest.Mock).mockResolvedValue(0)
+  // A3 — No push delivery, no phone
+  it('A3: sends nothing (no throw) when push delivers nothing and no phone number', async () => {
+    mockSendPush.mockResolvedValue({ attempted: 0, delivered: 0 })
     ;(mockPrisma.user.findUnique as jest.Mock).mockResolvedValue({
       ...MOCK_USER_BASE,
       phone: null,
     })
 
     await expect(sendArmingPrompt('user-1')).resolves.toBeUndefined()
-    expect(mockSendPush).not.toHaveBeenCalled()
     expect(mockSendSMS).not.toHaveBeenCalled()
   })
 })

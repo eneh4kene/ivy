@@ -86,6 +86,11 @@ export const config = {
   logging: {
     level: env.LOG_LEVEL,
   },
+  ops: {
+    alertThrottleMin: env.OPS_ALERT_THROTTLE_MIN,
+    alertsMuted: env.OPS_ALERTS_MUTED,
+    healthToken: env.OPS_HEALTH_TOKEN,
+  },
   inngest: {
     enabled: env.INNGEST_ENABLED,
     appId: env.INNGEST_APP_ID,

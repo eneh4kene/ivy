@@ -1,5 +1,6 @@
 import prisma from '../utils/prisma';
 import logger from '../utils/logger';
+import { opsAlert } from '../lib/ops-alert';
 import nodemailer from 'nodemailer';
 import axios from 'axios';
 import { config } from '../config';
@@ -86,7 +87,13 @@ class BuddyService {
           data: { lastDigestAt: new Date() },
         });
       } catch (err) {
-        logger.error(`Failed to send digest for user ${buddy.userId}:`, err);
+        await opsAlert({
+          severity: 'warn',
+          source: 'buddy-digest',
+          title: 'digest_send_failed',
+          userId: buddy.userId,
+          error: err,
+        });
       }
     }
   }

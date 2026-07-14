@@ -1,5 +1,6 @@
 import webpush from 'web-push'
 import prisma from '../utils/prisma'
+import logger from '../utils/logger'
 
 if (process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY) {
   webpush.setVapidDetails(
@@ -49,16 +50,26 @@ export async function unsubscribeDevice(endpoint: string) {
   })
 }
 
-export async function sendPushToUser(userId: string, payload: PushPayload): Promise<void> {
-  if (!process.env.VAPID_PUBLIC_KEY || !process.env.VAPID_PRIVATE_KEY) return
+export interface PushSendResult {
+  /** Active subscriptions we tried to send to (0 = no channel, or VAPID unset). */
+  attempted: number
+  /** Sends the push provider accepted. 0 with attempted > 0 = all sends failed. */
+  delivered: number
+}
+
+export async function sendPushToUser(userId: string, payload: PushPayload): Promise<PushSendResult> {
+  if (!process.env.VAPID_PUBLIC_KEY || !process.env.VAPID_PRIVATE_KEY) {
+    return { attempted: 0, delivered: 0 }
+  }
 
   const subscriptions = await prisma.pushSubscription.findMany({
     where: { userId, isActive: true },
   })
 
-  if (subscriptions.length === 0) return
+  if (subscriptions.length === 0) return { attempted: 0, delivered: 0 }
 
   const message = JSON.stringify(payload)
+  let delivered = 0
 
   await Promise.allSettled(
     subscriptions.map(async (sub: { id: string; endpoint: string; p256dh: string; auth: string }) => {
@@ -67,6 +78,7 @@ export async function sendPushToUser(userId: string, payload: PushPayload): Prom
           { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
           message
         )
+        delivered++
         await prisma.pushSubscription.update({
           where: { id: sub.id },
           data: { lastUsed: new Date() },
@@ -77,10 +89,14 @@ export async function sendPushToUser(userId: string, payload: PushPayload): Prom
             where: { id: sub.id },
             data: { isActive: false },
           })
+        } else {
+          logger.warn(`Push send failed for user ${userId} (sub ${sub.id}):`, err?.message ?? err)
         }
       }
     })
   )
+
+  return { attempted: subscriptions.length, delivered }
 }
 
 export async function sendPushToMany(userIds: string[], payload: PushPayload): Promise<void> {

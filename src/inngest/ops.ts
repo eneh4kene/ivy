@@ -1,4 +1,5 @@
 import { inngest } from './client';
+import { withHeartbeat } from './with-heartbeat';
 import prisma from '../utils/prisma';
 import logger from '../utils/logger';
 import { sendTelegramAdmin } from '../utils/telegram-admin';
@@ -113,7 +114,7 @@ async function twilioBalanceUsd(): Promise<number | null> {
 
 export const opsDailyGuard = inngest.createFunction(
   { id: 'ops-daily-guard', name: 'Ops daily cost guard', triggers: { cron: '0 7 * * *' } },
-  async () => {
+  withHeartbeat('ops-daily-guard', async () => {
     const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
     const { lines, total } = await spendByService(since);
     const balance = await twilioBalanceUsd();
@@ -131,13 +132,23 @@ export const opsDailyGuard = inngest.createFunction(
 
     await sendTelegramAdmin(msg);
     logger.info(`Ops daily guard sent (total £${total.toFixed(2)}, alerts: ${alerts.length})`);
+
+    // Retention: ops_events is an alert log, not an archive. Non-criticals
+    // keep 30 days, criticals 90. Best-effort — table may not exist yet.
+    await prisma.opsEvent.deleteMany({
+      where: { createdAt: { lt: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) }, severity: { not: 'critical' } },
+    }).catch(() => {});
+    await prisma.opsEvent.deleteMany({
+      where: { createdAt: { lt: new Date(Date.now() - 90 * 24 * 60 * 60 * 1000) } },
+    }).catch(() => {});
+
     return { total, alerts: alerts.length };
-  },
+  }),
 );
 
 export const opsWeeklyPulse = inngest.createFunction(
   { id: 'ops-weekly-pulse', name: 'Ops weekly product pulse', triggers: { cron: '30 7 * * 1' } },
-  async () => {
+  withHeartbeat('ops-weekly-pulse', async () => {
     const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
 
     const [newUsers, onboarded, armed, cyclesSettled, forfeits, callsDone, callsMissed, chatMsgs, { total }] =
@@ -163,8 +174,14 @@ export const opsWeeklyPulse = inngest.createFunction(
 
     const digest = await discoveryDigest(since);
 
+    // Ops health line: how many criticals paged this week (0 is the goal).
+    const criticals = await prisma.opsEvent.count({
+      where: { severity: 'critical', createdAt: { gte: since } },
+    }).catch(() => -1);
+
     const msg = [
       '🌿 Ivy weekly pulse',
+      criticals >= 0 ? `Ops: ${criticals} critical alert${criticals === 1 ? '' : 's'} this week` : '',
       `Users: ${onboarded} onboarded (+${newUsers} new this week)`,
       `Arming: ${armed} days armed this week`,
       `Settlement: ${cyclesSettled.length} cycles · ${keptDays}/${totalDays || '—'} days kept · £${kept.toFixed(2)} returned · £${forfeited.toFixed(2)} forfeited`,
@@ -177,5 +194,5 @@ export const opsWeeklyPulse = inngest.createFunction(
     await sendTelegramAdmin(msg);
     logger.info('Ops weekly pulse sent');
     return { onboarded, newUsers, cycles: cyclesSettled.length };
-  },
+  }),
 );

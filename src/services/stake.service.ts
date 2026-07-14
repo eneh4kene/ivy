@@ -29,6 +29,8 @@ import logger from '../utils/logger'
 import { BadRequestError, NotFoundError } from '../utils/errors'
 import { STAKE_CONFIG, GRACE_SKIPS_PER_CYCLE, type Currency } from '../config/pricing'
 import { dispatchPendingDonationsForUser } from './every-org.service'
+import { opsAlert } from '../lib/ops-alert'
+import { serverAnalytics } from '../lib/analytics'
 import type { ForfeitMode, StakeCycleStatus, SliceOutcome } from '@prisma/client'
 
 // ---------------------------------------------------------------------------
@@ -109,7 +111,14 @@ async function recordFailedHoldAndNotify(
       },
     })
   } catch (e) {
-    logger.error(`Could not record FAILED stake cycle for user ${userId}`, e)
+    await opsAlert({
+      severity: 'critical',
+      source: 'stake',
+      title: 'failed_cycle_not_recorded',
+      detail: 'auth hold failed AND the FAILED cycle row could not be written — stake state is now untracked',
+      userId,
+      error: e,
+    })
   }
 
   // Re-auth nudge — non-blocking; failure to notify must not mask the real error.
@@ -122,9 +131,17 @@ async function recordFailedHoldAndNotify(
       'nudge',
     )
   } catch (e) {
-    logger.warn(`Could not notify user ${userId} of stake hold failure`, e)
+    await opsAlert({
+      severity: 'warn',
+      source: 'stake',
+      title: 'hold_failure_notify_failed',
+      detail: 'user does not know their stake hold failed — card stays unauthorised silently',
+      userId,
+      error: e,
+    })
   }
 
+  serverAnalytics.stakeAuthFailed(userId, reason)
   throw new BadRequestError(`Stake auth hold failed for user ${userId}: ${reason}`)
 }
 
@@ -453,6 +470,7 @@ async function placeHoldAndCreateCycle(
     `StakeCycle opened${isFoundation ? ' (FOUNDATION)' : ''}: ${cycle.id} | user=${userId} | ` +
     `amount=${currency} ${stakeAmount} | days=${daysInCycle} | pi=${paymentIntent.id}`
   )
+  serverAnalytics.stakeCycleOpened(userId, stakeAmount, isFoundation)
 
   return {
     cycleId: cycle.id,
@@ -729,9 +747,18 @@ export async function settleStakeCycle(cycleId: string): Promise<SettleStakeCycl
       forfeitDonationIds.push(donation.id)
     }
 
-    // Dispatch via the existing every-org path — non-blocking; failure logged, not fatal
+    // Dispatch via the existing every-org path — non-blocking, but a failure
+    // is captured charity money that never reached the charity: page ops.
     dispatchPendingDonationsForUser(cycle.userId).catch((err) =>
-      logger.error(`StakeCycle ${cycleId}: every-org dispatch failed`, err)
+      opsAlert({
+        severity: 'critical',
+        source: 'stake',
+        title: 'everyorg_dispatch_failed',
+        detail: 'forfeit captured but donation dispatch to Every.org failed — charity money is stuck',
+        userId: cycle.userId,
+        entity: { type: 'stakeCycle', id: cycleId },
+        error: err,
+      })
     )
   }
 
@@ -745,6 +772,13 @@ export async function settleStakeCycle(cycleId: string): Promise<SettleStakeCycl
       daysForfeited: toForfeit.length,
       graceUsed: newGraceUsed,
     },
+  })
+
+  serverAnalytics.stakeCycleSettled(cycle.userId, {
+    daysKept: cycle.daysInCycle - toForfeit.length,
+    daysForfeited: toForfeit.length,
+    capturedAmount: captureAmount,
+    returnedAmount: releaseAmount,
   })
 
   // ── The settlement voice ────────────────────────────────────────────────
@@ -860,7 +894,7 @@ export async function handlePaymentIntentCanceled(paymentIntent: Stripe.PaymentI
 export async function handlePaymentIntentPaymentFailed(paymentIntent: Stripe.PaymentIntent): Promise<void> {
   const cycle = await prisma.stakeCycle.findFirst({
     where: { stripePaymentIntentId: paymentIntent.id },
-    select: { id: true, status: true },
+    select: { id: true, status: true, userId: true },
   })
 
   if (!cycle) return
@@ -869,7 +903,14 @@ export async function handlePaymentIntentPaymentFailed(paymentIntent: Stripe.Pay
     where: { id: cycle.id },
     data: { status: 'FAILED' },
   })
-  logger.warn(`StakeCycle ${cycle.id}: PI ${paymentIntent.id} payment failed → FAILED`)
+  await opsAlert({
+    severity: 'warn',
+    source: 'webhook:stripe',
+    title: 'stake_auth_failed',
+    detail: `PI ${paymentIntent.id} payment failed → cycle FAILED; user needs re-auth`,
+    userId: cycle.userId,
+    entity: { type: 'stakeCycle', id: cycle.id },
+  })
 }
 
 /**
@@ -939,7 +980,15 @@ export async function reauthoriseStakeCycle(cycleId: string): Promise<void> {
     try {
       await stripe.paymentIntents.cancel(cycle.stripePaymentIntentId)
     } catch (err) {
-      logger.warn(`Re-auth ${cycleId}: could not cancel old PI ${cycle.stripePaymentIntentId}`, err)
+      await opsAlert({
+        severity: 'warn',
+        source: 'stake',
+        title: 'reauth_old_pi_cancel_failed',
+        detail: `could not cancel old PI ${cycle.stripePaymentIntentId} — a stale auth hold may linger on the user's card`,
+        userId: cycle.userId,
+        entity: { type: 'stakeCycle', id: cycleId },
+        error: err,
+      })
     }
   }
 
