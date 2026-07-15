@@ -119,6 +119,10 @@ export const serverAnalytics = {
   workoutArmed: (userId: string, via: string) =>
     capture(userId, 'workout_armed', { via }),
 
+  // The spoken "when" was written back to the plan → T-60 nudge will fire
+  plannedTimeCaptured: (userId: string, source: string) =>
+    capture(userId, 'planned_time_captured', { source }),
+
   armingDeadlineMissed: (userId: string) =>
     capture(userId, 'arming_deadline_missed'),
 

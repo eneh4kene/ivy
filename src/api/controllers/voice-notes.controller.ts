@@ -197,6 +197,16 @@ router.post(
         serverAnalytics.workoutArmed(userId, 'voice_note')
       }
 
+      // The morning VN is where the "when" is usually spoken ("run at 6pm") —
+      // write it back to the plan so the T-60 pre-commit nudge fires.
+      // Non-blocking; the service never throws and alerts its own failures.
+      if (transcript) {
+        import('../../services/commitment-time.service')
+          .then(({ default: commitmentTimeService }) =>
+            commitmentTimeService.captureFromText(userId, transcript, 'voice_note'))
+          .catch(() => {})
+      }
+
       logger.info(
         `VoiceNote ${voiceNote.id} created for user ${userId}` +
         (workoutId ? ` — workout ${workoutId} armed` : ' — no workout linked yet') +

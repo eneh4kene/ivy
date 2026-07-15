@@ -173,6 +173,16 @@ class WebhookController {
               error: err,
             }));
 
+            // The spoken "when" → Workout.plannedTime, so the T-60 pre-commit
+            // nudge fires for times stated on calls, not just typed in the app.
+            // Skipped for COACH_PONDER (the speaker is the coach, not a client).
+            if (dbCallType !== 'COACH_PONDER') {
+              import('../../services/commitment-time.service')
+                .then(({ default: commitmentTimeService }) =>
+                  commitmentTimeService.captureFromText(dbUserId, call.transcript, 'call'))
+                .catch(() => {});
+            }
+
             // Keep Ivy's word: if the user asked to be called back, schedule it.
             callbackService.detectAndSchedule(dbUserId, call.transcript, dbCallType)
               .catch((err) => opsAlert({
