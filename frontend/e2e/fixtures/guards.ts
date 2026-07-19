@@ -127,6 +127,12 @@ export const test = base.extend<{
       // "Load failed". That's environmental noise, not a JS bug — tolerate it here
       // (a persistent outage is still caught by assertNoPersistentApiFailures).
       if (/network error|load failed/i.test(err.message)) return
+      // Google Identity Services probes its own sign-in iframe and the browser
+      // surfaces the cross-origin SecurityError as an uncaught pageerror. The
+      // button still renders and auth works — only this exact probe is excused.
+      // Match on the joined detail: WebKit splits the message at the first ":",
+      // so the leading phrase lands in err.name, not err.message.
+      if (/blocked a frame with origin .+ from accessing a frame with origin "https:\/\/accounts\.google\.com"/i.test(detail)) return
       violations.push({ kind: 'pageerror', detail })
     })
 
