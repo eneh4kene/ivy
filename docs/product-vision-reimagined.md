@@ -170,3 +170,66 @@ compulsion comes from the identity becoming load-bearing, not from the app being
 - **Voice notes** ("tell future-you") ship with the Red Button — same emotional surface, tiny build.
 - **Coach flywheel** work (referral loops, coach-facing proof artifacts) is allowed before the consumer
   gate: it monetizes today and compounds the only channel that's already working.
+
+---
+
+## Third pass — 2026-07-19: teeth are a ladder, not a gate
+
+*Triggered by a founder observation during beta week one: mandatory stakes are an organic growth
+limiter — and not just at the consumer front door. Even inside a coach's book, not every client wants
+to bet on themselves. This pass resolves the "self-improver ceiling" the first pass admitted to.*
+
+### I. The stake ceiling is real, and history proves it
+Commitment-contract products (StickK 2008, Beeminder, Forfeit) doubled follow-through in the research
+and stayed niche for fifteen years anyway, because "card in before we've proven anything" is the hardest
+ask in consumer software. The Whoop/Peloton comparison fails on inspection: their premium is a *price*;
+a stake is a *bet*, and betting on yourself is a psychological ask that self-selects the already-serious.
+The same wall exists inside the coach channel: a 30-client book contains people loss-framing would
+motivate and people it would paralyze. A stake-mandatory Ivy forces every coach to pre-segment his own
+clients before recommending it — friction on the one sale that's working.
+
+### J. Resolution: the teeth ladder
+The brand claim was never money — it's *consequences*. Money is one rung:
+
+1. **Word alone** — a promise to Ivy, on the record. Sixty seconds to start, free.
+2. **Witnessed** — someone sees. For coach clients this rung is on by default and already built: the
+   coach console IS the witness ("Joe will see I skipped" is stronger teeth than £3/day). For everyone
+   else it's the per-promise witness link from pass two (the sister, the cofounder).
+3. **Staked** — money, opt-in, and offered by Ivy at the moment of demonstrated need: "You've missed
+   Tuesday twice running — want to make next week real?" A user who has slipped twice converts at a rate
+   no signup page ever will. The offer is care, not checkout.
+
+**Hard rule addition:** the stake must stay one tap to accept from inside a conversation. The
+highest-conversion stake offer that will ever exist dies if saying yes means re-onboarding.
+
+### K. This is cheaper than it looks — and free where it counts
+The machinery is already ladder-shaped: the entire daily loop (morning VN, escalation ladder, pre-commit
+nudge, evening call, coach visibility, MISSED marking) runs for any paid user with an arming window;
+only the weekly cycle opener requires a stake amount. Stake-mandatory lives in the onboarding flow and
+the nudge copy, not the architecture. The build is: a skippable stake step ("add teeth now or later")
+plus no-stake copy variants. And economics are untouched — revenue is the subscription; forfeits are
+pass-through to charity by principle — so a stake-less client pays exactly what a staked one pays.
+
+### L. Coaches and witnesses were the same section all along
+Pass two treated coaches (F, go-to-market) and witnesses (B, viral loop) as separate. They are one
+object: a coach is a **professional witness** carrying 10–50 edges in the promise graph, whose
+livelihood depends on promises being kept. Coach-channel clients don't need the consumer witness loop
+bootstrapped — they arrive with the strongest witness pre-installed. Every coach feature (digests,
+ponder, room briefs) is promise-graph infrastructure, not a side channel.
+
+### M. Users without coaches
+The ladder answers them without a new mechanic. Rung 1 needs nobody. Rung 2 is the witness link — the
+free, one-tap sister/friend/cofounder from pass two, which was already the first post-gate viral build.
+The floor under both is Ivy herself plus the record: she was there every day, she remembers, and the
+vine doesn't lie. The consumer front door becomes "**make a promise, pick your teeth**" — and the teeth
+menu is where pacts, witnesses, and stakes all live as choices instead of walls.
+
+### Sequencing deltas (third pass)
+- **Skippable stake + no-stake nudge copy: now.** It serves the live beta directly — the coach can
+  invite his whole book instead of pre-filtering it. Small build, no gate needed.
+- The staked rung keeps everything from before, unchanged for those who choose it: pricing inversion
+  ("free if you keep your word") applies to that rung only and remains verifiably true.
+- The in-conversation stake offer ("make it real?") ships with the drift-detection work (D) — same
+  detection surface, same taste requirements, same rarity cap.
+- Witness-per-promise stays the first post-gate viral build; it is now also the coachless user's rung 2,
+  which raises its priority the moment consumer signups exist.
