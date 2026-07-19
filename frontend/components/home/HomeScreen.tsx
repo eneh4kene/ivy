@@ -179,6 +179,42 @@ function TodayStakeCard({ state, hasCard }: { state: StakeState; hasCard: boolea
     )
   }
 
+  // The hold FAILED (card declined / needs re-auth) and no cycle is open: the
+  // week has no teeth and the user may not know. This must be as loud as the
+  // arming ladder — ember, because this is the money system failing, not decor.
+  if (!cycle && state.holdFailure) {
+    return (
+      <div>
+        <p className="mb-2 flex items-center gap-2 font-mono text-[8.5px] uppercase tracking-[0.3em] text-ember-400/90">
+          Stake console · Hold failed
+          <span className="h-px flex-1 bg-ember-500/20" />
+        </p>
+        <Link href="/stake-setup" className="block">
+          <div className="flex items-stretch overflow-hidden rounded-2xl border border-ember-500/40 bg-gradient-to-br from-[#2a0f0c]/70 to-[#160806]/85 shadow-[0_0_44px_rgba(255,122,107,0.08)] transition-all active:scale-[0.99]">
+            <div className="flex-1 px-4 py-3.5">
+              <p className="font-mono text-[13px] font-semibold tracking-[0.18em] text-ember-400 [text-shadow:0_0_12px_rgba(255,122,107,0.35)]">
+                CARD DECLINED
+              </p>
+              <p className="mt-1.5 text-xs leading-relaxed text-ink-400">
+                Your <b className="font-medium text-ink-50">{s}{state.holdFailure.amount}</b> weekly hold didn&apos;t go
+                through — this week has <b className="font-medium text-ink-50">no stake behind it</b>. Re-confirm your
+                card to put the teeth back.
+              </p>
+            </div>
+            <div className="flex w-[96px] shrink-0 flex-col items-center justify-center gap-1.5 border-l border-ember-500/25 bg-gradient-to-b from-ember-500/15 to-ember-500/5 text-ember-400">
+              <span className="font-mono text-[13px] font-semibold tracking-[0.08em] [text-shadow:0_0_14px_rgba(255,122,107,0.5)]">
+                [FIX]
+              </span>
+              <span className="font-mono text-[7.5px] uppercase tracking-[0.2em] text-ink-400">
+                Re-confirm card
+              </span>
+            </div>
+          </div>
+        </Link>
+      </div>
+    )
+  }
+
   // Stake configured but no active cycle yet. Two very different states:
   //  • No card on file → the stake CANNOT arm. Be honest and drive to add one;
   //    never imply a cycle is coming when nothing will open. (This was the old
@@ -408,6 +444,26 @@ type MyCircle = Awaited<ReturnType<typeof circlesApi.getMy>>[number]
 function CircleCard({ circle }: { circle: MyCircle }) {
   const total = circle.maxSize || circle.size || circle.members?.length || 0
   const activePct = total > 0 ? Math.round((circle.size / total) * 100) : 0
+  // A 1-2 person room shown as "1/8 members" teaches ghost-town. Be honest:
+  // it's forming, and it fills — don't dress emptiness up as a stat.
+  const isForming = (circle.members?.length ?? circle.size ?? 0) < 3
+
+  if (isForming) {
+    return (
+      <Link href="/circles">
+        <div className="surface rounded-2xl p-4 hover:border-periwinkle-400/25 transition-colors active:scale-[0.99]">
+          <div className="flex items-center gap-2 mb-1.5">
+            <Users className="w-4 h-4 text-periwinkle-400" />
+            <p className="text-sm font-semibold text-ink-50">{circle.name}</p>
+            <span className="ml-auto font-mono text-[8px] uppercase tracking-[0.16em] text-periwinkle-300">Forming</span>
+          </div>
+          <p className="text-xs text-ink-400 leading-relaxed">
+            The room fills as others start — you&rsquo;ll feel it wake up. For now, you set the tone.
+          </p>
+        </div>
+      </Link>
+    )
+  }
 
   return (
     <Link href="/circles">

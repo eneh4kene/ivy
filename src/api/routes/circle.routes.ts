@@ -63,6 +63,33 @@ router.get('/:id', async (req: AuthRequest, res: Response, next: NextFunction): 
   } catch (err) { next(err) }
 })
 
+// GET /api/circles/:id/stake-statuses — witnessed stakes (Phase 4b mechanic 1).
+// Members only; non-opted-in members come back as 'private' with no amounts.
+// Visibility ONLY — no money data beyond each member's own slice.
+router.get('/:id/stake-statuses', async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const isMember = await circleService.isActiveMember(req.params.id, req.user!.id)
+    if (!isMember) {
+      res.status(404).json({ success: false, error: 'Circle not found' }); return
+    }
+    const statuses = await circleService.getCircleStakeStatuses(req.params.id)
+    res.json({ success: true, data: statuses })
+  } catch (err) { next(err) }
+})
+
+// POST /api/circles/:id/share-stake — opt in/out of my own stake visibility
+router.post('/:id/share-stake', async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const isMember = await circleService.isActiveMember(req.params.id, req.user!.id)
+    if (!isMember) {
+      res.status(404).json({ success: false, error: 'Circle not found' }); return
+    }
+    const share = req.body?.share === true
+    await circleService.setShareStakeWithCircle(req.params.id, req.user!.id, share)
+    res.json({ success: true, data: { share } })
+  } catch (err) { next(err) }
+})
+
 // POST /api/circles — create a circle (Ivy Plus / Concierge / B2B admin)
 router.post('/', async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
   try {

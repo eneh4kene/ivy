@@ -595,6 +595,71 @@ class CoachService {
     };
   }
 
+  /**
+   * getKeepRateReport — the coach's proof artifact: "my clients' keep-rate."
+   *
+   * Where getBookPulse is the coach's week-ops view, this is the shop window —
+   * a 28-day kept-days percentage across the book plus a per-client breakdown,
+   * built only from settled reality (past planned days), never future plans.
+   * First names only; this may be read aloud or screenshotted by the coach.
+   */
+  async getKeepRateReport(coachId: string) {
+    const clients = await prisma.user.findMany({
+      where: { coachId, isOnboarded: true, isActive: true },
+      select: { id: true, firstName: true },
+    });
+    if (clients.length === 0) {
+      return { windowDays: 28, bookRate: null, keptDays: 0, totalDays: 0, clients: [] };
+    }
+
+    const windowStart = new Date(Date.now() - 28 * 86_400_000);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const workouts = await prisma.workout.findMany({
+      // plannedDate < today: only days whose outcome is real — a future PLANNED
+      // day is not an unkept day.
+      where: {
+        userId: { in: clients.map((c) => c.id) },
+        plannedDate: { gte: windowStart, lt: today },
+      },
+      select: { userId: true, status: true },
+    });
+
+    const kept = (s: string) => s === 'COMPLETED' || s === 'PARTIAL';
+    const byUser = new Map<string, { kept: number; total: number }>();
+    for (const w of workouts) {
+      const e = byUser.get(w.userId) ?? { kept: 0, total: 0 };
+      e.total++;
+      if (kept(w.status)) e.kept++;
+      byUser.set(w.userId, e);
+    }
+
+    let keptDays = 0;
+    let totalDays = 0;
+    const perClient = clients
+      .map((c) => {
+        const e = byUser.get(c.id) ?? { kept: 0, total: 0 };
+        keptDays += e.kept;
+        totalDays += e.total;
+        return {
+          id: c.id,
+          firstName: c.firstName,
+          keptDays: e.kept,
+          totalDays: e.total,
+          rate: e.total > 0 ? Math.round((e.kept / e.total) * 100) : null,
+        };
+      })
+      .sort((a, b) => (b.rate ?? -1) - (a.rate ?? -1));
+
+    return {
+      windowDays: 28,
+      bookRate: totalDays > 0 ? Math.round((keptDays / totalDays) * 100) : null,
+      keptDays,
+      totalDays,
+      clients: perClient,
+    };
+  }
+
   async sendWeeklyDigestToAllCoaches() {
     const coaches = await prisma.user.findMany({
       where: {

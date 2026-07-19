@@ -138,6 +138,24 @@ coaches" marketing page + COACH-variant signup + £79 coach checkout
 
 ---
 
+### From the 19 Jul full-system audit (parked with reasoning)
+
+14. **Stake-sizing personalization** — £2/day default slice is calibrated for the
+    beta demographic; loss aversion scales with income. When there's revenue
+    data: offer stake suggestions from behaviour ("your misses cluster when the
+    slice feels trivial"). NOT a priority until real users prove the default wrong.
+15. **Settle-moment upgrade** — settlement currently lands as a chat message;
+    pre-choreography cheap win is attaching the week's vine image to that
+    message. Full Settle Night stays gated (vision doc move #5).
+16. **Games investment freeze** — GameSpec engine is built and good; no further
+    game features until circles have real room-mass (the 19 Jul audit's
+    population finding). The crown mechanic especially: deepest feature, least
+    reachable at current scale.
+17. **`/transformation` migration** — live legacy surface: pre-vine styling,
+    pre-lexicon copy ("workouts" to all tracks), retired-tier gating. Migrate
+    or fold into Season Close when its trigger fires; see docs/vocabulary.md
+    known-debt list.
+
 ## SMALL REFINEMENTS (batch into any nearby work)
 
 8. **Late-night retry rule** — missed-call retry is a flat +15min; after ~21:30 it

@@ -26,7 +26,7 @@ import { BadRequestError, NotFoundError } from '../../utils/errors'
 import prisma from '../../utils/prisma'
 import logger from '../../utils/logger'
 import { STAKE_CONFIG, type Currency } from '../../config/pricing'
-import { getStakeState } from '../../services/stake.service'
+import { getStakeState, disputeSlice } from '../../services/stake.service'
 
 const router = Router()
 router.use(authenticate)
@@ -283,6 +283,30 @@ router.get(
     try {
       const state = await getStakeState(req.user!.id)
       res.status(200).json({ success: true, data: state })
+    } catch (err) {
+      next(err)
+    }
+  },
+)
+
+// ─── POST /api/stake/dispute ─────────────────────────────────────────────────
+// The honest-mistake valve: "I did the thing but forgot the voice note."
+// Marks the forfeited day disputed + raises a critical ops alert for human
+// review. Never moves money itself.
+
+const disputeSchema = z.object({
+  body: z.object({
+    workoutId: z.string({ required_error: 'workoutId is required' }).uuid(),
+  }),
+})
+
+router.post(
+  '/dispute',
+  validate(disputeSchema),
+  async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const result = await disputeSlice(req.user!.id, req.body.workoutId)
+      res.status(200).json({ success: true, data: result })
     } catch (err) {
       next(err)
     }

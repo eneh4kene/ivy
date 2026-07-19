@@ -16,7 +16,7 @@ import {
   MessageCircle, ChevronRight, Link2, UserX, Shield,
   PhoneCall, Share2, X,
 } from 'lucide-react'
-import { coachApi, type CoachProfile, type CoachClient, type CoachPulse } from '@/lib/api'
+import { coachApi, type CoachProfile, type CoachClient, type CoachPulse, type CoachKeepRate } from '@/lib/api'
 import { useAuthStore } from '@/lib/store/auth.store'
 import { ClientRow, SectionHeader, segmentClients } from '@/components/coach/ClientRoster'
 
@@ -27,6 +27,8 @@ export default function CoachDashboard() {
   const [profile, setProfile] = useState<CoachProfile | null>(null)
   const [clients, setClients] = useState<CoachClient[]>([])
   const [pulse, setPulse] = useState<CoachPulse | null>(null)
+  const [keepRate, setKeepRate] = useState<CoachKeepRate | null>(null)
+  const [keepRateCopied, setKeepRateCopied] = useState(false)
   const [inviteUrl, setInviteUrl] = useState('')
   const [copied, setCopied] = useState(false)
   const [loadError, setLoadError] = useState('')
@@ -54,8 +56,9 @@ export default function CoachDashboard() {
     }).catch((err) => {
       setLoadError(err.message ?? 'Failed to load coach data')
     })
-    // Pulse is additive — its failure never blocks the console.
+    // Pulse + keep-rate are additive — their failure never blocks the console.
     coachApi.getPulse().then(setPulse).catch(() => {})
+    coachApi.getKeepRate().then(setKeepRate).catch(() => {})
   }, [])
 
   const handleCopy = () => {
@@ -228,6 +231,51 @@ export default function CoachDashboard() {
                 Carrying the group: <span className="text-ink-200">{pulse.topPerformers.join(', ')}</span>
               </p>
             )}
+          </div>
+        )}
+
+        {/* ── Keep-rate — the proof artifact ("my clients' keep-rate") ── */}
+        {keepRate && keepRate.bookRate !== null && (
+          <div className="rounded-2xl surface p-4 mb-5 animate-fade-in">
+            <div className="flex items-center justify-between mb-1">
+              <p className="text-2xs font-semibold uppercase tracking-widest text-ink-400">
+                Keep-rate · last {keepRate.windowDays} days
+              </p>
+              <button
+                onClick={() => {
+                  navigator.clipboard.writeText(
+                    `My clients kept ${keepRate.bookRate}% of their committed days over the last ${keepRate.windowDays} days (${keepRate.keptDays} of ${keepRate.totalDays}) — tracked daily by Ivy.`,
+                  )
+                  setKeepRateCopied(true)
+                  setTimeout(() => setKeepRateCopied(false), 2000)
+                }}
+                className="flex items-center gap-1 text-2xs text-gold-400/90 hover:text-gold-300 transition-colors"
+              >
+                {keepRateCopied ? <><Check className="w-3 h-3" /> Copied</> : <><Copy className="w-3 h-3" /> Copy as proof</>}
+              </button>
+            </div>
+            <div className="flex items-end gap-3 mb-3">
+              <p className="font-display text-4xl font-semibold text-ink-50 tabular-nums leading-none">
+                {keepRate.bookRate}<span className="text-xl text-ink-400">%</span>
+              </p>
+              <p className="text-xs text-ink-300 pb-0.5">
+                of committed days kept — {keepRate.keptDays} of {keepRate.totalDays} across the book
+              </p>
+            </div>
+            <div className="space-y-1.5">
+              {keepRate.clients.filter((c) => c.totalDays > 0).slice(0, 6).map((c) => (
+                <div key={c.id} className="flex items-center gap-2">
+                  <span className="w-16 truncate text-2xs text-ink-300">{c.firstName}</span>
+                  <div className="flex-1 h-1.5 rounded-full bg-ink-700 overflow-hidden">
+                    <div
+                      className="h-full rounded-full bg-gold-400/80 transition-all duration-700"
+                      style={{ width: `${c.rate ?? 0}%` }}
+                    />
+                  </div>
+                  <span className="w-9 text-right font-mono text-2xs text-ink-400 tabular-nums">{c.rate}%</span>
+                </div>
+              ))}
+            </div>
           </div>
         )}
 

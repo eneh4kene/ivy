@@ -122,6 +122,20 @@ async function recordFailedHoldAndNotify(
   }
 
   // Re-auth nudge — non-blocking; failure to notify must not mask the real error.
+  // Push FIRST (the loud channel — same energy as the arming ladder), message
+  // second; each is best-effort and independent.
+  try {
+    const { sendPushToUser } = await import('./push.service')
+    await sendPushToUser(userId, {
+      title: 'Your stake hold failed',
+      body: 'This week has no stake behind it yet — open Ivy and re-confirm your card.',
+      tag: 'stake-hold-failed',
+      url: '/home',
+      actions: [{ action: 'open', title: 'Fix it now' }],
+    })
+  } catch {
+    // push is best-effort; the message nudge below still fires
+  }
   try {
     const { default: messagingService } = await import('./messaging.service')
     await messagingService.sendMessage(
@@ -1077,6 +1091,16 @@ export interface StakeStateResult {
     amountSafe: number
     amountAtRisk: number
   } | null
+  /**
+   * Set when the most recent hold attempt FAILED and no cycle is currently
+   * open: the user's week has no teeth and they may not know. The home
+   * surface must show this as loudly as the arming ladder nudges.
+   */
+  holdFailure: {
+    amount: number
+    currency: Currency
+    failedAt: string
+  } | null
   /** The user's persisted stake configuration (set at stake-setup). */
   config: {
     hasConfig: boolean
@@ -1197,6 +1221,26 @@ export async function getStakeState(userId: string): Promise<StakeStateResult> {
     }
   }
 
+  // ── Failed hold (card declined / SCA) ─────────────────────────────────────
+  // Only meaningful when no cycle is open: a FAILED row newer than any other
+  // recent cycle means this week's hold never landed and the week has no teeth.
+  let holdFailure: StakeStateResult['holdFailure'] = null
+  if (!cycleRow) {
+    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
+    const latestRecent = await prisma.stakeCycle.findFirst({
+      where: { userId, createdAt: { gte: sevenDaysAgo } },
+      orderBy: { createdAt: 'desc' },
+      select: { status: true, stakeAmount: true, createdAt: true },
+    })
+    if (latestRecent?.status === 'FAILED') {
+      holdFailure = {
+        amount: Number(latestRecent.stakeAmount),
+        currency,
+        failedAt: latestRecent.createdAt.toISOString(),
+      }
+    }
+  }
+
   // ── Today's workout / arming state ────────────────────────────────────────
   const now = new Date()
   const todayStart = startOfDay(now)
@@ -1287,6 +1331,7 @@ export async function getStakeState(userId: string): Promise<StakeStateResult> {
 
   return {
     cycle,
+    holdFailure,
     config: {
       hasConfig: weeklyAmount !== null,
       weeklyAmount,
@@ -1300,6 +1345,84 @@ export async function getStakeState(userId: string): Promise<StakeStateResult> {
     today,
     week,
   }
+}
+
+// ---------------------------------------------------------------------------
+// Slice dispute — the honest-mistake valve
+// ---------------------------------------------------------------------------
+
+/**
+ * disputeSlice — "I did the thing but forgot the voice note."
+ *
+ * The likeliest unfair-forfeit case is a false negative, not a lie. This does
+ * NOT touch money or settlement logic (G1-G6 stay untouched): it marks the
+ * workout as disputed and raises a critical ops alert so a human reviews it —
+ * before settle when possible, as a Stripe refund after if upheld. Mirrors the
+ * pause protocol's manual-review pattern.
+ *
+ * Returns graceCovers=true when the cycle's grace allowance will already absorb
+ * every forfeit so far (including this one) at settlement — the UI uses it to
+ * reassure instead of escalate.
+ */
+export async function disputeSlice(
+  userId: string,
+  workoutId: string,
+): Promise<{ disputed: boolean; graceCovers: boolean }> {
+  const workout = await prisma.workout.findFirst({
+    where: { id: workoutId, userId },
+    select: {
+      id: true,
+      plannedDate: true,
+      sliceOutcome: true,
+      skippedReason: true,
+      stakeCycleId: true,
+    },
+  })
+  if (!workout) throw new NotFoundError('Workout not found')
+  if (workout.sliceOutcome !== 'FORFEITED') {
+    throw new BadRequestError('Only a forfeited day can be disputed')
+  }
+  const fourteenDaysAgo = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000)
+  if (workout.plannedDate < fourteenDaysAgo) {
+    throw new BadRequestError('This day is too old to dispute — contact support instead')
+  }
+
+  const alreadyDisputed = workout.skippedReason?.startsWith('DISPUTED') ?? false
+  if (!alreadyDisputed) {
+    await prisma.workout.update({
+      where: { id: workout.id },
+      data: {
+        skippedReason: `DISPUTED ${new Date().toISOString().slice(0, 10)}: user says completed${
+          workout.skippedReason ? ` (was: ${workout.skippedReason})` : ''
+        }`,
+      },
+    })
+    await opsAlert({
+      severity: 'critical',
+      source: 'stake',
+      title: 'slice_disputed',
+      detail:
+        `User disputes forfeited day ${workout.plannedDate.toISOString().slice(0, 10)} ` +
+        `(workout ${workout.id}) — says completed but unarmed. Review before Sunday settle; ` +
+        `if already captured and upheld, refund the slice in Stripe.`,
+      userId,
+      entity: { type: 'workout', id: workout.id },
+    })
+  }
+
+  let graceCovers = false
+  if (workout.stakeCycleId) {
+    const cycle = await prisma.stakeCycle.findUnique({
+      where: { id: workout.stakeCycleId },
+      select: { status: true, daysForfeited: true, graceUsed: true },
+    })
+    if (cycle?.status === 'AUTHORIZED') {
+      const graceRemaining = Math.max(0, GRACE_SKIPS_PER_CYCLE - cycle.graceUsed)
+      graceCovers = cycle.daysForfeited > 0 && cycle.daysForfeited <= graceRemaining
+    }
+  }
+
+  return { disputed: true, graceCovers }
 }
 
 /**

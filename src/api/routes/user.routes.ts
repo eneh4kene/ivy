@@ -599,6 +599,60 @@ router.post(
 );
 
 /**
+ * @route   GET /api/users/me/memories
+ * @desc    What Ivy remembers about the current user — the long-term curated
+ *          memory store (CallMemory), grouped client-side by category. Making
+ *          the memory VISIBLE is the point: proof-of-being-known is the
+ *          product's emotional core, and the user must be able to see (and
+ *          correct) what's held about them.
+ * @access  Private
+ */
+router.get(
+  '/me/memories',
+  authenticate,
+  async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const memories = await prisma.callMemory.findMany({
+        where: { userId: req.user!.id },
+        orderBy: { createdAt: 'desc' },
+        select: { id: true, content: true, category: true, source: true, createdAt: true },
+      });
+      res.status(200).json({ success: true, data: memories });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+/**
+ * @route   DELETE /api/users/me/memories/:memoryId
+ * @desc    "Forget this" — permanently remove one memory. A wrong memory
+ *          repeated on a call destroys trust faster than no memory at all,
+ *          so correction must be one tap, no questions asked.
+ * @access  Private
+ */
+router.delete(
+  '/me/memories/:memoryId',
+  authenticate,
+  async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      // deleteMany scoped to the owner: deleting someone else's memory is a
+      // silent no-op (count 0 → 404), never an authz leak.
+      const result = await prisma.callMemory.deleteMany({
+        where: { id: req.params.memoryId, userId: req.user!.id },
+      });
+      if (result.count === 0) {
+        res.status(404).json({ success: false, error: { message: 'Memory not found' } });
+        return;
+      }
+      res.status(200).json({ success: true, data: { deleted: true } });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+/**
  * @route   GET /api/users/:id
  * @desc    Get user by ID
  * @access  Private

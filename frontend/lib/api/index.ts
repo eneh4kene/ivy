@@ -114,6 +114,26 @@ export const usersApi = {
     const response = await client.post<ApiResponse<{ phone: string }>>('/api/users/phone/verify', { code })
     return response.data.data!.phone
   },
+
+  /** What Ivy remembers about me — the long-term memory store, newest first. */
+  getMemories: async (): Promise<IvyMemory[]> => {
+    const response = await client.get<ApiResponse<IvyMemory[]>>('/api/users/me/memories')
+    return response.data.data!
+  },
+
+  /** "Forget this" — permanently removes one memory. */
+  forgetMemory: async (memoryId: string) => {
+    const response = await client.delete<ApiResponse<{ deleted: boolean }>>(`/api/users/me/memories/${memoryId}`)
+    return response.data
+  },
+}
+
+export interface IvyMemory {
+  id: string
+  content: string
+  category: 'motivation' | 'life_event' | 'personal_detail' | 'struggle' | 'breakthrough' | string
+  source: 'call' | 'chat' | string
+  createdAt: string
 }
 
 // Workouts API
@@ -418,6 +438,27 @@ export const circlesApi = {
     const response = await client.patch<ApiResponse<CircleSession>>(`/api/circles/sessions/${sessionId}/complete`, data)
     return response.data.data!
   },
+
+  /** Witnessed stakes: every active member's today-status; non-opted-in = 'private'. */
+  getStakeStatuses: async (circleId: string): Promise<WitnessedStakeStatus[]> => {
+    const response = await client.get<ApiResponse<WitnessedStakeStatus[]>>(`/api/circles/${circleId}/stake-statuses`)
+    return response.data.data ?? []
+  },
+
+  /** Opt in/out of my own stake visibility in this circle. */
+  setShareStake: async (circleId: string, share: boolean) => {
+    const response = await client.post<ApiResponse<{ share: boolean }>>(`/api/circles/${circleId}/share-stake`, { share })
+    return response.data.data!
+  },
+}
+
+export interface WitnessedStakeStatus {
+  userId: string
+  firstName: string
+  shareStakeWithCircle: boolean
+  stakeStatus: 'armed' | 'completed' | 'forfeited' | 'unarmed' | 'no_stake' | 'private'
+  sliceAmount: number | null
+  cycleId: string | null
 }
 
 interface CircleSession {
@@ -707,6 +748,19 @@ export const coachApi = {
   updateProgrammeAreas: async (id: string, areas: Array<{ id: string; area: string; instruction: string }>): Promise<void> => {
     await client.patch(`/api/coach/clients/${id}/programme-areas`, { areas })
   },
+  /** The proof artifact: 28-day kept-days % for the book + per-client breakdown. */
+  getKeepRate: async (): Promise<CoachKeepRate> => {
+    const response = await client.get<ApiResponse<CoachKeepRate>>('/api/coach/keep-rate')
+    return response.data.data!
+  },
+}
+
+export interface CoachKeepRate {
+  windowDays: number
+  bookRate: number | null
+  keptDays: number
+  totalDays: number
+  clients: Array<{ id: string; firstName: string; keptDays: number; totalDays: number; rate: number | null }>
 }
 
 // Stake Config API
@@ -745,6 +799,12 @@ export interface StakeState {
     amountSafe: number
     amountAtRisk: number
   } | null
+  /** Set when the latest hold attempt failed and no cycle is open — the week has no teeth. */
+  holdFailure: {
+    amount: number
+    currency: 'GBP' | 'USD'
+    failedAt: string
+  } | null
   config: {
     hasConfig: boolean
     weeklyAmount: number | null
@@ -775,6 +835,12 @@ export const stakeApi = {
   /** Composed daily/home state: active cycle, config (charity names), today, week grid. */
   getState: async (): Promise<StakeState> => {
     const response = await client.get<ApiResponse<StakeState>>('/api/stake/state')
+    return response.data.data!
+  },
+
+  /** "I actually did this" — flag a forfeited day for human review. Never moves money. */
+  dispute: async (workoutId: string): Promise<{ disputed: boolean; graceCovers: boolean }> => {
+    const response = await client.post<ApiResponse<{ disputed: boolean; graceCovers: boolean }>>('/api/stake/dispute', { workoutId })
     return response.data.data!
   },
 

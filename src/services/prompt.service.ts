@@ -14,6 +14,8 @@
 // Each entry is a function taking ctx and returning the flow string.
 // Values are baked in — not Retell-placeholder-dependent.
 
+import { opsAlert } from '../lib/ops-alert';
+
 type FlowFn = (ctx: Record<string, any>) => string;
 
 // ── Track lexicon ──────────────────────────────────────────────────────────────
@@ -210,6 +212,8 @@ const FLOWS: Record<string, FlowFn> = {
       `- One miss: normalise it. "One miss doesn't break a streak."`,
       `- Two in a row: "Let's not make it three. What gets in the way?"`,
       `- Three+: "Something's going on. What is it really?" Dig gently.`,
+      '',
+      `IF THEY SAY THEY DID IT BUT FORGOT THE VOICE NOTE: don't argue and don't adjudicate. First miss this week: "Your grace day covers it automatically when the week settles — no charge for it." Beyond grace: "Flag the day in the app — tap the missed day and mark 'I actually did this'. A human reviews every flag — if it's upheld, that day's money comes back." Never promise the outcome yourself; the flag is the promise.`,
     ].filter(Boolean).join('\n');
   },
 
@@ -638,13 +642,39 @@ class PromptService {
     ].filter(Boolean);
 
     const prompt = sections.join('\n\n');
-    // Tail nudge, mirroring the JUST APPLIED pattern: mid-prompt the crown
-    // instruction loses to the chat brevity rules (verified on prod) — the
-    // model weights the end of the system prompt.
+    const tails = this.tailDirectives(ctx, isCoachCall);
+    if (!tails.length) return prompt;
+    // Lowest priority first: the model weights the END of the system prompt
+    // hardest (verified on prod — crown vs. chat brevity), so the highest
+    // priority directive renders last, closest to the end.
+    const rendered = tails
+      .sort((a, b) => a.priority - b.priority)
+      .map((t) => t.text)
+      .join('\n\n');
+    return `${prompt}\n\n${rendered}`;
+  }
+
+  // ── Tail directives ──────────────────────────────────────────────────────────
+  // The ONE sanctioned mechanism for "this must outrank the standing rules".
+  // Mid-prompt instructions lose to late rules (verified on prod), so anything
+  // that must win goes here — never as an ad-hoc string appended in
+  // buildSystemPrompt. Add a directive by pushing {priority, text}; higher
+  // priority = closer to the end = wins harder. Keep the set SMALL: every tail
+  // spends the same attention budget it's trying to protect.
+  private tailDirectives(
+    ctx: Record<string, any>,
+    isCoachCall: boolean,
+  ): Array<{ priority: number; text: string }> {
+    const tails: Array<{ priority: number; text: string }> = [];
+
     if (ctx.circle_crown_game && !isCoachCall) {
-      return `${prompt}\n\nBEFORE ANYTHING ELSE: they hold the unclaimed "${ctx.circle_crown_game}" crown — the right to name the room's next pledge (see UNCLAIMED CROWN above). Unless the visible conversation shows you already raised it, raise it first thing in your reply and offer the grounded candidate pledges. For this one message, this outranks every brevity and topic rule.`;
+      tails.push({
+        priority: 100,
+        text: `BEFORE ANYTHING ELSE: they hold the unclaimed "${ctx.circle_crown_game}" crown — the right to name the room's next pledge (see UNCLAIMED CROWN above). Unless the visible conversation shows you already raised it, raise it first thing in your reply and offer the grounded candidate pledges. For this one message, this outranks every brevity and topic rule.`,
+      });
     }
-    return prompt;
+
+    return tails;
   }
 
   // ── Circle game standing ─────────────────────────────────────────────────────
@@ -729,7 +759,21 @@ class PromptService {
         if (ctx.days_left_in_sprint === 0) return 'sprint_close';
         return 'weekly_planning';
 
+      // Chase calls normally run from a Haiku brief; when the brief fails, the
+      // morning flow ("lock in today, stake on the line") is the honest nearest
+      // shape — deliberate, not a silent default.
+      case 'ARMING_CHASE':
+        return 'morning_planning';
+
       default:
+        // A wrong-flavoured call is worse than a failed one: surface it loudly
+        // instead of silently running the morning script at someone.
+        opsAlert({
+          severity: 'warn',
+          source: 'prompt',
+          title: 'unknown_call_type_flow_fallback',
+          detail: `resolveFlowKey got unmapped callType "${callType}" — fell back to morning_planning`,
+        }).catch(() => {});
         return 'morning_planning';
     }
   }

@@ -170,6 +170,15 @@ router.get('/pulse', requireCoach, async (req: AuthRequest, res: Response, next:
   } catch (err) { next(err); }
 });
 
+// GET /api/coach/keep-rate — the proof artifact: 28-day kept-days % for the
+// whole book + per-client breakdown. The coach's sales tool.
+router.get('/keep-rate', requireCoach, async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const report = await coachService.getKeepRateReport(req.user!.id);
+    res.json({ success: true, data: report });
+  } catch (err) { next(err); }
+});
+
 // GET /api/coach/clients/:id
 router.get('/clients/:id', requireCoach, async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {

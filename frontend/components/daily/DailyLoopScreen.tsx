@@ -42,6 +42,57 @@ function NavBar({ circleName }: { circleName: string | null }) {
   )
 }
 
+/* ── Honest-mistake valve ─────────────────────────────────────────────────── */
+// Today's slice forfeited but they say they DID the thing (forgot the VN — the
+// likeliest unfair-forfeit case). One tap flags it for human review; money
+// never moves from here. Grace reassurance comes from the server's answer.
+function DisputeStrip({ workoutId, dailySlice, currency }: {
+  workoutId: string
+  dailySlice: number
+  currency: 'GBP' | 'USD'
+}) {
+  const [phase, setPhase] = useState<'idle' | 'sending' | 'done' | 'failed'>('idle')
+  const [graceCovers, setGraceCovers] = useState(false)
+  const s = currency === 'GBP' ? '£' : '$'
+
+  const flag = async () => {
+    setPhase('sending')
+    try {
+      const res = await stakeApi.dispute(workoutId)
+      setGraceCovers(res.graceCovers)
+      setPhase('done')
+    } catch {
+      setPhase('failed')
+    }
+  }
+
+  return (
+    <div className="mx-4 mt-2 rounded-xl border border-ember-500/30 bg-ember-500/[0.06] px-3.5 py-2.5">
+      {phase === 'done' ? (
+        <p className="text-xs leading-relaxed text-ink-200">
+          {graceCovers
+            ? <>Flagged. Your <b className="font-medium text-ink-50">grace day</b> already covers this when the week settles — no charge for it.</>
+            : <>Flagged. A human reviews every flag — if it&apos;s upheld, that day&apos;s {s}{dailySlice} comes back.</>}
+        </p>
+      ) : (
+        <div className="flex items-center gap-3">
+          <p className="flex-1 text-xs leading-relaxed text-ink-300">
+            Today&apos;s {s}{dailySlice} slice forfeited — no voice note landed.
+            {phase === 'failed' && <span className="text-ember-400"> Flag didn&apos;t send — try again.</span>}
+          </p>
+          <button
+            onClick={flag}
+            disabled={phase === 'sending'}
+            className="shrink-0 rounded-lg border border-ember-500/40 px-2.5 py-1.5 font-mono text-[9px] uppercase tracking-[0.18em] text-ember-400 hover:bg-ember-500/10 transition-colors disabled:opacity-50"
+          >
+            {phase === 'sending' ? 'Flagging…' : 'I actually did this'}
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
 /* ── Day header ───────────────────────────────────────────────────────────── */
 function DayHeader({ phase, name, streakDays }: { phase: DailyLoopPhase; name: string; streakDays: number }) {
   const isEvening = phase === 'evening-review'
@@ -379,6 +430,13 @@ export function DailyLoopScreen() {
         <NavBar circleName={circleName} />
         <DayHeader phase={phase} name={name} streakDays={streak} />
         {stakeForBar && <StakeBar stake={stakeForBar} isArmed={isArmed || phase === 'evening-review'} />}
+        {state?.today.sliceOutcome === 'FORFEITED' && state.today.workoutId && cycle && (
+          <DisputeStrip
+            workoutId={state.today.workoutId}
+            dailySlice={cycle.dailySlice}
+            currency={currency}
+          />
+        )}
       </div>
 
       {/* Content zone */}

@@ -711,7 +711,7 @@ class CircleService {
       // Find their current open stake cycle
       const cycle = await prisma.stakeCycle.findFirst({
         where: { userId: member.userId, status: 'AUTHORIZED' },
-        select: { id: true, stakeAmount: true },
+        select: { id: true, stakeAmount: true, daysInCycle: true },
         orderBy: { periodStart: 'desc' },
       })
 
@@ -737,7 +737,10 @@ class CircleService {
         select: { armedAt: true, sliceOutcome: true, stakeSliceAmount: true },
       }) as { armedAt: Date | null; sliceOutcome: string; stakeSliceAmount: any } | null
 
-      const baseSlice = Math.round((Number(cycle.stakeAmount) / 7) * 100) / 100
+      // Divide by the cycle's REAL forfeitable-day count — Foundation Runs are
+      // often <7 days, and /7 understates their slice (same bug class as the
+      // baton-stake fix in circle-game.service).
+      const baseSlice = Math.round((Number(cycle.stakeAmount) / (cycle.daysInCycle || 7)) * 100) / 100
       const sliceAmount = workout?.stakeSliceAmount
         ? Math.round(Number(workout.stakeSliceAmount) * 100) / 100
         : baseSlice

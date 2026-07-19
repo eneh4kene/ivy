@@ -13,6 +13,7 @@ import type { UpdateProfileInput, AccountabilityBuddy } from '@/lib/types'
 import { User, Phone, Clock, Target, CreditCard, Trash2, Download, CheckCircle2, AlertCircle, ChevronRight, Users, Bell, BellOff, Heart, Loader2, ShieldCheck, MessageCircle } from 'lucide-react'
 import { usePushNotifications } from '@/hooks/usePushNotifications'
 import { usePwaInstall, IosInstallSheet } from '@/components/pwa/InstallPrompt'
+import { IvyMemoriesCard } from '@/components/settings/IvyMemories'
 import { isIOSSafari, isStandalone } from '@/lib/pwa'
 
 /**
@@ -682,6 +683,9 @@ export default function SettingsPage() {
             )}
           </div>
         </div>
+
+        {/* What Ivy remembers — visible, correctable memory */}
+        <IvyMemoriesCard />
 
         {/* Push Notifications */}
         {permission !== 'unsupported' && (
