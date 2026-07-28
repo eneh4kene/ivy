@@ -141,10 +141,12 @@ const FLOWS: Record<string, FlowFn> = {
     const streak = ctx.current_streak;
     // Stake framing: SUCCESS = they KEEP their money. Do NOT say "£X goes to charity."
     // Streaks are acknowledgement only — no "bonus sent to charity" wallet claims.
+    // No stake configured (teeth ladder: stakes are optional) → the win is the
+    // kept word, never a phantom stake.
     const stakeToday = ctx.stake_today ?? null;
     const stakeConfirm = stakeToday
       ? `"Your £${stakeToday} is safe — you kept it."`
-      : `"Your stake's intact."`;
+      : `"Day kept — exactly what you said you'd do."`;
     const streakLine = (() => {
       if (streak >= 90) return `90 days. A full quarter. That's not motivation — that's discipline.`;
       if (streak >= 30) return `30 days straight. Look at what you built.`;
@@ -213,7 +215,9 @@ const FLOWS: Record<string, FlowFn> = {
       `- Two in a row: "Let's not make it three. What gets in the way?"`,
       `- Three+: "Something's going on. What is it really?" Dig gently.`,
       '',
-      `IF THEY SAY THEY DID IT BUT FORGOT THE VOICE NOTE: don't argue and don't adjudicate. First miss this week: "Your grace day covers it automatically when the week settles — no charge for it." Beyond grace: "Flag the day in the app — tap the missed day and mark 'I actually did this'. A human reviews every flag — if it's upheld, that day's money comes back." Never promise the outcome yourself; the flag is the promise.`,
+      stakeToday
+        ? `IF THEY SAY THEY DID IT BUT FORGOT THE VOICE NOTE: don't argue and don't adjudicate. First miss this week: "Your grace day covers it automatically when the week settles — no charge for it." Beyond grace: "Flag the day in the app — tap the missed day and mark 'I actually did this'. A human reviews every flag — if it's upheld, that day's money comes back." Never promise the outcome yourself; the flag is the promise.`
+        : `IF THEY SAY THEY DID IT BUT FORGOT THE VOICE NOTE: don't argue and don't adjudicate. "Flag the day in the app — tap the missed day and mark 'I actually did this'. A human reviews every flag." Never promise the outcome yourself; the flag is the promise.`,
     ].filter(Boolean).join('\n');
   },
 
@@ -260,7 +264,7 @@ const FLOWS: Record<string, FlowFn> = {
       `1. Open: ${openLine}`,
       `2. Listen to determine outcome — then follow the appropriate path:`,
       `   COMPLETED → ${completedStakeLine}`,
-      `   PARTIAL → "That counts. Partial beats zero." Your stake's intact.`,
+      `   PARTIAL → "That counts. Partial beats zero."${stakeToday ? " Your stake's intact." : ''}`,
       `   MISSED → ${missedStakeLine}`,
       `3. Tomorrow: plant a seed for the plan. Don't over-commit.`,
     ].join('\n');
@@ -308,7 +312,9 @@ const FLOWS: Record<string, FlowFn> = {
       '',
       `RESCUE RULES:`,
       `- If they choose a real rest day: "You called instead of disappearing. That's growth." Then: "Tomorrow's plan?"`,
-      `- Doing the minimum keeps their stake safe. Mention it once.`,
+      stakeToday
+        ? `- Doing the minimum keeps their stake safe. Mention it once.`
+        : `- Doing the minimum still counts the day. Mention it once.`,
       `- Move fast — they called because they want to be talked in.`,
     ].filter(Boolean).join('\n');
   },
@@ -435,9 +441,14 @@ const FLOWS: Record<string, FlowFn> = {
     // (the "Foundation Run") — name that amount, not the full weekly figure, so
     // Day Zero is low-friction. Completing keeps the daily slice; missing forfeits
     // it to forfeit_destination. Morning arming = spoken voice note, NOT a live call.
+    // Three tiers of teeth (ladder — stakes are OPTIONAL): a live Foundation Run
+    // to name, a configured weekly stake, or no stake at all. Never describe a
+    // money mechanic to someone who hasn't put money on the line.
     const stakeLine = foundationStake
       ? `"Your first run is just £${foundationStake} on the line — a real stake, training wheels on. Complete each day and you keep that day's slice; miss one and it goes to ${forfeitDest ?? 'a charity you didn\'t choose'}. It's your own money — that's the teeth. From next week it steps up to the weekly stake you set." Keep it simple, one explanation.`
-      : `"Your stake is your commitment device — your own money on the line. Complete the day and you keep it. Miss and it forfeits. That's the teeth." Keep it simple.`;
+      : ctx.stake_weekly != null
+        ? `"Your stake is your commitment device — your own money on the line. Complete the day and you keep it. Miss and it forfeits. That's the teeth." Keep it simple.`
+        : `"Every day you tell me the one thing you're doing, out loud — and I hold you to it. Kept days go on your record; missed days do too. Your word is the stake here." If it comes up naturally (do NOT pitch it): they can add a small weekly money stake later in the app — optional, one tap.`;
     const vnLine = `MORNING VN: "Each morning you'll drop a quick voice note — what you're taking on today, said out loud. That arms the day. No VN = unarmed = the day doesn't count." (Mornings are an async voice note; the only live call is the evening one.)`;
     const successCharityLine = successCharity
       ? `SUCCESS FRAMING: On days you complete, ${successCharity} benefits (via a corporate donation — it fires when the system is live). Right now it's about keeping your stake.`
@@ -506,7 +517,7 @@ const FLOWS: Record<string, FlowFn> = {
       '',
       `· WHO YOU ARE (short): you're the one who'll be working their clients between their sessions — mornings, evenings, every day. This call is you learning how they coach, and them learning what you'll do for them. Then ASK about their coaching — who they work with, what their clients struggle with most — and genuinely listen. What they tell you here should shape everything you say after; use their words, their client types, their examples for the rest of the call.`,
       '',
-      `· WHAT YOU DO FOR THEIR CLIENTS: the daily rhythm — a morning voice-note commitment, an evening settle, their own money on the line for showing up, a streak they watch grow. The shape of it: their programme is the WHAT, you're the EVERY DAY. Land it with an example that fits the clients they just described, not a feature list.`,
+      `· WHAT YOU DO FOR THEIR CLIENTS: the daily rhythm — a morning voice-note commitment, an evening settle, optionally their own money on the line for showing up, a streak they watch grow. The shape of it: their programme is the WHAT, you're the EVERY DAY. Land it with an example that fits the clients they just described, not a feature list.`,
       '',
       `· WHAT YOU DO FOR THEM: you spot slipping clients before they ghost (they hear from you at the second miss, not after the cancellation email); every couple of weeks the two of you have a short ponder call where you bring what you've seen and they adjust programmes out loud — they say it, you apply it; and anything they tell you about a client, you coach in THEIR voice, never against their programme. ${brand}`,
       '',
