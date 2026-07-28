@@ -105,10 +105,16 @@ export async function initiateCallHandler({ event, step }: { event: any; step: S
           ? buildPonderPrompt(ctx)
           : promptService.buildSystemPrompt(callType, ctx, isB2B, brief ?? undefined);
 
-        // Call from the UK number for GBP users, US number for USD users (falls back to UK if US not configured)
-        const fromNumber = (ctx.currency === 'USD' && config.twilio.phoneNumberUs)
+        // Caller ID must match the DESTINATION, not the billing currency: a US
+        // phone called from +44 reads as international spam and goes unanswered.
+        // Currency only approximates region (email/invite signups default GBP),
+        // so route by phone prefix first — same lesson smsFrom learned live —
+        // then fall back to currency, then the primary number.
+        const fromNumber = (phone.startsWith('+1') && config.twilio.phoneNumberUs)
           ? config.twilio.phoneNumberUs
-          : config.twilio.phoneNumber;
+          : (ctx.currency === 'USD' && config.twilio.phoneNumberUs)
+            ? config.twilio.phoneNumberUs
+            : config.twilio.phoneNumber;
         if (!fromNumber) throw new Error('No Twilio from-number configured (TWILIO_PHONE_NUMBER)');
 
         // BYOC: register with Retell, then Twilio dials the user and bridges to
