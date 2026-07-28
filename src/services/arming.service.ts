@@ -56,10 +56,16 @@ const REMINDER_DELAY_MINS = 75
 // ---------------------------------------------------------------------------
 
 export const armingPushTemplates = {
+  // The ladder runs with or without money on the line (teeth ladder — vision
+  // doc third pass). Every template branches on stakeAmount > 0 so a
+  // stake-less user is held to their WORD, never shown a "£0 stake".
+
   /** Step 1 — window opens */
   prompt: (stakeAmount: number, currency: Currency): PushPayload => ({
     title: 'Morning! Drop your voice note',
-    body: `What's the one thing you're taking on today? Your ${CURRENCY_SYMBOL[currency]}${stakeAmount} stake is counting on it.`,
+    body: stakeAmount > 0
+      ? `What's the one thing you're taking on today? Your ${CURRENCY_SYMBOL[currency]}${stakeAmount} stake is counting on it.`
+      : `What's the one thing you're taking on today? Say it out loud and it's real.`,
     tag: 'arming-prompt',
     url: '/daily?action=record',
     actions: [{ action: 'open', title: 'Record now' }],
@@ -68,7 +74,9 @@ export const armingPushTemplates = {
   /** Step 2 — loss-framed reminder (~75 min after prompt, if still unarmed) */
   reminder: (stakeAmount: number, currency: Currency): PushPayload => ({
     title: "You haven't armed today",
-    body: `Your ${CURRENCY_SYMBOL[currency]}${stakeAmount} is on the line until you record your voice note.`,
+    body: stakeAmount > 0
+      ? `Your ${CURRENCY_SYMBOL[currency]}${stakeAmount} is on the line until you record your voice note.`
+      : `Today doesn't count until you say what you're doing with it. 30 seconds.`,
     tag: 'arming-reminder',
     url: '/daily?action=record',
     actions: [{ action: 'open', title: 'Arm now' }],
@@ -77,7 +85,9 @@ export const armingPushTemplates = {
   /** Step 3 — final notice (approaching deadline) */
   finalNotice: (stakeAmount: number, currency: Currency, deadlineStr: string): PushPayload => ({
     title: 'Last chance to arm',
-    body: `Drop your VN by ${deadlineStr} or today won't count and your ${CURRENCY_SYMBOL[currency]}${stakeAmount} goes to your forfeit destination.`,
+    body: stakeAmount > 0
+      ? `Drop your VN by ${deadlineStr} or today won't count and your ${CURRENCY_SYMBOL[currency]}${stakeAmount} goes to your forfeit destination.`
+      : `Drop your VN by ${deadlineStr} or today goes down as a miss on your record.`,
     tag: 'arming-final-notice',
     url: '/daily?action=record',
     actions: [{ action: 'open', title: 'Arm now — it takes 30 seconds' }],

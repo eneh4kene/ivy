@@ -139,6 +139,11 @@ class PaymentService {
       // Allow user-entered promo codes at checkout unless one was pre-applied
       allow_promotion_codes: !stripeDiscounts,
       ...(stripeDiscounts && { discounts: stripeDiscounts }),
+      // Beta path: with a 100%-off code (+ trial) the total due is zero — skip
+      // card entry entirely. NOTE: a card-less user can't open a stake cycle
+      // (off-session auth needs a saved card); the stake stays deferred until
+      // they add one, which matches the optional-stake teeth ladder.
+      payment_method_collection: 'if_required',
       subscription_data: {
         trial_period_days: 14,
         metadata: { userId: user.id, tier, currency },
@@ -187,6 +192,8 @@ class PaymentService {
       currency: currency.toLowerCase(),
       line_items: [{ price: priceId, quantity: 1 }],
       allow_promotion_codes: true,
+      // Same beta path as the consumer checkout: 100%-off code → no card entry.
+      payment_method_collection: 'if_required',
       subscription_data: {
         metadata: { userId, tier: 'COACH', currency },
       },
