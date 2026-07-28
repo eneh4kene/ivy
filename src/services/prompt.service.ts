@@ -59,9 +59,15 @@ const TRACK_LEXICON: Record<string, TrackLexicon> = {
 const lex = (ctx: Record<string, any>): TrackLexicon =>
   TRACK_LEXICON[String(ctx.track ?? '').toLowerCase()] ?? TRACK_LEXICON.fitness;
 
+// Voice agents read symbols aloud — a USD user must hear "dollars", never
+// "pounds". Every money interpolation goes through this, keyed off the same
+// ctx.currency the checkout and stake engines use.
+const curSym = (ctx: Record<string, any>): string => (ctx.currency === 'USD' ? '$' : '£');
+
 const FLOWS: Record<string, FlowFn> = {
 
   morning_planning: (ctx) => {
+    const sym = curSym(ctx);
     const L = lex(ctx);
     const streak = ctx.current_streak > 1
       ? `They're on a ${ctx.current_streak}-day streak — acknowledge it briefly.`
@@ -86,7 +92,7 @@ const FLOWS: Record<string, FlowFn> = {
     // Remind them their stake is on the line; completing keeps their money safe.
     const stakeToday = ctx.stake_today ?? null;
     const stakeLine = stakeToday
-      ? `STAKE REMINDER: "Your £${stakeToday} is on the line today — completing keeps it safe." Once, naturally.`
+      ? `STAKE REMINDER: "Your ${sym}${stakeToday} is on the line today — completing keeps it safe." Once, naturally.`
       : '';
 
     return [
@@ -111,6 +117,7 @@ const FLOWS: Record<string, FlowFn> = {
   },
 
   morning_planning_calendar: (ctx) => {
+    const sym = curSym(ctx);
     const L = lex(ctx);
     const sprint = ctx.sprint_number && ctx.days_left_in_sprint != null
       ? `Sprint ${ctx.sprint_number} closes in ${ctx.days_left_in_sprint} day${ctx.days_left_in_sprint === 1 ? '' : 's'}.`
@@ -121,7 +128,7 @@ const FLOWS: Record<string, FlowFn> = {
     // Stake framing: completing keeps their stake safe; missing forfeits the day's slice.
     const stakeToday = ctx.stake_today ?? null;
     const stakeLine = stakeToday
-      ? `STAKE TIE: "Your £${stakeToday} is safe once it's done." ${sprint}`.trim()
+      ? `STAKE TIE: "Your ${sym}${stakeToday} is safe once it's done." ${sprint}`.trim()
       : sprint;
 
     return [
@@ -138,6 +145,7 @@ const FLOWS: Record<string, FlowFn> = {
   },
 
   evening_completed: (ctx) => {
+    const sym = curSym(ctx);
     const streak = ctx.current_streak;
     // Stake framing: SUCCESS = they KEEP their money. Do NOT say "£X goes to charity."
     // Streaks are acknowledgement only — no "bonus sent to charity" wallet claims.
@@ -145,7 +153,7 @@ const FLOWS: Record<string, FlowFn> = {
     // kept word, never a phantom stake.
     const stakeToday = ctx.stake_today ?? null;
     const stakeConfirm = stakeToday
-      ? `"Your £${stakeToday} is safe — you kept it."`
+      ? `"Your ${sym}${stakeToday} is safe — you kept it."`
       : `"Day kept — exactly what you said you'd do."`;
     const streakLine = (() => {
       if (streak >= 90) return `90 days. A full quarter. That's not motivation — that's discipline.`;
@@ -174,6 +182,7 @@ const FLOWS: Record<string, FlowFn> = {
   },
 
   evening_missed: (ctx) => {
+    const sym = curSym(ctx);
     const isMemorial = ctx.season_type === 'memorial';
     if (isMemorial) {
       return [
@@ -193,9 +202,9 @@ const FLOWS: Record<string, FlowFn> = {
     const stakeToday = ctx.stake_today ?? null;
     const forfeitDest = ctx.forfeit_destination ?? null;
     const forfeitLine = stakeToday && forfeitDest
-      ? `STAKE: Mention once, gently: "That day's £${stakeToday} goes to ${forfeitDest}." Don't dwell — it's the mechanic, not a punishment.`
+      ? `STAKE: Mention once, gently: "That day's ${sym}${stakeToday} goes to ${forfeitDest}." Don't dwell — it's the mechanic, not a punishment.`
       : stakeToday
-        ? `STAKE: Mention once, gently: "That day's £${stakeToday} forfeits." Don't dwell.`
+        ? `STAKE: Mention once, gently: "That day's ${sym}${stakeToday} forfeits." Don't dwell.`
         : '';
 
     return [
@@ -222,11 +231,12 @@ const FLOWS: Record<string, FlowFn> = {
   },
 
   evening_partial: (ctx) => {
+    const sym = curSym(ctx);
     // Stake framing: PARTIAL = a completed/partial day — their stake slice is RELEASED (they keep it).
     // Do NOT say "£X goes to charity" on partial success.
     const stakeToday = ctx.stake_today ?? null;
     const stakeConfirm = stakeToday
-      ? `"Partial counts — your £${stakeToday} is safe."`
+      ? `"Partial counts — your ${sym}${stakeToday} is safe."`
       : `"Partial counts."`;
 
     return [
@@ -242,6 +252,7 @@ const FLOWS: Record<string, FlowFn> = {
   },
 
   evening_unknown: (ctx) => {
+    const sym = curSym(ctx);
     const plan = ctx.todays_plan;
     const openLine = plan
       ? `"How did the ${plan} go today?"`
@@ -250,10 +261,10 @@ const FLOWS: Record<string, FlowFn> = {
     const stakeToday = ctx.stake_today ?? null;
     const forfeitDest = ctx.forfeit_destination ?? null;
     const completedStakeLine = stakeToday
-      ? `Celebrate. "Your £${stakeToday} is safe — you kept it." Streak acknowledgment.`
+      ? `Celebrate. "Your ${sym}${stakeToday} is safe — you kept it." Streak acknowledgment.`
       : `Celebrate. Streak acknowledgment.`;
     const missedStakeLine = stakeToday && forfeitDest
-      ? `"No judgment. What happened?" Note gently that the day's £${stakeToday} forfeits to ${forfeitDest}. Pivot to tomorrow.`
+      ? `"No judgment. What happened?" Note gently that the day's ${sym}${stakeToday} forfeits to ${forfeitDest}. Pivot to tomorrow.`
       : `"No judgment. What happened?" One sentence. Pivot to tomorrow.`;
 
     return [
@@ -271,6 +282,7 @@ const FLOWS: Record<string, FlowFn> = {
   },
 
   rescue: (ctx) => {
+    const sym = curSym(ctx);
     const isMemorial = ctx.season_type === 'memorial';
     if (isMemorial) {
       return [
@@ -290,7 +302,7 @@ const FLOWS: Record<string, FlowFn> = {
     const stakeToday = ctx.stake_today ?? null;
     const forfeitDest = ctx.forfeit_destination ?? null;
     const stakeLever = stakeToday
-      ? `Stake lever: "Doing the minimum keeps your £${stakeToday} safe${forfeitDest ? ` — otherwise it goes to ${forfeitDest}` : ''}." Use once if they're wavering.`
+      ? `Stake lever: "Doing the minimum keeps your ${sym}${stakeToday} safe${forfeitDest ? ` — otherwise it goes to ${forfeitDest}` : ''}." Use once if they're wavering.`
       : '';
 
     return [
@@ -365,6 +377,7 @@ const FLOWS: Record<string, FlowFn> = {
   },
 
   sprint_close: (ctx) => {
+    const sym = curSym(ctx);
     const sprintNum = ctx.sprint_number ?? '?';
     // Phase 5: Circles is available to all paid users (PRO/"Ivy" is the one tier).
     // ELITE/CONCIERGE kept in check for any grandfathered subscribers during migration.
@@ -379,7 +392,7 @@ const FLOWS: Record<string, FlowFn> = {
     // season-cumulative numbers that exist in ctx; never invents amounts.
     const forfeited = ctx.stake_forfeited != null ? Number(ctx.stake_forfeited) : null;
     const impactLine = forfeited != null && forfeited > 0 && ctx.forfeit_destination
-      ? `IMPACT STORY: "£${forfeited} of your stake has gone to ${ctx.forfeit_destination} so far this season. You didn't plan to fund them — but that money is real and it's doing real work. The best outcome is still them getting nothing from you next sprint." One beat, honestly told — consequence, not charity theatre.`
+      ? `IMPACT STORY: "${sym}${forfeited} of your stake has gone to ${ctx.forfeit_destination} so far this season. You didn't plan to fund them — but that money is real and it's doing real work. The best outcome is still them getting nothing from you next sprint." One beat, honestly told — consequence, not charity theatre.`
       : forfeited === 0 || (ctx.stake_kept != null && (forfeited == null || forfeited === 0))
         ? `IMPACT STORY: "Every pound you staked this season is still yours — nothing forfeited. The money never had to move because you did." Let that land as the win it is.`
         : '';
@@ -431,6 +444,7 @@ const FLOWS: Record<string, FlowFn> = {
   },
 
   onboarding: (ctx) => {
+    const sym = curSym(ctx);
     const track = ctx.track ?? '(to confirm)';
     const forfeitDest = ctx.forfeit_destination ?? null;
     const successCharity = ctx.success_charity_name ?? ctx.charity_name ?? null;
@@ -445,7 +459,7 @@ const FLOWS: Record<string, FlowFn> = {
     // to name, a configured weekly stake, or no stake at all. Never describe a
     // money mechanic to someone who hasn't put money on the line.
     const stakeLine = foundationStake
-      ? `"Your first run is just £${foundationStake} on the line — a real stake, training wheels on. Complete each day and you keep that day's slice; miss one and it goes to ${forfeitDest ?? 'a charity you didn\'t choose'}. It's your own money — that's the teeth. From next week it steps up to the weekly stake you set." Keep it simple, one explanation.`
+      ? `"Your first run is just ${sym}${foundationStake} on the line — a real stake, training wheels on. Complete each day and you keep that day's slice; miss one and it goes to ${forfeitDest ?? 'a charity you didn\'t choose'}. It's your own money — that's the teeth. From next week it steps up to the weekly stake you set." Keep it simple, one explanation.`
       : ctx.stake_weekly != null
         ? `"Your stake is your commitment device — your own money on the line. Complete the day and you keep it. Miss and it forfeits. That's the teeth." Keep it simple.`
         : `"Every day you tell me the one thing you're doing, out loud — and I hold you to it. Kept days go on your record; missed days do too. Your word is the stake here." If it comes up naturally (do NOT pitch it): they can add a small weekly money stake later in the app — optional, one tap.`;
@@ -532,6 +546,7 @@ const FLOWS: Record<string, FlowFn> = {
   },
 
   season_close: (ctx) => {
+    const sym = curSym(ctx);
     const isMemorial = ctx.season_type === 'memorial';
     const seasonNum = ctx.season_number ?? '?';
     const arcNote = ctx.notable_observation
@@ -567,8 +582,8 @@ const FLOWS: Record<string, FlowFn> = {
     // Build the stats line around stake outcomes, not donation totals
     const statsLine = (() => {
       const parts: string[] = [`Total ${lex(ctx).nounPlural}: ${totalSessions}.`];
-      if (stakeKept != null) parts.push(`Stake kept: £${stakeKept}.`);
-      if (stakeForfeited != null && Number(stakeForfeited) > 0) parts.push(`Forfeited: £${stakeForfeited}.`);
+      if (stakeKept != null) parts.push(`Stake kept: ${sym}${stakeKept}.`);
+      if (stakeForfeited != null && Number(stakeForfeited) > 0) parts.push(`Forfeited: ${sym}${stakeForfeited}.`);
       if (successCharity && stakeKept) parts.push(`${successCharity} benefited from your successful days.`);
       return parts.join(' ');
     })();
@@ -792,6 +807,7 @@ class PromptService {
   // ── Section builders ─────────────────────────────────────────────────────────
 
   private persona(ctx: Record<string, any>, isB2B: boolean): string {
+    const sym = curSym(ctx);
     // Coaches are partners, not clients — the consumer framing ("X weeks in,
     // goal, stake") is wrong-voice and factually empty for them.
     if (ctx.subscription_tier === 'COACH') {
@@ -813,9 +829,9 @@ class PromptService {
     // Do NOT say "£X goes to charity" on success — that is the legacy wallet mechanic (now removed).
     // The corporate donation on success (Phase 6) is not built yet; omit until live.
     const stakeLine = ctx.stake_today
-      ? `Today's stake: £${ctx.stake_today} — kept on success, forfeited${ctx.forfeit_destination ? ` to ${ctx.forfeit_destination}` : ''} on a miss.`
+      ? `Today's stake: ${sym}${ctx.stake_today} — kept on success, forfeited${ctx.forfeit_destination ? ` to ${ctx.forfeit_destination}` : ''} on a miss.`
       : ctx.stake_weekly
-        ? `Weekly stake: £${ctx.stake_weekly} — their own money. Success = kept; miss = forfeited.`
+        ? `Weekly stake: ${sym}${ctx.stake_weekly} — their own money. Success = kept; miss = forfeited.`
         : '';
     const b2bLine = isB2B && ctx.company_wellness_theme
       ? `Company programme: "${ctx.company_wellness_theme}".`
@@ -961,6 +977,7 @@ class PromptService {
   }
 
   private standingRules(ctx: Record<string, any>): string {
+    const sym = curSym(ctx);
     // Name the forfeit/impact destination where relevant; never name success charity as "where the money goes" on a success
     const forfeitCharityLine = ctx.forfeit_destination
       ? `- Forfeit destination: "${ctx.forfeit_destination}" — name it if the forfeit consequence is relevant to this call.`
@@ -970,7 +987,7 @@ class PromptService {
       : '';
     // One-line stake reminder to ground every call
     const stakeReminder = ctx.stake_today
-      ? `- Today's stake: £${ctx.stake_today}. Success = they keep it. Miss = it forfeits. Never say it goes to charity on success.`
+      ? `- Today's stake: ${sym}${ctx.stake_today}. Success = they keep it. Miss = it forfeits. Never say it goes to charity on success.`
       : '';
 
     return [
@@ -992,7 +1009,7 @@ class PromptService {
       `- Read memory back verbatim — weave it in naturally`,
       `- Let a miss spiral into guilt — one sentence on what happened, then forward`,
       `- Invent details — if something is null or unknown, don't fabricate`,
-      `- Say "your £X goes to charity" on a successful day — on success the stake is RETURNED, not donated`,
+      `- Say "your ${sym}X goes to charity" on a successful day — on success the stake is RETURNED, not donated`,
       `- Do a "later check-in" inside THIS call. Verifying they actually did the thing is a SEPARATE future call — never circle back in the same call to ask "did you do it?" right after they committed. Once they commit, close, say goodbye, and hang up.`,
     ].filter(Boolean).join('\n');
   }
