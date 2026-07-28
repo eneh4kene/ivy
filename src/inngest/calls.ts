@@ -82,10 +82,12 @@ export async function initiateCallHandler({ event, step }: { event: any; step: S
 
         // Callback markers only live in the scheduled snapshot (getUserContext
         // doesn't know this call was requested by the user) — carry them over so
-        // Ivy can acknowledge she's calling back as promised.
+        // Ivy can acknowledge she's calling back as promised, and RESUME the
+        // interrupted conversation instead of restarting it.
         if (contextData?.is_callback) {
           ctx.is_callback = true;
           ctx.callback_requested_minutes = contextData.callback_requested_minutes;
+          ctx.resumes_interrupted_call = contextData.resumes_interrupted_call === true;
         }
 
         const isB2B = ctx.subscription_tier === 'B2B';
