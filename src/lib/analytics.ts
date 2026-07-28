@@ -123,6 +123,10 @@ export const serverAnalytics = {
   plannedTimeCaptured: (userId: string, source: string) =>
     capture(userId, 'planned_time_captured', { source }),
 
+  // A card-less (promo) subscriber saved a card — the stake opt-in moment
+  cardAdded: (userId: string, purpose: string) =>
+    capture(userId, 'card_added', { purpose }),
+
   armingDeadlineMissed: (userId: string) =>
     capture(userId, 'arming_deadline_missed'),
 

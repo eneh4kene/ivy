@@ -78,12 +78,38 @@ class PaymentService {
       throw new NotFoundError('User not found');
     }
 
-    // Already subscribed (including mid-trial) — a reusable card is on file. Don't
-    // create a duplicate checkout; signal the caller so it proceeds without a
-    // redirect instead of double-charging. The frontend treats this as success.
+    // Already subscribed (including mid-trial). Usually a reusable card is on
+    // file from subscription checkout — but a 100%-off promo signup saved none
+    // (payment_method_collection: 'if_required'). A stake needs a card for the
+    // off-session auth hold, so card-less subscribers get a SETUP-mode Checkout
+    // (saves a card, charges nothing) instead of a duplicate subscription.
     if (user.stripeSubscriptionId) {
-      logger.info(`Checkout skipped for ${userId} — already subscribed (${user.stripeSubscriptionId})`);
-      return { sessionId: null, url: null, alreadySubscribed: true };
+      if (await this.customerHasCard(user.stripeCustomerId)) {
+        logger.info(`Checkout skipped for ${userId} — already subscribed (${user.stripeSubscriptionId})`);
+        return { sessionId: null, url: null, alreadySubscribed: true };
+      }
+
+      let setupCustomerId = user.stripeCustomerId;
+      if (!setupCustomerId) {
+        const customer = await this.stripe.customers.create({
+          email: user.email,
+          metadata: { userId: user.id },
+        });
+        setupCustomerId = customer.id;
+        await prisma.user.update({ where: { id: userId }, data: { stripeCustomerId: setupCustomerId } });
+      }
+
+      const setupSession = await this.stripe.checkout.sessions.create({
+        customer: setupCustomerId,
+        mode: 'setup',
+        payment_method_types: ['card'],
+        success_url: successUrl,
+        cancel_url: cancelUrl,
+        metadata: { userId: user.id, purpose: 'card_setup' },
+      });
+
+      logger.info(`Card-setup session created for ${userId} — subscribed but no card on file`);
+      return { sessionId: setupSession.id, url: setupSession.url, alreadySubscribed: false };
     }
 
     const priceId = this.getPriceId(tier, currency);
@@ -159,6 +185,76 @@ class PaymentService {
       sessionId: session.id,
       url: session.url,
     };
+  }
+
+  /**
+   * True when the Stripe customer has a reusable card on file — either an
+   * invoice default or any saved card PM. False when Stripe/customer is
+   * missing (dev without keys behaves like "no card": stake stays deferred).
+   */
+  async customerHasCard(customerId: string | null | undefined): Promise<boolean> {
+    if (!this.stripe || !customerId) return false;
+    try {
+      const customer = await this.stripe.customers.retrieve(customerId);
+      if (customer && !(customer as Stripe.DeletedCustomer).deleted) {
+        if ((customer as Stripe.Customer).invoice_settings?.default_payment_method) return true;
+      }
+      const pms = await this.stripe.paymentMethods.list({ customer: customerId, type: 'card', limit: 1 });
+      return pms.data.length > 0;
+    } catch (err) {
+      logger.warn(`customerHasCard check failed for ${customerId}:`, err);
+      return false;
+    }
+  }
+
+  /**
+   * checkout.session.completed — we only act on SETUP-mode sessions (the
+   * card-add hand-off for promo subscribers opting into a stake). Sets the new
+   * card as the customer's invoice default (future invoices + off-session
+   * stake holds both need it), then re-runs the idempotent Day-Zero so the
+   * Foundation Run opens NOW instead of waiting for the Monday cron.
+   */
+  async handleCheckoutSessionCompleted(session: Stripe.Checkout.Session) {
+    if (session.mode !== 'setup' || !this.stripe) return;
+
+    const userId = session.metadata?.userId;
+    const customerId = typeof session.customer === 'string' ? session.customer : session.customer?.id;
+    const setupIntentId = typeof session.setup_intent === 'string' ? session.setup_intent : session.setup_intent?.id;
+    if (!customerId || !setupIntentId) {
+      logger.warn(`Setup session ${session.id} completed without customer/setup_intent — nothing to attach`);
+      return;
+    }
+
+    const setupIntent = await this.stripe.setupIntents.retrieve(setupIntentId);
+    const pmId = typeof setupIntent.payment_method === 'string'
+      ? setupIntent.payment_method
+      : setupIntent.payment_method?.id;
+    if (!pmId) {
+      logger.warn(`Setup intent ${setupIntentId} has no payment method — card add did not complete`);
+      return;
+    }
+
+    await this.stripe.customers.update(customerId, {
+      invoice_settings: { default_payment_method: pmId },
+    });
+    logger.info(`Card saved via setup session for user ${userId ?? 'unknown'} — set as invoice default`);
+
+    if (userId) {
+      serverAnalytics.cardAdded(userId, 'stake_optin');
+      // The user came here to activate a stake — open the Foundation Run now.
+      // Idempotent; failures alert inside startDayZeroExperience's own paths.
+      const { default: userService } = await import('./user.service');
+      userService.startDayZeroExperience(userId).catch((err) =>
+        opsAlert({
+          severity: 'critical',
+          source: 'payments',
+          title: 'post_card_day_zero_failed',
+          detail: 'user added a card to activate their stake and the Foundation Run still did not open',
+          userId,
+          error: err,
+        })
+      );
+    }
   }
 
   /**

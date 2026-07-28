@@ -426,6 +426,12 @@ class WebhookController {
           await paymentService.handlePaymentFailed(event.data.object);
           break;
 
+        case 'checkout.session.completed':
+          // Only meaningful for SETUP-mode sessions (card-add for stake opt-in);
+          // subscription-mode sessions are handled via customer.subscription.*.
+          await paymentService.handleCheckoutSessionCompleted(event.data.object);
+          break;
+
         // ── Stake PaymentIntent events (auth-and-capture cycle) ──────────────
         case 'payment_intent.succeeded':
           // Card auth hold confirmed — mark StakeCycle AUTHORIZED (if not already)

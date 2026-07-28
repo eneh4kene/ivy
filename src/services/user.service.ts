@@ -331,7 +331,7 @@ class UserService {
       select: {
         id: true, firstName: true, isOnboarded: true, phone: true, timezone: true,
         eveningCallTime: true, subscriptionTier: true, stakeWeeklyAmount: true,
-        stripeSubscriptionId: true,
+        stripeSubscriptionId: true, stripeCustomerId: true,
       },
     });
     if (!user) return;
@@ -368,7 +368,13 @@ class UserService {
       return;
     }
 
-    const hasCard = !!user.stripeSubscriptionId;
+    // "Subscribed" no longer implies "card on file": a 100%-off promo checkout
+    // saves no card (payment_method_collection: 'if_required'). The Foundation
+    // Run's off-session hold needs an actual card, so check Stripe directly —
+    // a false positive here means a paying user gets a scary hold-failure page.
+    const { default: paymentService } = await import('./payment.service');
+    const hasCard = !!user.stripeSubscriptionId
+      && await paymentService.customerHasCard(user.stripeCustomerId);
 
     const { serverAnalytics } = await import('../lib/analytics');
     serverAnalytics.dayZeroTriggered(userId, hasCard);

@@ -56,6 +56,15 @@ jest.mock('../services/stake.service', () => ({
   computeFoundationWindow: (...args: any[]) => mockComputeFoundationWindow(...args),
 }))
 
+// "Subscribed" no longer implies "card on file" (promo signups save none) —
+// day-zero now asks Stripe directly. Default to card-present; the promo test
+// flips it.
+const mockCustomerHasCard = jest.fn()
+jest.mock('../services/payment.service', () => ({
+  __esModule: true,
+  default: { customerHasCard: (...args: any[]) => mockCustomerHasCard(...args) },
+}))
+
 import userService from '../services/user.service'
 import prisma from '../utils/prisma'
 import circleService from '../services/circle.service'
@@ -91,6 +100,7 @@ beforeEach(() => {
     daysInCycle: 3,
   })
   mockOpenFoundationCycle.mockResolvedValue({ cycleId: 'cyc1' })
+  mockCustomerHasCard.mockResolvedValue(true)
 })
 
 const flush = () => new Promise((r) => setImmediate(r))
@@ -148,6 +158,24 @@ describe('startDayZeroExperience', () => {
       expect.objectContaining({ messageType: 'onboarding_handoff' }),
     )
     expect(mockOpenFoundationCycle).toHaveBeenCalledWith('u1', expect.objectContaining({ daysInCycle: 3 }))
+  })
+
+  it('promo signup (subscribed, NO card): welcome half runs, Foundation Run deferred', async () => {
+    db.user.findUnique.mockResolvedValue({ ...ONBOARDED_PAID })
+    mockCustomerHasCard.mockResolvedValue(false)
+
+    await userService.startDayZeroExperience('u1')
+    await flush()
+
+    // Ivy still shows up on day one…
+    expect(circle.autoAssignToCircle).toHaveBeenCalledWith('u1')
+    expect(chat.postIvyMessage).toHaveBeenCalledWith(
+      'u1',
+      expect.any(String),
+      expect.objectContaining({ messageType: 'onboarding_handoff' }),
+    )
+    // …but no off-session hold is attempted without a card (no scary failure).
+    expect(mockOpenFoundationCycle).not.toHaveBeenCalled()
   })
 
   it('is idempotent: existing handoff + cycle ⇒ neither created again', async () => {
