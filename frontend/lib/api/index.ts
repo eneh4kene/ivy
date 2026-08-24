@@ -58,6 +58,7 @@ export const usersApi = {
     firstName: string
     lastName: string
     phone?: string
+    timezone?: string
     track: string
     goal: string
     subscriptionTier?: string

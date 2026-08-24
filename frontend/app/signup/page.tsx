@@ -6,6 +6,7 @@ import { useSearchParams } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { usersApi, authApi } from '@/lib/api'
+import { detectTimezone } from '@/lib/timezones'
 import { GoogleSignInButton } from '@/components/auth/GoogleSignInButton'
 import { ArrowRight, Mail, AlertCircle, CheckCircle2, Sparkles } from 'lucide-react'
 import { Logo } from '@/components/brand/Logo'
@@ -56,6 +57,10 @@ function SignupForm() {
         firstName,
         lastName,
         email,
+        // Without this the row falls to the Prisma default (Europe/London) and a
+        // US client's evening call fires at 2pm their time. The backend's
+        // createUserSchema has always accepted timezone; signup just never sent it.
+        timezone: detectTimezone(),
         track: 'fitness',
         goal: '',
         region,

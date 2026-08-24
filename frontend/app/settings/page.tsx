@@ -15,6 +15,7 @@ import { usePushNotifications } from '@/hooks/usePushNotifications'
 import { usePwaInstall, IosInstallSheet } from '@/components/pwa/InstallPrompt'
 import { IvyMemoriesCard } from '@/components/settings/IvyMemories'
 import { isIOSSafari, isStandalone } from '@/lib/pwa'
+import { TIMEZONE_GROUPS, optionsIncluding, currentTimeIn } from '@/lib/timezones'
 
 /**
  * Permanent install entry point — the ephemeral home banner can be muted by a
@@ -455,12 +456,21 @@ export default function SettingsPage() {
             <div className="space-y-1.5">
               <label className="text-sm font-medium">Timezone</label>
               <select className={selectClass} value={profileData.timezone} onChange={(e) => setProfileData({ ...profileData, timezone: e.target.value })}>
-                <option value="Europe/London">London (GMT)</option>
-                <option value="Europe/Paris">Paris (CET)</option>
-                <option value="America/New_York">New York (EST)</option>
-                <option value="America/Los_Angeles">Los Angeles (PST)</option>
-                <option value="Asia/Tokyo">Tokyo (JST)</option>
+                {TIMEZONE_GROUPS.map((group) => (
+                  <optgroup key={group} label={group}>
+                    {optionsIncluding(profileData.timezone)
+                      .filter((o) => o.group === group)
+                      .map((o) => (
+                        <option key={o.value} value={o.value}>{o.label}</option>
+                      ))}
+                  </optgroup>
+                ))}
               </select>
+              {/* Calls fire on this zone, so show the resulting local time — it
+                  turns an abstract IANA string into something checkable. */}
+              <p className="text-xs text-muted-foreground">
+                Ivy calls you on this clock — it&apos;s {currentTimeIn(profileData.timezone)} there now.
+              </p>
             </div>
             <Button type="submit" disabled={isLoading} size="sm">
               {isLoading ? 'Saving…' : 'Save Profile'}
