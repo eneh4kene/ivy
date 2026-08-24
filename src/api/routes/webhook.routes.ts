@@ -1,14 +1,31 @@
-import { Router } from 'express';
+import { Router, RequestHandler } from 'express';
 import webhookController from '../controllers/webhook.controller';
 
 const router = Router();
+
+/**
+ * Bind every handler to the controller instance.
+ *
+ * WebhookController is a class exported as a singleton, so passing a method by
+ * bare reference (`webhookController.handleX`) drops `this` — Express invokes it
+ * detached and any `this.helper()` inside throws
+ * "Cannot read properties of undefined". That is not a hypothetical: the Retell
+ * handler crashed on `this.findCallIdByRetellId` for every single call, so no
+ * transcript, insight or memory ever landed, while the six handlers that happen
+ * not to use `this` (Stripe among them) worked fine and hid the problem.
+ *
+ * Binding all of them — not just the two that use `this` today — means the next
+ * handler to reach for a helper cannot silently reintroduce this.
+ */
+const h = (name: keyof typeof webhookController): RequestHandler =>
+  (webhookController[name] as RequestHandler).bind(webhookController);
 
 /**
  * @route   POST /webhooks/retell
  * @desc    Handle Retell AI webhook events
  * @access  Public (verified by Retell signature)
  */
-router.post('/retell', webhookController.handleRetellWebhook);
+router.post('/retell', h('handleRetellWebhook'));
 
 /**
  * @route   POST /webhooks/telegram
@@ -17,14 +34,14 @@ router.post('/retell', webhookController.handleRetellWebhook);
  *
  * Configure in Telegram: POST https://api.telegram.org/bot{TOKEN}/setWebhook?url={this URL}
  */
-router.post('/telegram', webhookController.handleTelegramWebhook);
+router.post('/telegram', h('handleTelegramWebhook'));
 
 /**
  * @route   POST /webhooks/stripe
  * @desc    Handle Stripe webhook events
  * @access  Public (verified by Stripe signature)
  */
-router.post('/stripe', webhookController.handleStripeWebhook);
+router.post('/stripe', h('handleStripeWebhook'));
 
 /**
  * @route   POST /webhooks/twilio-sms
@@ -34,7 +51,7 @@ router.post('/stripe', webhookController.handleStripeWebhook);
  * Configure in Twilio: Phone Numbers → your number → Messaging → Webhook → this URL (POST)
  * This handles replies when WhatsApp isn't configured and messages go out as SMS.
  */
-router.post('/twilio-sms', webhookController.handleTwilioSms);
+router.post('/twilio-sms', h('handleTwilioSms'));
 
 /**
  * @route   POST /webhooks/twilio-inbound
@@ -44,7 +61,7 @@ router.post('/twilio-sms', webhookController.handleTwilioSms);
  * Configure in Twilio: Phone Numbers → your number → Voice → Webhook → this URL (POST)
  * Set RETELL_SIP_ENDPOINT in Railway env (from Retell dashboard → Phone Numbers → BYOC SIP URI)
  */
-router.post('/twilio-inbound', webhookController.handleTwilioInbound);
+router.post('/twilio-inbound', h('handleTwilioInbound'));
 
 /**
  * @route   POST /webhooks/twilio-call-status
@@ -54,7 +71,7 @@ router.post('/twilio-inbound', webhookController.handleTwilioInbound);
  *          connected for those.
  * @access  Public (callId scoped per call via query param)
  */
-router.post('/twilio-call-status', webhookController.handleTwilioCallStatus);
+router.post('/twilio-call-status', h('handleTwilioCallStatus'));
 
 /**
  * @route   POST /webhooks/retell-inbound
@@ -63,7 +80,7 @@ router.post('/twilio-call-status', webhookController.handleTwilioCallStatus);
  *
  * Configure in Retell: Dashboard → Phone Numbers → your number → Inbound Webhook URL → this URL
  */
-router.post('/retell-inbound', webhookController.handleRetellInbound);
+router.post('/retell-inbound', h('handleRetellInbound'));
 
 /**
  * @route   POST /webhooks/sentry
@@ -72,6 +89,6 @@ router.post('/retell-inbound', webhookController.handleRetellInbound);
  *
  * Configure in Sentry: Settings → Integrations → WebHooks → add URL → tick "issue" events
  */
-router.post('/sentry', webhookController.handleSentryWebhook);
+router.post('/sentry', h('handleSentryWebhook'));
 
 export default router;
