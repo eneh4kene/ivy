@@ -60,17 +60,32 @@ async function checkAnthropic() {
   const key = process.env.ANTHROPIC_API_KEY;
   if (!key) { add('Anthropic', 'FAIL', 'ANTHROPIC_API_KEY not set — every prompt will fail'); return; }
   try {
-    // /v1/models is the cheapest authenticated GET; no tokens billed.
-    const res = await fetchWithTimeout('https://api.anthropic.com/v1/models?limit=1', {
-      headers: { 'x-api-key': key, 'anthropic-version': '2023-06-01' },
+    // Must hit a BILLED endpoint. GET /v1/models answers 200 on an org with no
+    // credit, so it cannot tell "funded" from "will fail on the first prompt" —
+    // the same false-green that let a suspended Retell account read as healthy.
+    // A 16-token completion costs a fraction of a cent and is unambiguous.
+    const res = await fetchWithTimeout('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'x-api-key': key,
+        'anthropic-version': '2023-06-01',
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'claude-opus-5',
+        max_tokens: 16,
+        thinking: { type: 'disabled' },
+        messages: [{ role: 'user', content: 'Reply with the single word: ok' }],
+      }),
     });
-    if (res.status === 200) add('Anthropic', 'OK', 'key valid');
+    if (res.status === 200) add('Anthropic', 'OK', 'key valid · completion billed successfully');
     else if (res.status === 401) add('Anthropic', 'FAIL', '401 — key invalid or revoked');
-    else if (res.status === 400 || res.status === 402) {
+    else if (res.status === 429) add('Anthropic', 'WARN', '429 — rate limited right now');
+    else {
       const body = await res.text();
-      add('Anthropic', 'FAIL', `${res.status} — likely out of credit: ${body.slice(0, 160)}`);
-    } else if (res.status === 429) add('Anthropic', 'WARN', '429 — rate limited right now');
-    else add('Anthropic', 'WARN', `unexpected HTTP ${res.status}`);
+      const outOfCredit = /credit balance|too low|billing/i.test(body);
+      add('Anthropic', 'FAIL', `${res.status}${outOfCredit ? ' — OUT OF CREDIT' : ''}: ${body.slice(0, 160)}`);
+    }
   } catch (err: any) {
     add('Anthropic', 'FAIL', `probe failed: ${err?.message ?? err}`);
   }
@@ -79,23 +94,52 @@ async function checkAnthropic() {
 async function checkRetell() {
   const key = process.env.RETELL_API_KEY;
   if (!key) { add('Retell', 'FAIL', 'RETELL_API_KEY not set — no voice agent, no calls'); return; }
+
+  // 1) Auth — agent endpoints live at the API root, not /v2 (see retell.service.ts).
+  let agentCount = '?';
   try {
-    // Agent endpoints live at the API root, not /v2 (see retell.service.ts).
     const res = await fetchWithTimeout('https://api.retellai.com/list-agents', {
       headers: { Authorization: `Bearer ${key}` },
     });
+    if (res.status === 401 || res.status === 403) {
+      add('Retell', 'FAIL', `${res.status} — key invalid`);
+      return;
+    }
     if (res.status === 200) {
       const agents = (await res.json()) as unknown[];
-      add('Retell', 'OK', `key valid · ${Array.isArray(agents) ? agents.length : '?'} agents`);
-    } else if (res.status === 401 || res.status === 403) {
-      add('Retell', 'FAIL', `${res.status} — key invalid`);
-    } else if (res.status === 402) {
-      add('Retell', 'FAIL', '402 — account unfunded, calls will not connect');
-    } else {
-      add('Retell', 'WARN', `unexpected HTTP ${res.status}`);
+      agentCount = Array.isArray(agents) ? String(agents.length) : '?';
     }
   } catch (err: any) {
-    add('Retell', 'FAIL', `probe failed: ${err?.message ?? err}`);
+    add('Retell', 'FAIL', `auth probe failed: ${err?.message ?? err}`);
+    return;
+  }
+
+  // 2) Billing — list-agents returns 200 on a SUSPENDED account, so reading
+  // agents proves nothing about whether a call can be placed. The billing gate
+  // only fires on the endpoint that costs money. Register with a deliberately
+  // bogus agent_id: an unfunded account 402s before validating the agent, a
+  // funded one rejects the agent (4xx). Nothing is dialled either way —
+  // registration alone never rings a phone; the Twilio leg is a separate step.
+  try {
+    const res = await fetchWithTimeout('https://api.retellai.com/v2/register-phone-call', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        agent_id: 'agent_preflight_probe_does_not_exist',
+        from_number: '+10000000000',
+        to_number: '+10000000000',
+        direction: 'outbound',
+      }),
+    });
+    if (res.status === 402) {
+      const body = await res.text();
+      add('Retell', 'FAIL', `402 PAYMENT OVERDUE — calls will not connect: ${body.slice(0, 120)}`);
+    } else {
+      // Any non-402 means the billing gate let us through to agent validation.
+      add('Retell', 'OK', `key valid · ${agentCount} agents · billing active`);
+    }
+  } catch (err: any) {
+    add('Retell', 'WARN', `billing probe failed: ${err?.message ?? err}`);
   }
 }
 
