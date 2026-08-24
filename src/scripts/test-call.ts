@@ -46,7 +46,7 @@ async function main() {
     select: { id: true, firstName: true },
   });
   if (!user) {
-    console.error(`\nNo user in the DB with phone .`);
+    console.error(`\nNo user in the DB with phone ${to}.`);
     console.error('Persistence cannot be tested without one — the webhook has');
     console.error('nothing to attach the transcript to. Sign up with this number');
     console.error('first, or pass a number that already belongs to a user.\n');
