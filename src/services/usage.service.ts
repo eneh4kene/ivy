@@ -15,8 +15,10 @@ const COST_PER_UNIT: Record<string, Record<string, number>> = {
   openai: {
     whisper: 0.005,    // per minute transcribed (~$0.006/min ≈ £0.005/min)
   },
-  postmark: {
-    email: 0.0001,     // per email (Postmark)
+  resend: {
+    // Free tier covers ~3k/month; paid is roughly $20 per 50k. Kept non-zero so
+    // email shows up in cost monitoring at all.
+    email: 0.0004,     // per email (Resend)
   },
   telegram: {
     telegram_message: 0, // free

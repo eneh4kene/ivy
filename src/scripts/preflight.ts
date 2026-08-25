@@ -257,8 +257,32 @@ async function checkEmail() {
   // The June outage: a From on an unverified domain silently bounced everything.
   if (!from || /ivy\.com|ai4e1\.net/i.test(from)) {
     add('Email', 'FAIL', `EMAIL_FROM="${from}" is an unverified sender — mail will silently bounce`);
-  } else {
-    add('Email', 'OK', `sender ${from}`);
+    return;
+  }
+
+  // Actually open the connection and authenticate, rather than trusting that a
+  // host string means working email. Magic links are the ONLY login path, so a
+  // dead sender is a total outage, and it reads as healthy from the outside:
+  // the app awaits sendMail, gets no error, and logs success.
+  //
+  // Honest limit: verify() proves credentials and reachability, NOT delivery.
+  // Postmark's free tier ran out on 26 Jul and every send after that returned
+  // "250 Ok: queued" and was then dropped — verify() would still have passed.
+  // Provider quota is the one failure this cannot see.
+  try {
+    const nodemailer = await import('nodemailer');
+    const t = nodemailer.default.createTransport({
+      host,
+      port: Number(process.env.SMTP_PORT ?? 587),
+      secure: String(process.env.SMTP_SECURE) === 'true',
+      auth: process.env.SMTP_USER && process.env.SMTP_PASSWORD
+        ? { user: process.env.SMTP_USER, pass: process.env.SMTP_PASSWORD }
+        : undefined,
+    });
+    await t.verify();
+    add('Email', 'OK', `${host} auth ok · sender ${from} (verify != delivery — check provider quota)`);
+  } catch (err: any) {
+    add('Email', 'FAIL', `${host} rejected the connection: ${err?.message ?? err}`);
   }
 }
 

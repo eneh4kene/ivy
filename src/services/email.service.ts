@@ -77,7 +77,7 @@ class EmailService {
     if (!transport) return;
     try {
       await transport.sendMail({ from: config.email.from, to, subject, html });
-      if (userId && type) await logUsage('postmark', 'email', 1, userId, { type, to });
+      if (userId && type) await logUsage('resend', 'email', 1, userId, { type, to });
       logger.info(`Email sent: ${type ?? subject} → ${to}`);
     } catch (err) {
       logger.error(`Email failed: ${type ?? subject} → ${to}`, err);
