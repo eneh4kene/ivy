@@ -173,8 +173,19 @@ class CallService {
       }
     }
 
-    // Coach clients get morning only — halves voice COGS while still delivering daily accountability
-    if (!user.coachId && user.eveningCallTime) {
+    // Coach clients get the evening call too.
+    //
+    // This used to read `!user.coachId` — "coach clients get morning only,
+    // halves voice COGS". That plan was written before the live morning call
+    // became opt-in (§1c, async VN is the default loop), and the two rules were
+    // never reconciled: `morningCallOptIn` is default-false and nothing in the
+    // codebase ever sets it true, so "morning only" resolved to *no calls at
+    // all* for every coach-referred client — the primary GTM segment, silently
+    // receiving nothing. The saving didn't halve their calls, it zeroed them.
+    //
+    // The evening call is the one that settles the day, so it is the one worth
+    // keeping. Revisit COGS when coach clients are numerous enough to measure.
+    if (user.eveningCallTime) {
       const eveningUTC = toUTC(user.eveningCallTime);
       if (isBefore(now, eveningUTC)) {
         if (user.commStyle === 'TEXTS') {
