@@ -47,6 +47,38 @@ SMS OTP, nudge SMS are all Twilio); WebRTC is an addition.
 
 ---
 
+### 5b. Stake offer timing — surfaced on STRUGGLE, never as a gate or a reward
+**Decision (25 Aug 2026): staking is never mandatory, never earned, never a penalty.**
+
+Three rules:
+1. **Never at the door.** A mandatory card wall on day one is the biggest churn
+   risk in the funnel — the user hasn't felt anything work yet. (As of this date
+   it IS mandatory: `POST /api/stake/config` requires a positive
+   `stakeWeeklyAmount` and is the ONLY writer of `armingWindowStart/End`, so
+   skipping the stake means no arming loop, i.e. no product. Being fixed.)
+2. **Always available on demand.** Some people know themselves and want teeth
+   immediately. Settings must always offer it.
+3. **Proactively surfaced only on demonstrated slippage.** A commitment device is
+   a remedy for a self-control failure — offering it to someone already keeping
+   their word solves a problem they don't have and reads as a tax on success.
+   Trigger on repeated misses (the insight pipeline already stores
+   `obstacles_mentioned`, `avoidance_language`, `commitment_confidence`, and
+   memories accumulate patterns).
+
+**Framing is load-bearing.** "Your word hasn't been enough on Tuesdays — some
+people put money on it, want to try?" = Ivy offering a bigger lever. "You failed,
+so now it costs" = predatory, and churns exactly who you're trying to keep.
+Respects the pause protocol: never pitch teeth to someone going through something
+genuinely hard.
+
+**Guardrail:** cap how often Ivy can raise it. A struggling user nagged about
+money every week is its own churn engine.
+
+**Trigger to build: after the stake-optional plumbing lands** (nullable
+stakeWeeklyAmount + the `foundation_stake` phantom fix).
+
+---
+
 ## THE ALIVE/VIRAL QUEUE (founder-endorsed direction, sequenced after beta data)
 
 4. **Season garden** — each settled week becomes a permanent plant; your history is a
