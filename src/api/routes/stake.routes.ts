@@ -41,9 +41,24 @@ const saveStakeConfigSchema = z.object({
      * User-set weekly stake amount. Must be >= minWeeklyStake for the user's currency.
      * Validated against STAKE_CONFIG.minWeeklyStake after we know the user's currency.
      */
+    /**
+     * The weekly stake, or null/0 for no stake at all.
+     *
+     * This route is the ONLY writer of armingWindowStart/End, and the arming
+     * loop selects purely on that window — it never looks at a stake. So while
+     * a positive amount was required here, skipping the stake meant no arming
+     * window, which meant no morning VN, no reminders, no daily loop: the user
+     * got no product. "Optional stake" was true of Ivy's language and false of
+     * the plumbing.
+     *
+     * Allowing null/0 lets this complete as a window-and-charity setup, so the
+     * daily ritual works for everyone and money stays a lever people opt into.
+     */
     stakeWeeklyAmount: z
-      .number({ required_error: 'stakeWeeklyAmount is required' })
-      .positive('stakeWeeklyAmount must be positive'),
+      .number()
+      .nonnegative('stakeWeeklyAmount cannot be negative')
+      .nullable()
+      .optional(),
 
     forfeitMode: z.enum(['MIDDLE', 'SAVAGE'], {
       required_error: 'forfeitMode is required',
@@ -103,8 +118,16 @@ router.post(
       const currency = (user.currency ?? 'GBP') as Currency
       const minStake = STAKE_CONFIG.minWeeklyStake[currency]
 
+      // null / 0 / undefined all mean "no money on the line" — a valid setup,
+      // not a validation failure. Normalised to null so nothing downstream has
+      // to distinguish "zero" from "absent".
+      const hasStake = stakeWeeklyAmount != null && stakeWeeklyAmount > 0
+      const normalisedStake = hasStake ? stakeWeeklyAmount : null
+
       // ── Minimum stake validation (§9 decision 2) ──────────────────────────
-      if (stakeWeeklyAmount < minStake) {
+      // Only applies to an actual stake. A stake-less setup has no minimum to
+      // meet — the floor exists so a real stake is big enough to have teeth.
+      if (hasStake && stakeWeeklyAmount! < minStake) {
         throw new BadRequestError(
           `stakeWeeklyAmount must be at least ${currency === 'GBP' ? '£' : '$'}${minStake}/week`,
         )
@@ -152,7 +175,7 @@ router.post(
 
       // ── Persist stake config ───────────────────────────────────────────────
       const updateData: Record<string, unknown> = {
-        stakeWeeklyAmount,
+        stakeWeeklyAmount: normalisedStake,
         forfeitMode,
         dislikedCharityId: forfeitMode === 'SAVAGE' ? (dislikedCharityId ?? null) : null,
         armingWindowStart,

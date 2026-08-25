@@ -433,8 +433,20 @@ class CallService {
     // stake Ivy can name ("your first run is just £7"), independent of whatever
     // full weekly amount they set. is_evening_first_call lets the onboarding
     // flow open with an evening-aware greeting instead of a morning framing.
+    //
+    // ONLY for users who have actually chosen to stake. This was set from config
+    // unconditionally, and because the onboarding flow's teeth ladder branches on
+    // foundation_stake FIRST, its stake-less branch ("your word is the stake
+    // here") was unreachable — every new user was told real money was at risk.
+    // Observed live: a user with no stake and no card was told "your £1 a day is
+    // safe... if a day slides it goes to Against Malaria Foundation". Nothing
+    // could be taken; the promise was fiction. A stake needs both an amount and
+    // a card, since an off-session hold is impossible without a saved method.
     const foundationCurrency = (user?.currency ?? 'GBP') as Currency;
-    const foundation_stake = STAKE_CONFIG.foundationFlatAmount[foundationCurrency];
+    const canActuallyStake = stake_weekly != null && !!user?.stripeCustomerId;
+    const foundation_stake = canActuallyStake
+      ? STAKE_CONFIG.foundationFlatAmount[foundationCurrency]
+      : null;
     const callLocalHour = (() => {
       const tz = user?.timezone || 'Europe/London';
       const h = Number(now.toLocaleString('en-GB', { hour: '2-digit', hour12: false, timeZone: tz }));
