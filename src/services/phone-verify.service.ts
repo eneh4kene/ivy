@@ -72,23 +72,60 @@ class PhoneVerifyService {
       return;
     }
 
+    // US numbers get the code by VOICE, not SMS.
+    //
+    // A2P 10DLC is unregistered, so US carriers drop unregistered long-code
+    // traffic — usually silently, and Twilio reports the message as accepted
+    // before the carrier discards it. Since this OTP gates onboarding
+    // (markUserAsOnboarded requires a verified phone), an undeliverable text
+    // does not degrade the US experience, it BLOCKS US signup entirely: no
+    // code, no onboarding, no Day-Zero, dead app.
+    //
+    // Voice is not subject to A2P and the US number is already voice-capable,
+    // so this is the same verification strength over a channel that works
+    // today. Revisit once the 10DLC brand + campaign are approved.
+    const useVoice = newPhone.startsWith('+1');
+
     try {
-      await client.messages.create({
-        to: newPhone,
-        from: smsFrom(newPhone),
-        body: `Your Ivy verification code is ${code}. It expires in 5 minutes. If you didn't request this, ignore it.`,
-      });
+      if (useVoice) {
+        // <Say> would read "123456" as "one hundred twenty-three thousand…",
+        // so the digits are spaced, and the code is repeated for anyone
+        // reaching for a pen.
+        const spoken = code.split('').join(', ');
+        await client.calls.create({
+          to: newPhone,
+          from: smsFrom(newPhone),
+          twiml:
+            `<Response><Pause length="1"/>` +
+            `<Say voice="alice">Hello, this is Ivy with your verification code.</Say>` +
+            `<Pause length="1"/>` +
+            `<Say voice="alice">Your code is ${spoken}.</Say>` +
+            `<Pause length="1"/>` +
+            `<Say voice="alice">Once more. ${spoken}.</Say>` +
+            `<Pause length="1"/>` +
+            `<Say voice="alice">It expires in five minutes. Goodbye.</Say>` +
+            `</Response>`,
+        });
+      } else {
+        await client.messages.create({
+          to: newPhone,
+          from: smsFrom(newPhone),
+          body: `Your Ivy verification code is ${code}. It expires in 5 minutes. If you didn't request this, ignore it.`,
+        });
+      }
     } catch (err: any) {
       // Surface a human message instead of a bare 500 — Twilio being down or
       // misconfigured (e.g. rotated auth token) is an operational fault, not
       // the user's. Keep the full error in logs for diagnosis.
       logger.error(`Phone OTP send failed for user ${userId} (Twilio ${err?.status ?? ''} ${err?.code ?? ''}): ${err?.message}`);
       throw new BadRequestError(
-        "We couldn't send the text message just now — please try again in a few minutes."
+        useVoice
+          ? "We couldn't call you with your code just now — please try again in a few minutes."
+          : "We couldn't send the text message just now — please try again in a few minutes."
       );
     }
 
-    logger.info(`Phone OTP sent to ${newPhone} for user ${userId}`);
+    logger.info(`Phone OTP ${useVoice ? 'called' : 'texted'} to ${newPhone} for user ${userId}`);
   }
 
   async verifyOtp(userId: string, code: string): Promise<string> {

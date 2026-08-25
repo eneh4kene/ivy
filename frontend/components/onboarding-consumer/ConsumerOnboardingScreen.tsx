@@ -272,7 +272,7 @@ function ChannelStep({
   submitting: boolean
   error: string | null
 }) {
-  // Phase "enter": pick channel + type number. Phase "code": confirm the SMS
+  // Phase "enter": pick channel + type number. Phase "code": confirm the OTP
   // OTP. We verify the number through the same backend endpoints settings uses,
   // so onboarding can't save an unverified (typo'd / wrong-owner) phone.
   const [phase, setPhase] = useState<'enter' | 'code'>('enter')
@@ -320,7 +320,10 @@ function ChannelStep({
     }
   }
 
-  // ── Phase 2: enter the SMS code ──────────────────────────────────────────
+  // ── Phase 2: enter the code ──────────────────────────────────────────────
+  // US numbers receive it by VOICE, not SMS — A2P 10DLC is unregistered so US
+  // carriers drop the text. Telling a US user to check their messages would
+  // strand them staring at an inbox while the phone rings unanswered.
   if (phase === 'code') {
     return (
       <div className="flex flex-col flex-1 px-4 pt-2 pb-6 animate-fade-in">
@@ -330,8 +333,13 @@ function ChannelStep({
           </div>
           <h2 className="font-display text-2xl text-ink-50">Confirm your number</h2>
           <p className="text-sm text-ink-400 mt-1.5 leading-snug">
-            We sent a 6-digit code to <span className="text-ink-100 font-medium">{normalizePhone(phone)}</span>.
-            Enter it to verify Ivy can reach you.
+            {normalizePhone(phone).startsWith('+1') ? (
+              <>Ivy is <span className="text-ink-100 font-medium">calling {normalizePhone(phone)}</span> to
+              read you a 6-digit code. Answer and jot it down.</>
+            ) : (
+              <>We sent a 6-digit code to <span className="text-ink-100 font-medium">{normalizePhone(phone)}</span>.
+              Enter it to verify Ivy can reach you.</>
+            )}
           </p>
         </div>
 
@@ -362,7 +370,7 @@ function ChannelStep({
             onClick={handleSend}
             className="text-xs text-ink-400 hover:text-ink-200 transition-colors disabled:opacity-40"
           >
-            {sending ? 'Sending…' : 'Resend code'}
+            {sending ? 'Sending…' : normalizePhone(phone).startsWith('+1') ? 'Call me again' : 'Resend code'}
           </button>
         </div>
 
@@ -497,7 +505,7 @@ export function ConsumerOnboardingScreen() {
   }, [step])
 
   // Persist track + channel, mark the user onboarded, refresh the store, then
-  // hand off to stake setup. The phone is already set+verified via the SMS OTP
+  // hand off to stake setup. The phone is already set+verified via the OTP
   // step (so markAsOnboarded — which requires a phone — passes), no need to
   // resend it here.
   const completeOnboarding = useCallback(async () => {
