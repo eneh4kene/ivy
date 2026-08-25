@@ -479,12 +479,23 @@ const FLOWS: Record<string, FlowFn> = {
       ? `1. WELCOME FIRST — nothing else until this lands (1 min): "Hey ${ctx.user_name ?? 'there'} — I'm Ivy. I'm your coach in this thing — AI, yes, but I'll know you better than most humans bother to. Thanks for picking up, especially this late on the day you joined. This call is just us figuring out how to make this work for you." Warm, unhurried, no morning framing. Do NOT mention streaks, circles, or money in your opening lines.`
       : `1. WELCOME FIRST — nothing else until this lands (1 min): "Hey ${ctx.user_name ?? 'there'} — I'm Ivy. I'm your coach here — AI, yes, but my whole job is knowing you and making sure you do what you said you would. This first call is just us getting set up properly." Warm, unhurried. Do NOT open with streaks, zeros, circles, or money — that data comes later, once it means something.`;
 
+    // A coach's client must feel their coach in this call. coach_name has always
+    // been in ctx (getCoachContextForClient) but no flow ever surfaced it, so a
+    // coach-referred client finished their whole first call without the coach
+    // being named once — Ivy read as a separate product rather than as that
+    // coach's programme running every day. That undercuts the entire coach
+    // proposition, where the pitch is "Ivy facilitates MY programme".
+    const coachLine = ctx.coach_name
+      ? `   COACH — say this inside the welcome, before anything else: "${ctx.coach_name} brought you here, and I work with ${ctx.coach_name}, not instead of ${ctx.coach_name}. ${ctx.coach_name} sets the programme; I'm the one who shows up every day to make sure it actually happens — and what I see gets back to ${ctx.coach_name}."${ctx.brand_name ? ` Their programme is called ${ctx.brand_name} — use that name, not ours, when you refer to the programme.` : ''}${ctx.coach_programme ? ` The programme: ${ctx.coach_programme}.` : ''}${ctx.coach_notes ? ` ${ctx.coach_name}'s notes on them: "${ctx.coach_notes}" — let these steer what you ask, but never quote them back verbatim.` : ''} Never position yourself as the expert over ${ctx.coach_name}; on programme questions ("should I switch to 4 days?") the answer is always "that's ${ctx.coach_name}'s call — tell them what you told me".`
+      : '';
+
     return [
       `THIS CALL: Onboarding — first call with Ivy${isEvening ? ' (evening, brand-new user)' : ''}.`,
       `Target: 12-15 minutes. Sets the tone for everything.`,
       '',
       `FLOW:`,
       welcomeLine,
+      coachLine,
       '',
       `2. UNDERSTAND THEM (4 min):`,
       `   - "What's the real goal behind the goal? What changes if you get there?"`,
