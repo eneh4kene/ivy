@@ -112,7 +112,11 @@ function WelcomeStep({ onNext }: { onNext: () => void }) {
   const pillItems = [
     { label: 'Morning voice note', sub: 'Say it out loud. Arm your day.', color: 'text-gold-400', bg: 'bg-gold-400/08 border-gold-400/15' },
     { label: 'Evening review', sub: 'Ivy replays your words. Settles the score.', color: 'text-sage-400', bg: 'bg-sage-400/08 border-sage-400/15' },
-    { label: 'Stake on the line', sub: 'Your £. Follow through — or it goes somewhere you\'d hate.', color: 'text-ember-400', bg: 'bg-ember-400/08 border-ember-400/15' },
+    // Money is now opt-in, and most people start without it — so the stake is
+    // named as an option rather than promised as the mechanic. Leading with
+    // "your money on the line" to someone who will never stake sets up the
+    // product to under-deliver on its own first screen.
+    { label: 'Money, if you want teeth', sub: 'Optional. Add a stake any time — or let your word be the stake.', color: 'text-ember-400', bg: 'bg-ember-400/08 border-ember-400/15' },
     { label: 'Circle & games', sub: '5-person cohort. Social teeth.', color: 'text-periwinkle-400', bg: 'bg-periwinkle-400/08 border-periwinkle-400/15' },
   ]
 
@@ -124,11 +128,11 @@ function WelcomeStep({ onNext }: { onNext: () => void }) {
           <Logo size={64} className="glow-gold" />
         </div>
         <h1 className="font-display text-3xl text-ink-50 tracking-tight leading-snug">
-          Accountability<br />
-          <em className="text-gradient-gold not-italic">that has teeth.</em>
+          Say it out loud.<br />
+          <em className="text-gradient-gold not-italic">Then actually do it.</em>
         </h1>
         <p className="mt-3 text-sm text-ink-400 leading-relaxed max-w-xs mx-auto">
-          Your money on the line. Your commitment, out loud. Every day.
+          Every morning you name the one thing. Every evening Ivy calls to see if you did it.
         </p>
       </div>
 
