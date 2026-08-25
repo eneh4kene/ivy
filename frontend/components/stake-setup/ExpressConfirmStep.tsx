@@ -8,6 +8,9 @@
  * Two valves keep it from feeling forced:
  *   • "Start at the £7 minimum instead" — the cheapest real stake, not a skip.
  *   • "Customise" — opens the full wizard for anyone who wants the dials.
+ *   • "Start without a stake" — a real completion, not a skip: saves the arming
+ *     window with no money, so the daily loop works and a card is never asked
+ *     for. Money becomes a lever they can add later.
  *   • "Not now" — defers the gate for this session (re-nudged on home later).
  *
  * Activation reuses the same saveConfig + card-on-file flow as ConfirmStep.
@@ -17,11 +20,13 @@ import { useState } from 'react'
 import { Sparkles, AlertTriangle, Clock, Shield } from 'lucide-react'
 import { DEFAULT_STAKE_SETUP, STAKE_CONFIG, dailySlice } from '@/lib/mock/stake-setup'
 import type { StakeSetupState } from '@/lib/mock/stake-setup'
-import { activateStake } from '@/lib/stake'
+import { activateStake, startWithoutStake } from '@/lib/stake'
 
 interface ExpressConfirmStepProps {
   /** Called after activation succeeds without a redirect (card already on file). */
   onActivated: () => void
+  /** Setup completed with no stake — window saved, no card taken. */
+  onStartedFree: () => void
   /** Open the full multi-step wizard. */
   onCustomise: () => void
   /** Defer the gate for this session and leave setup. */
@@ -32,8 +37,8 @@ const sym = STAKE_CONFIG.currencySymbol
 // First cycle is always a flat starter (Foundation Run), not the weekly amount.
 const foundationFlat = 7
 
-export function ExpressConfirmStep({ onActivated, onCustomise, onDefer }: ExpressConfirmStepProps) {
-  const [busy, setBusy] = useState<null | 'default' | 'min'>(null)
+export function ExpressConfirmStep({ onActivated, onStartedFree, onCustomise, onDefer }: ExpressConfirmStepProps) {
+  const [busy, setBusy] = useState<null | 'default' | 'min' | 'free'>(null)
   const [error, setError] = useState<string | null>(null)
 
   // Smart defaults — Middle mode forfeits to a vetted house charity, so we leave
@@ -54,6 +59,20 @@ export function ExpressConfirmStep({ onActivated, onCustomise, onDefer }: Expres
       // Never silently pretend success — the stake isn't active, so say so.
       setError(err?.message || "Something went wrong activating your stake. Please try again.")
     } finally {
+      setBusy(null)
+    }
+  }
+
+  // A real completion, not a defer: saves the arming window with no stake, so
+  // the morning VN, reminders and evening call all work without a card.
+  const handleStartFree = async () => {
+    setBusy('free')
+    setError(null)
+    try {
+      await startWithoutStake(defaults)
+      onStartedFree()
+    } catch (e: any) {
+      setError(e?.message ?? "Couldn't finish setup — please try again.")
       setBusy(null)
     }
   }
@@ -152,6 +171,17 @@ export function ExpressConfirmStep({ onActivated, onCustomise, onDefer }: Expres
         className="w-full py-3 rounded-2xl text-sm text-ink-200 surface hover:bg-ink-700 transition-all disabled:opacity-60"
       >
         {busy === 'min' ? 'Setting up…' : `Start at the ${sym}${STAKE_CONFIG.minWeekly} minimum instead`}
+      </button>
+
+      {/* No-stake completion — a real finish, not a skip. Deliberately a full
+          button rather than a small link: it is a legitimate way to use Ivy,
+          and burying it is what made the stake feel mandatory. */}
+      <button
+        onClick={handleStartFree}
+        disabled={busy !== null}
+        className="w-full py-3 rounded-2xl text-sm text-ink-200 surface hover:bg-ink-700 transition-all disabled:opacity-60"
+      >
+        {busy === 'free' ? 'Setting up…' : 'Start without a stake — just my word'}
       </button>
 
       {/* Customise + defer */}

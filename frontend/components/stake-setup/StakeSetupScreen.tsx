@@ -63,7 +63,7 @@ function ProgressDots({ steps, currentIndex }: { steps: StakeSetupStep[]; curren
 
 // ─── Done screen ──────────────────────────────────────────────────────────────
 
-function DoneScreen({ state }: { state: StakeSetupState }) {
+function DoneScreen({ state, staked }: { state: StakeSetupState; staked: boolean }) {
   const sym = '£'
   // First cycle is always a flat starter (Foundation Run), not the weekly amount.
   const foundationFlat = 7
@@ -80,19 +80,37 @@ function DoneScreen({ state }: { state: StakeSetupState }) {
         <div className="w-20 h-20 mx-auto rounded-full bg-gold-400/10 border border-gold-400/25 flex items-center justify-center glow-gold mb-4">
           <span className="text-3xl">🏆</span>
         </div>
-        <h2 className="font-display text-3xl text-ink-50">Your first run is live.</h2>
+        <h2 className="font-display text-3xl text-ink-50">
+          {staked ? 'Your first run is live.' : "You're set."}
+        </h2>
         <p className="text-sm text-ink-400 leading-relaxed max-w-xs mx-auto">
-          A flat {sym}{foundationFlat} starter goes on the line as soon as payment clears — no teeth on
-          day one. From next week it steps up to {sym}{state.weeklyAmount}. Your morning prompt
-          arrives at {state.armingWindowStart}; show up every day and you keep it all.
+          {staked ? (
+            <>
+              A flat {sym}{foundationFlat} starter goes on the line as soon as payment clears — no teeth on
+              day one. From next week it steps up to {sym}{state.weeklyAmount}. Your morning prompt
+              arrives at {state.armingWindowStart}; show up every day and you keep it all.
+            </>
+          ) : (
+            <>
+              No money on the line — your word is the stake. Your morning prompt arrives at{' '}
+              {state.armingWindowStart}, and Ivy calls in the evening to close the day. You can add a
+              stake later if you ever want more teeth.
+            </>
+          )}
         </p>
       </div>
 
       {/* Summary pills */}
       <div className="flex flex-wrap gap-2 justify-center max-w-xs">
-        <span className="glass-gold rounded-xl px-3 py-1.5 text-xs text-gold-300 font-mono">
-          {sym}{foundationFlat} first run · then {sym}{state.weeklyAmount}/wk
-        </span>
+        {staked ? (
+          <span className="glass-gold rounded-xl px-3 py-1.5 text-xs text-gold-300 font-mono">
+            {sym}{foundationFlat} first run · then {sym}{state.weeklyAmount}/wk
+          </span>
+        ) : (
+          <span className="glass rounded-xl px-3 py-1.5 text-xs text-ink-200 font-mono">
+            No stake · your word
+          </span>
+        )}
         <span className="glass rounded-xl px-3 py-1.5 text-xs text-ink-200">
           {state.forfeitMode === 'SAVAGE' ? '😬 Savage mode' : '🏠 Middle mode'}
         </span>
@@ -133,6 +151,8 @@ export function StakeSetupScreen() {
   const [formState, setFormState] = useState<StakeSetupState>(DEFAULT_STAKE_SETUP)
   const [stepHistory, setStepHistory] = useState<StakeSetupStep[]>(['stake-amount'])
   const [done, setDone] = useState(false)
+  // Which kind of completion — a staked run, or the no-stake path.
+  const [doneStaked, setDoneStaked] = useState(true)
 
   const { height: viewportH } = useVisualViewport()
 
@@ -173,7 +193,7 @@ export function StakeSetupScreen() {
     setFormState((s) => ({ ...s, forfeitMode: mode, dislikedCharityId: null }))
   }
 
-  if (done) return <DoneScreen state={formState} />
+  if (done) return <DoneScreen state={formState} staked={doneStaked} />
 
   // ── Default-on one-tap landing ──
   if (mode === 'express') {
@@ -189,7 +209,8 @@ export function StakeSetupScreen() {
         <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain safe-top">
           <div className="px-4 pb-10">
             <ExpressConfirmStep
-              onActivated={() => setDone(true)}
+              onActivated={() => { setDoneStaked(true); setDone(true) }}
+              onStartedFree={() => { setDoneStaked(false); setDone(true) }}
               onCustomise={() => setMode('wizard')}
               onDefer={handleDefer}
             />
@@ -298,7 +319,7 @@ export function StakeSetupScreen() {
             {currentStep === 'confirm' && (
               <ConfirmStep
                 state={formState}
-                onConfirm={() => setDone(true)}
+                onConfirm={() => { setDoneStaked(true); setDone(true) }}
                 onEdit={jumpTo}
               />
             )}

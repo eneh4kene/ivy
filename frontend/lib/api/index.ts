@@ -855,11 +855,12 @@ export const stakeApi = {
 
   /**
    * Persist the user's stake configuration.
-   * weeklyAmount must be >= STAKE_CONFIG.minWeeklyStake for the user's currency.
+   * weeklyAmount must be >= STAKE_CONFIG.minWeeklyStake, or null for no stake.
    * dislikedCharityId is required when forfeitMode is 'SAVAGE'.
    */
   saveConfig: async (data: {
-    stakeWeeklyAmount: number
+    /** null = no money on the line; the window and charity are still saved. */
+    stakeWeeklyAmount: number | null
     forfeitMode: 'MIDDLE' | 'SAVAGE'
     dislikedCharityId?: string | null
     preferredCharityId?: string | null

@@ -69,6 +69,32 @@ export function clearDeferredStakeGate(): void {
  * march the user onto the home screen with no subscription (the old silent-catch
  * bug that left new users with a dead app and no stake).
  */
+/**
+ * Complete stake setup with NO money on the line.
+ *
+ * This route is the only writer of armingWindowStart/End, and the arming loop
+ * selects purely on that window — so "Not now" (which just set a session flag
+ * and redirected) left the user with no window at all: no morning VN prompt, no
+ * reminders, no daily loop. Skipping the stake meant skipping the product, which
+ * made a stake mandatory in practice however optional the copy said it was.
+ *
+ * Saves the window and forfeit destination with a null stake, and deliberately
+ * does NOT open checkout — the whole point is that no card is required. Money
+ * stays a lever they can add later, offered when they're actually struggling.
+ */
+export async function startWithoutStake(state: StakeSetupState): Promise<void> {
+  await stakeApi.saveConfig({
+    stakeWeeklyAmount: null,
+    // Required by the API and harmless with no stake: it only decides where a
+    // forfeit would go, and with nothing at risk nothing is ever forfeited.
+    forfeitMode: 'MIDDLE',
+    dislikedCharityId: null,
+    preferredCharityId: state.successCharityId,
+    armingWindowStart: state.armingWindowStart,
+    armingWindowEnd: state.armingWindowEnd,
+  })
+}
+
 export async function activateStake(state: StakeSetupState): Promise<{ redirected: boolean }> {
   await stakeApi.saveConfig({
     stakeWeeklyAmount: state.weeklyAmount,
