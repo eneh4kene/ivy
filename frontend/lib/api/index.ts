@@ -704,6 +704,14 @@ export const coachMarketplaceApi = {
 }
 
 export const coachApi = {
+  /** "Try it first" — Ivy rings the coach and runs a real client-style call. */
+  trialCall: async (phone: string): Promise<{ callId: string; retellCallId: string }> => {
+    const response = await client.post<ApiResponse<{ callId: string; retellCallId: string }>>(
+      '/api/coach/trial-call', { phone },
+    )
+    return response.data.data!
+  },
+
   getProfile: async (): Promise<CoachProfile | null> => {
     const response = await client.get<ApiResponse<CoachProfile | null>>('/api/coach/profile')
     return response.data.data ?? null

@@ -9,6 +9,11 @@ import authService from './auth.service';
 import { logUsage } from './usage.service';
 import { inngest } from '../inngest/client';
 import crypto from 'crypto';
+import { config } from '../config';
+
+// Trial calls spend real Retell + Twilio money on an unpaid account. Two is
+// enough to judge the product; more is someone using us as a free phone line.
+const TRIAL_CALL_CAP = 2;
 
 /**
  * Drafts starter notes a coach keeps on a client, for Ivy to read before every
@@ -1020,6 +1025,113 @@ class CoachService {
     if (source === 'ponder') serverAnalytics.ponderCompleted(coachId, applied.length);
     logger.info(`Programme updates (${source}): applied ${applied.length} for coach ${coachId}`);
     return applied;
+  }
+
+  /**
+   * "Try it first" — place ONE real client-style call to a prospective coach.
+   *
+   * The coach funnel asked for £79/mo before showing anything the product does.
+   * A coach signed up in July, hit that wall, stopped, and five weeks later
+   * asked to experience it first-hand for a funding application — the exact
+   * thing the paywall withheld. A coach cannot sell what they have never felt,
+   * so this puts the experience before the price.
+   *
+   * It runs the SAME pipeline as a real client call (real context, real Haiku
+   * brief, real composed prompt), because a mock would prove nothing about the
+   * product they are being asked to buy.
+   *
+   * The trial client is deliberately inert: no eveningCallTime and no arming
+   * window, so no scheduler ever picks it up. It exists only to hang a call and
+   * its transcript on.
+   */
+  async placeTrialCall(coachId: string, phone: string): Promise<{ callId: string; retellCallId: string }> {
+    const coach = await prisma.user.findUnique({
+      where: { id: coachId },
+      select: { id: true, firstName: true, role: true, currency: true, timezone: true },
+    });
+    if (!coach) throw new NotFoundError('Coach not found');
+    if (coach.role !== 'coach') throw new BadRequestError('Not a coach account');
+
+    const trialEmail = `trial-${coachId}@ivy-trial.invalid`;
+
+    // Hard cap — this spends real Retell + Twilio money on an unpaid account.
+    const existing = await prisma.user.findUnique({
+      where: { email: trialEmail },
+      select: { id: true, _count: { select: { calls: true } } },
+    });
+    if (existing && existing._count.calls >= TRIAL_CALL_CAP) {
+      throw new BadRequestError(
+        `You've used your ${TRIAL_CALL_CAP} trial calls. Ready to bring your clients on?`,
+      );
+    }
+
+    // The coach experiences it AS a client: their own name, their own number,
+    // themselves as the coach behind it — so what they hear is exactly what
+    // their client would hear.
+    const trialClient = await prisma.user.upsert({
+      where: { email: trialEmail },
+      update: { phone },
+      create: {
+        email: trialEmail,
+        phone,
+        firstName: coach.firstName,
+        lastName: '',
+        timezone: coach.timezone ?? 'Europe/London',
+        currency: coach.currency ?? 'GBP',
+        subscriptionTier: 'PRO',
+        commStyle: 'CALLS',
+        track: 'fitness',
+        goal: 'See what my clients experience',
+        coachId: coach.id,
+        coachLinkedAt: new Date(),
+        coachNotes:
+          'This is the coach themselves, trying the client experience before deciding. ' +
+          'Treat them exactly like a real new client — they are judging whether this is ' +
+          'good enough for the people they coach.',
+        isOnboarded: true,
+        isActive: true,
+        // No eveningCallTime and no arming window: nothing must ever schedule
+        // itself off this record.
+      },
+      select: { id: true, firstName: true },
+    });
+
+    const call = await prisma.call.create({
+      data: { userId: trialClient.id, callType: 'ONBOARDING', scheduledAt: new Date(), status: 'SCHEDULED' },
+      select: { id: true },
+    });
+
+    const [{ default: callService }, { default: outboundCallService }, { default: promptService }, { default: briefService }] =
+      await Promise.all([
+        import('./call.service'),
+        import('./outbound-call.service'),
+        import('./prompt.service'),
+        import('./brief.service'),
+      ]);
+    const { getTrackConfig } = await import('../config/tracks');
+    const { flattenContext } = await import('../utils/retell');
+
+    const ctx = await callService.getUserContext(trialClient.id, 'ONBOARDING');
+    const brief = await briefService.generateCallBrief('ONBOARDING', ctx, getTrackConfig(ctx.track)!);
+    const systemPrompt = promptService.buildSystemPrompt('ONBOARDING', ctx, false, brief ?? undefined);
+
+    const fromNumber = phone.startsWith('+1')
+      ? (config.twilio.phoneNumberUs ?? config.twilio.phoneNumber)
+      : config.twilio.phoneNumber;
+    if (!fromNumber) throw new BadRequestError('No caller ID configured');
+
+    const placed = await outboundCallService.placeCall({
+      toNumber: phone,
+      fromNumber,
+      agentId: config.retell.agentIds.b2c || '',
+      variables: flattenContext({ ...ctx, call_type: 'onboarding' }),
+      metadata: { callId: call.id, userId: trialClient.id, callType: 'ONBOARDING', trial: true },
+      systemPrompt,
+    });
+
+    await callService.updateCallStatus(call.id, 'IN_PROGRESS', { retellCallId: placed.retellCallId });
+    logger.info(`Coach trial call placed for ${coachId} -> ${phone} (retell=${placed.retellCallId})`);
+    return { callId: call.id, retellCallId: placed.retellCallId };
   }
 }
 

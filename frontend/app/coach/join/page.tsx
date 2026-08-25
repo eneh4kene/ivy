@@ -17,7 +17,7 @@ import { ArrowRight, PhoneCall, Bell, Link2, Loader2 } from 'lucide-react'
 import { ProtectedRoute } from '@/components/auth/protected-route'
 import { useAuthStore } from '@/lib/store/auth.store'
 import { postLoginDestination } from '@/lib/auth-routing'
-import { paymentsApi } from '@/lib/api'
+import { paymentsApi, coachApi } from '@/lib/api'
 
 const DEAL = [
   { icon: Bell, text: 'Slip alerts before clients ghost you' },
@@ -28,6 +28,28 @@ const DEAL = [
 function CoachJoinInner() {
   const router = useRouter()
   const { user, fetchUser } = useAuthStore()
+  // "Try it first" — a coach cannot sell what they have never felt, and asking
+  // for £79 before showing anything is what stranded our first coach signup.
+  const [trialPhone, setTrialPhone] = useState('')
+  const [trialState, setTrialState] = useState<'idle' | 'sending' | 'sent'>('idle')
+  const [trialError, setTrialError] = useState('')
+
+  const startTrialCall = useCallback(async () => {
+    setTrialError('')
+    const cleaned = trialPhone.trim().replace(/\s/g, '')
+    if (!/^\+[1-9]\d{6,14}$/.test(cleaned)) {
+      setTrialError('Use international format, e.g. +447700900123')
+      return
+    }
+    setTrialState('sending')
+    try {
+      await coachApi.trialCall(cleaned)
+      setTrialState('sent')
+    } catch (err: any) {
+      setTrialError(err?.message ?? "Couldn't place the call — try again.")
+      setTrialState('idle')
+    }
+  }, [trialPhone])
   const [starting, setStarting] = useState(false)
   const [error, setError] = useState('')
   const [waiting, setWaiting] = useState(false)
@@ -110,6 +132,45 @@ function CoachJoinInner() {
               <p className="text-sm text-ink-200">{d.text}</p>
             </div>
           ))}
+        </div>
+
+
+        {/* Experience before price. Deliberately above the CTA. */}
+        <div className="surface border-ink-700 rounded-2xl p-5 space-y-3">
+          <div>
+            <p className="text-sm font-semibold text-ink-50">Hear it before you buy it</p>
+            <p className="mt-1 text-xs text-ink-400 leading-relaxed">
+              Ivy will ring you right now and run the call exactly as she&apos;d run it with one of
+              your clients. No card needed.
+            </p>
+          </div>
+          {trialState === 'sent' ? (
+            <p className="text-xs text-sage-400">
+              Calling you now — answer and talk to her like a client would.
+            </p>
+          ) : (
+            <>
+              <input
+                type="tel"
+                inputMode="tel"
+                placeholder="+44 7700 900123"
+                value={trialPhone}
+                onChange={(e) => setTrialPhone(e.target.value)}
+                disabled={trialState === 'sending'}
+                className="w-full h-11 rounded-lg border border-ink-700 bg-ink-900/60 px-3 text-sm text-ink-50 placeholder:text-ink-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400/40"
+              />
+              <button
+                onClick={startTrialCall}
+                disabled={trialState === 'sending' || !trialPhone}
+                className="w-full flex items-center justify-center gap-2 py-3 rounded-xl border border-gold-400/40 text-gold-300 font-medium text-sm hover:bg-gold-400/10 active:scale-[0.98] transition-all disabled:opacity-50"
+              >
+                {trialState === 'sending'
+                  ? <><Loader2 className="w-4 h-4 animate-spin" /> Ringing you…</>
+                  : <><PhoneCall className="w-4 h-4" /> Call me as a client</>}
+              </button>
+            </>
+          )}
+          {trialError && <p className="text-xs text-ember-400">{trialError}</p>}
         </div>
 
         {waiting ? (

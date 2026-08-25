@@ -15,6 +15,16 @@ function requireCoach(req: AuthRequest, _res: Response, next: NextFunction) {
   next();
 }
 
+// Gate: a coach-INTENT account (role='coach'), paid or not. requireCoach demands
+// COACH tier, which a coach who hasn't subscribed yet does not have — and the
+// whole point of the trial is to let them try before they pay.
+function requireCoachIntent(req: AuthRequest, _res: Response, next: NextFunction) {
+  if (req.user?.role !== 'coach' && req.user?.subscriptionTier !== 'COACH') {
+    return next(new UnauthorizedError('Coach account required'));
+  }
+  next();
+}
+
 // ─── Coach marketplace (consumer-facing) ─────────────────────────────────────
 //
 // GET /api/coach/marketplace
@@ -247,6 +257,24 @@ router.post('/invite-link/reset', requireCoach, async (req: AuthRequest, res: Re
   try {
     const token = await coachService.resetInviteToken(req.user!.id);
     res.json({ success: true, data: { token, url: `${process.env.FRONTEND_URL}/invite/${token}` } });
+  } catch (err) { next(err); }
+});
+
+/**
+ * @route   POST /api/coach/trial-call
+ * @desc    "Try it first" — one real client-style call to the coach's own phone,
+ *          before any payment. Capped; see coachService.placeTrialCall.
+ * @access  Coach-intent (role='coach'), no subscription required
+ */
+router.post('/trial-call', requireCoachIntent, async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const { phone } = req.body ?? {};
+    if (!phone || !/^\+[1-9]\d{6,14}$/.test(String(phone))) {
+      res.status(400).json({ success: false, error: 'A phone number in international format is required (e.g. +447700900123)' });
+      return;
+    }
+    const result = await coachService.placeTrialCall(req.user!.id, String(phone));
+    res.json({ success: true, data: result });
   } catch (err) { next(err); }
 });
 
