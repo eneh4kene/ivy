@@ -397,7 +397,14 @@ function ChannelStep({
       {/* Phone number — required for the daily check-ins */}
       <div className="mb-5">
         <label className="text-xs font-semibold text-ink-200 uppercase tracking-wider">Your phone number</label>
-        <p className="text-2xs text-ink-400 mt-1 mb-2 leading-snug">Ivy texts a code to confirm this number. Include your country code.</p>
+        {/* Channel follows the number: US gets a voice call because A2P 10DLC is
+            unregistered and US carriers drop the text. Promising a text we cannot
+            deliver is how a US signup dies staring at an empty inbox. */}
+        <p className="text-2xs text-ink-400 mt-1 mb-2 leading-snug">
+          {normalizePhone(phone).startsWith('+1')
+            ? 'Ivy calls you and reads out a code to confirm this number. Include your country code.'
+            : 'Ivy texts a code to confirm this number. Include your country code.'}
+        </p>
         <div className="relative">
           <Phone className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-ink-500" />
           <input
