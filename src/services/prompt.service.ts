@@ -464,8 +464,13 @@ const FLOWS: Record<string, FlowFn> = {
         ? `"Your stake is your commitment device — your own money on the line. Complete the day and you keep it. Miss and it forfeits. That's the teeth." Keep it simple.`
         : `"Every day you tell me the one thing you're doing, out loud — and I hold you to it. Kept days go on your record; missed days do too. Your word is the stake here." If it comes up naturally (do NOT pitch it): they can add a small weekly money stake later in the app — optional, one tap.`;
     const vnLine = `MORNING VN: "Each morning you'll drop a quick voice note — what you're taking on today, said out loud. That arms the day. No VN = unarmed = the day doesn't count." (Mornings are an async voice note; the only live call is the evening one.)`;
+    // The tail ("it's about keeping your stake") assumed everyone has money on
+    // the line. It fires whenever the user has a preferred charity, which is
+    // independent of staking — so a stake-less user was told to protect a stake
+    // they never set. Same phantom as foundation_stake, one flow along.
+    const hasTeeth = foundationStake != null || ctx.stake_weekly != null;
     const successCharityLine = successCharity
-      ? `SUCCESS FRAMING: On days you complete, ${successCharity} benefits (via a corporate donation — it fires when the system is live). Right now it's about keeping your stake.`
+      ? `SUCCESS FRAMING: On days you complete, ${successCharity} benefits (via a corporate donation — it fires when the system is live). ${hasTeeth ? "Right now it's about keeping your stake." : "Right now it's about keeping your word."}`
       : '';
 
     // Day Zero can land at any hour. If it's evening, open by acknowledging that
