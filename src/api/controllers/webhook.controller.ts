@@ -68,6 +68,10 @@ function retellDurationSecs(call: any): number {
   return Math.max(0, Math.round(ms / 1000));
 }
 
+// Inbound calls are user-initiated and uncapped by nature. This bounds a single
+// user's daily voice spend; scheduled calls have their own cap in call.service.
+const INBOUND_DAILY_CALL_CAP = 8;
+
 class WebhookController {
   /**
    * Handle Retell AI webhook events
@@ -617,9 +621,58 @@ class WebhookController {
         return;
       }
 
-      const callType = await this.resolveInboundCallType(user.id);
       const isB2B = user.subscriptionTier === 'B2B';
       const agentId = (isB2B ? config.retell.agentIds.b2b : config.retell.agentIds.b2c) ?? '';
+
+      // Inbound cost guard.
+      //
+      // Scheduled calls cap at DAILY_CALL_CAP (call.service), but inbound had no
+      // ceiling at all — and the voicemail now actively invites callbacks. A
+      // 5-minute call is ~$0.60, so an unbounded caller costs more per day than
+      // they pay per month.
+      //
+      // Counted here rather than at the Twilio layer on purpose: this handler
+      // already depends on the DB, so the check adds no new failure class, and
+      // rejecting a few seconds later costs pennies. handleTwilioInbound has NO
+      // database dependency today and a sleeping Neon takes ~4s to wake — putting
+      // a query in front of "can this person reach Ivy at all" to save $0.60 is
+      // the wrong trade.
+      //
+      // FAILS OPEN by design: this is a cost guard, not a security control.
+      // Any error and the call connects normally.
+      let overCap = false;
+      try {
+        const dayStart = new Date();
+        dayStart.setHours(0, 0, 0, 0);
+        const callsToday = await prisma.call.count({
+          where: { userId: user.id, scheduledAt: { gte: dayStart } },
+        });
+        overCap = callsToday >= INBOUND_DAILY_CALL_CAP;
+        if (overCap) {
+          logger.warn(`Inbound cap hit for ${user.id}: ${callsToday} calls today (cap ${INBOUND_DAILY_CALL_CAP})`);
+        }
+      } catch (err) {
+        logger.warn(`Inbound cap check failed for ${user.id} — allowing the call through:`, err);
+      }
+
+      if (overCap) {
+        // Answer briefly rather than dropping the line: a dead line reads as
+        // broken, and the whole product is "someone always picks up".
+        res.json({
+          agent_id: agentId,
+          retell_llm_dynamic_variables: {
+            system_prompt:
+              `You are Ivy. ${user.firstName} has already spoken with you several times today. ` +
+              `Say EXACTLY this and then END THE CALL: "Hey ${user.firstName} — we've already talked a fair bit today. ` +
+              `I'm still here for your evening check-in, so let's save it for then." Do not discuss anything else. ` +
+              `Do not take a commitment. Keep it under ten seconds.`,
+          },
+          metadata: { userId: user.id, callType: 'INBOUND_CAPPED' },
+        });
+        return;
+      }
+
+      const callType = await this.resolveInboundCallType(user.id);
 
       // Build context (DB queries only — no Haiku brief to stay within response window)
       const ctx = await callService.getUserContext(user.id, callType);
