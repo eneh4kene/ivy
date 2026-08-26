@@ -79,6 +79,49 @@ stakeWeeklyAmount + the `foundation_stake` phantom fix).
 
 ---
 
+### 6. Brand / insurer-sponsored seasons — third party pays on verified follow-through
+**Idea (26 Aug 2026):** a sponsor funds someone's season; money moves to the
+member's (or circle's) chosen charity each time they follow through. Sponsors
+could also propose granular challenges. Same plumbing as Phase 6 — only the
+payer changes.
+
+**HARD DEPENDENCY — verification. Do not sell this before it exists.**
+A kept day is currently **entirely self-reported**: the member recorded a voice
+note and told Ivy they did it. No photo, GPS, wearable or witness (confirmed in
+`workout.service.ts`). That is *correct* while the member's own money is at
+risk — they only cheat themselves, which is exactly what keeps the data honest.
+The moment a third party pays per kept day the incentive **inverts**: lying costs
+the member nothing and sends money to a charity they like. Self-report becomes a
+payout trigger, and any sponsor's finance team will (rightly) ask how we know.
+
+**The verification layer already exists and is switched off: Circles.** A
+peer-witnessed kept day is a categorically different claim from a self-reported
+one ("witnessed stakes" is already in the marketing copy). Circles currently have
+zero members. Witnessed days are the unlock.
+
+**Wrong first customer: big-brand CSR.** Coca-Cola/Nike-scale CSR is committed
+12-18 months ahead through agencies and procurement, and is acutely brand-safety
+sensitive — "our money goes to random members of the public and whatever charity
+they chose" is the exact sentence a brand-safety team exists to prevent. It ends
+in approval rights over participants, charities and messaging: heavy operational
+drag for goodwill money.
+
+**Better buyer: insurers / corporate wellness.** For them verified follow-through
+is **claims reduction — a P&L line, not a marketing line**. They already pay for
+verified activity, they have a measurement culture, and "we only pay when
+behaviour is confirmed" reads as a feature rather than an obstacle. Identical
+donation-on-success plumbing.
+
+**Sharpest half of the idea:** sponsor-funded *challenges* mapped onto the
+existing sprint/season architecture — a sponsored 4-week sprint paying out at
+Season Close. Naturally time-boxed, clean start and end, no open-ended
+relationship required.
+
+**Trigger to build: witnessed (circle-verified) kept days exist AND a first
+insurer/employer conversation is live.**
+
+---
+
 ## THE ALIVE/VIRAL QUEUE (founder-endorsed direction, sequenced after beta data)
 
 4. **Season garden** — each settled week becomes a permanent plant; your history is a
