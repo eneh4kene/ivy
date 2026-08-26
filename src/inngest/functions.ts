@@ -17,6 +17,7 @@
 import { inngest } from './client';
 import logger from '../utils/logger';
 import prisma from '../utils/prisma';
+import { config } from '../config';
 import buddyService from '../services/buddy.service';
 import { dispatchPendingDonations } from '../services/every-org.service';
 import callService from '../services/call.service';
@@ -296,16 +297,66 @@ const seasonAdvance = cronFunction(
 const stuckCallRecovery = cronFunction(
   { id: 'stuck-call-recovery', name: 'Recover stuck IN_PROGRESS calls', triggers: { cron: '0 3 * * *' } },
   async ({ step }) => {
-    const recovered = await step.run('recover-stuck-calls', async () => {
+    // "Recovery" used to mean updateMany({ status: 'FAILED' }) — it discarded the
+    // call. That is a cleanup job wearing a recovery job's name, and it cost us:
+    // a real 6m24s evening conversation sat stuck with a 5,087-character
+    // transcript still sitting in Retell, and this job would have marked it
+    // FAILED and thrown the transcript away. A call is only unrecoverable if
+    // RETELL has nothing; ask before discarding.
+    const result = await step.run('recover-stuck-calls', async () => {
       const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000);
-      const result = await prisma.call.updateMany({
+      const stuck = await prisma.call.findMany({
         where: { status: 'IN_PROGRESS', startedAt: { lt: twoHoursAgo } },
-        data: { status: 'FAILED', outcome: 'stuck_recovered' },
+        select: { id: true, retellCallId: true },
       });
-      return result.count;
+      let backfilled = 0;
+      let failed = 0;
+
+      for (const call of stuck) {
+        let rescued = false;
+        if (call.retellCallId && config.retell.apiKey) {
+          try {
+            const res = await fetch(`https://api.retellai.com/v2/get-call/${call.retellCallId}`, {
+              headers: { Authorization: `Bearer ${config.retell.apiKey}` },
+            });
+            if (res.ok) {
+              const rc = (await res.json()) as any;
+              if (rc.call_status === 'ended') {
+                const analysis = rc.call_analysis ?? {};
+                await prisma.call.update({
+                  where: { id: call.id },
+                  data: {
+                    status: 'COMPLETED',
+                    endedAt: rc.end_timestamp ? new Date(rc.end_timestamp) : new Date(),
+                    duration: Math.round((rc.duration_ms ?? 0) / 1000),
+                    transcript: rc.transcript || null,
+                    sentiment: analysis.user_sentiment ?? null,
+                    callSummary: analysis.call_summary ?? null,
+                    outcome: analysis.in_voicemail ? 'voicemail' : 'completed',
+                  },
+                });
+                backfilled++;
+                rescued = true;
+              }
+            }
+          } catch (err) {
+            logger.warn(`stuck-call-recovery: Retell lookup failed for ${call.id}`, err);
+          }
+        }
+        if (!rescued) {
+          await prisma.call.update({
+            where: { id: call.id },
+            data: { status: 'FAILED', outcome: 'stuck_recovered' },
+          });
+          failed++;
+        }
+      }
+      return { backfilled, failed };
     });
-    if (recovered > 0) logger.warn(`Recovered ${recovered} stuck IN_PROGRESS call(s)`);
-    return { recovered };
+
+    if (result.backfilled > 0) logger.info(`Backfilled ${result.backfilled} stuck call(s) from Retell`);
+    if (result.failed > 0) logger.warn(`Marked ${result.failed} unrecoverable stuck call(s) FAILED`);
+    return result;
   }
 );
 
