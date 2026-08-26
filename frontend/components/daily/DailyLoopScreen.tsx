@@ -203,7 +203,7 @@ function DailyPushPrompt() {
   )
 }
 
-function ArmedCard({ vn, dailySlice, currency }: { vn: VoiceNote | null; dailySlice: number; currency: 'GBP' | 'USD' }) {
+function ArmedCard({ vn, dailySlice, currency }: { vn: VoiceNote | null; dailySlice: number | null; currency: 'GBP' | 'USD' }) {
   const sym = currency === 'GBP' ? '£' : '$'
 
   return (
@@ -236,7 +236,9 @@ function ArmedCard({ vn, dailySlice, currency }: { vn: VoiceNote | null; dailySl
               <span className="text-2xs font-bold text-sage-300">1</span>
             </div>
             <p className="text-sm text-ink-200">
-              Ivy has your commitment. Follow through and your {sym}{dailySlice} is safe.
+              {dailySlice != null
+                ? <>Ivy has your commitment. Follow through and your {sym}{dailySlice} is safe.</>
+                : <>Ivy has your commitment. Follow through and the day is yours.</>}
             </p>
           </div>
           <div className="flex items-start gap-3">
@@ -326,13 +328,14 @@ function NoStakeState({ hasConfig, weeklyAmount, currency }: { hasConfig: boolea
         </>
       ) : (
         <>
-          <p className="font-mono text-xl font-semibold uppercase text-ink-50 tracking-tight">Set up your stake first</p>
+          <p className="font-mono text-xl font-semibold uppercase text-ink-50 tracking-tight">Finish setting up</p>
           <p className="text-sm text-ink-400 max-w-xs leading-relaxed">
-            Put money on the line so your daily commitment has teeth. Takes a minute.
+            Pick when you&apos;ll record your morning voice note and you&apos;re running. Money is optional —
+            add a stake later if you want teeth. Takes a minute.
           </p>
           <Link href="/stake-setup">
             <button className="relative overflow-hidden mt-2 px-6 py-3 rounded-2xl bg-gold-400 text-ink-900 font-semibold text-sm uppercase">
-              Set up my stake
+              Finish setup
             </button>
           </Link>
         </>
@@ -387,6 +390,8 @@ export function DailyLoopScreen() {
   else if (isArmed) phase = 'morning-armed'
 
   const cycle = state?.cycle ?? null
+  // The daily ritual belongs to anyone with an arming window, stake or not.
+  const hasArmingWindow = !!state?.config.armingWindowStart && !!state?.config.armingWindowEnd
   const currency: 'GBP' | 'USD' = cycle?.currency ?? state?.config.currency ?? 'GBP'
 
   const stakeForBar: StakeStatus | null = cycle
@@ -410,7 +415,9 @@ export function DailyLoopScreen() {
       }
     : null
 
-  const morningPrompt = `Morning. Your ${currency === 'GBP' ? '£' : '$'}${cycle?.dailySlice ?? ''} stake is live. What's the one thing you're taking on today — say it out loud.`
+  const morningPrompt = cycle
+    ? `Morning. Your ${currency === 'GBP' ? '£' : '$'}${cycle.dailySlice} stake is live. What's the one thing you're taking on today — say it out loud.`
+    : `Morning. What's the one thing you're taking on today — say it out loud.`
 
   // ── The vine hero — grown from the real week; glows brighter as you speak ──
   const week = state?.week ?? []
@@ -444,7 +451,11 @@ export function DailyLoopScreen() {
         <div className="flex-1 flex items-center justify-center">
           <span className="w-6 h-6 rounded-full border-2 border-ink-600 border-t-[#46f0c8] animate-spin" />
         </div>
-      ) : !cycle ? (
+      ) : !cycle && !hasArmingWindow ? (
+        /* Only for users who have not set up at all. A stake-less user HAS an
+           arming window and a full daily ritual — gating the whole screen on a
+           StakeCycle left them staring at "waiting for payment" while the
+           nudges told them to record a voice note. */
         <NoStakeState
           hasConfig={!!state?.config.hasConfig}
           weeklyAmount={state?.config.weeklyAmount ?? null}
@@ -465,7 +476,7 @@ export function DailyLoopScreen() {
             <IvyVine days={week} className="h-full w-auto" />
           </div>
           <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain">
-            <ArmedCard vn={todayVN} dailySlice={cycle.dailySlice} currency={currency} />
+            <ArmedCard vn={todayVN} dailySlice={cycle?.dailySlice ?? null} currency={currency} />
           </div>
         </div>
       ) : (
@@ -482,7 +493,7 @@ export function DailyLoopScreen() {
             <VoiceRecorder
               onSubmit={onVoiceNoteSubmit}
               prompt={morningPrompt}
-              stakeAmount={cycle.dailySlice}
+              stakeAmount={cycle?.dailySlice ?? null}
               currency={currency}
               onRecordingChange={setRecording}
               onLevel={setMicLevel}

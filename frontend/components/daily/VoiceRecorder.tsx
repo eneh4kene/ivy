@@ -63,7 +63,8 @@ type RecorderState = 'idle' | 'recording' | 'recorded' | 'playing' | 'submitting
 interface VoiceRecorderProps {
   onSubmit: (voiceNote: VoiceNote) => void
   prompt: string
-  stakeAmount: number
+  /** null = no money on the line; the ritual is identical, the copy is not. */
+  stakeAmount: number | null
   currency: 'GBP' | 'USD'
   /** Fires true when recording starts, false when it stops. */
   onRecordingChange?: (recording: boolean) => void
@@ -317,7 +318,9 @@ export function VoiceRecorder({ onSubmit, prompt, stakeAmount, currency, onRecor
         <div className="text-center space-y-1">
           <p className="font-mono text-xl font-semibold uppercase tracking-tight text-white">Armed for the day</p>
           <p className="text-sm text-ink-400">
-            <span className="text-sage-300 font-semibold">{sym}{stakeAmount}</span> secured · Ivy has your commitment
+            {stakeAmount != null
+              ? <><span className="text-sage-300 font-semibold">{sym}{stakeAmount}</span> secured · Ivy has your commitment</>
+              : <><span className="text-sage-300 font-semibold">Your word</span> is on it · Ivy has your commitment</>}
           </p>
         </div>
       </div>
@@ -450,8 +453,17 @@ export function VoiceRecorder({ onSubmit, prompt, stakeAmount, currency, onRecor
       {/* Stake reminder */}
       {phase === 'idle' && (
         <p className="text-2xs text-ink-400 text-center max-w-xs leading-relaxed">
-          Your <span className="text-gold-300">{sym}{stakeAmount}</span> stake is live. Recording arms your day.
-          Skip this and it&apos;s forfeited.
+          {stakeAmount != null ? (
+            <>
+              Your <span className="text-gold-300">{sym}{stakeAmount}</span> stake is live. Recording arms your day.
+              Skip this and it&apos;s forfeited.
+            </>
+          ) : (
+            <>
+              Recording arms your day. <span className="text-gold-300">Say it out loud</span> and Ivy holds you to it.
+              Skip it and the day doesn&apos;t count.
+            </>
+          )}
         </p>
       )}
 
