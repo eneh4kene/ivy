@@ -71,3 +71,60 @@ describe('inbound call cap', () => {
     expect(await isOverCap('u1')).toBe(false);
   });
 });
+
+/**
+ * Phone matching for inbound identification.
+ *
+ * The write path (updateUser) does not normalise, so a member's number can be
+ * stored in a national or unpunctuated form. An exact match would hand that
+ * member the stranger script on their own account.
+ */
+function normalisePhoneForMatch(raw: string): string | null {
+  const stripped = (raw ?? '').replace(/[\s\-().]/g, '');
+  if (!stripped) return null;
+  if (stripped.startsWith('+')) return stripped;
+  if (stripped.startsWith('00')) return `+${stripped.slice(2)}`;
+  return stripped;
+}
+function phoneMatchCandidates(normalised: string): string[] {
+  const set = new Set<string>([normalised]);
+  if (normalised.startsWith('+')) {
+    const digits = normalised.slice(1);
+    set.add(digits);
+    set.add(`00${digits}`);
+    if (digits.startsWith('44')) set.add(`0${digits.slice(2)}`);
+    if (digits.startsWith('1')) set.add(digits.slice(1));
+  }
+  return Array.from(set);
+}
+
+describe('inbound phone matching', () => {
+  it('strips formatting from what Twilio sends', () => {
+    expect(normalisePhoneForMatch('+44 7432 846-353')).toBe('+447432846353');
+  });
+
+  it('converts an international 00 prefix', () => {
+    expect(normalisePhoneForMatch('00447432846353')).toBe('+447432846353');
+  });
+
+  it('finds a UK member stored in national format', () => {
+    expect(phoneMatchCandidates('+447432846353')).toContain('07432846353');
+  });
+
+  it('finds a US member stored without the country code', () => {
+    expect(phoneMatchCandidates('+16506635861')).toContain('6506635861');
+  });
+
+  it('always includes the canonical E.164 form', () => {
+    expect(phoneMatchCandidates('+447432846353')).toContain('+447432846353');
+  });
+
+  it('never guesses a country code for a bare national number', () => {
+    // Guessing would risk matching the wrong person's account.
+    expect(phoneMatchCandidates(normalisePhoneForMatch('07432846353')!)).toEqual(['07432846353']);
+  });
+
+  it('handles an empty caller ID without throwing', () => {
+    expect(normalisePhoneForMatch('')).toBeNull();
+  });
+});

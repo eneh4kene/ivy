@@ -68,6 +68,38 @@ function retellDurationSecs(call: any): number {
   return Math.max(0, Math.round(ms / 1000));
 }
 
+
+/**
+ * Normalise a phone number for matching. Deliberately conservative: strips
+ * formatting only, never guesses a country code.
+ */
+function normalisePhoneForMatch(raw: string): string | null {
+  const stripped = (raw ?? '').replace(/[\s\-().]/g, '');
+  if (!stripped) return null;
+  if (stripped.startsWith('+')) return stripped;
+  if (stripped.startsWith('00')) return `+${stripped.slice(2)}`;
+  return stripped;
+}
+
+/**
+ * Plausible stored spellings of the same number, so a member is found whichever
+ * way their number was written. Matching a fixed candidate list keeps this an
+ * indexed lookup rather than a scan.
+ */
+function phoneMatchCandidates(normalised: string): string[] {
+  const set = new Set<string>([normalised]);
+  if (normalised.startsWith('+')) {
+    const digits = normalised.slice(1);
+    set.add(digits);
+    set.add(`00${digits}`);
+    // UK national form: +447… <-> 07…
+    if (digits.startsWith('44')) set.add(`0${digits.slice(2)}`);
+    // US national form: +1555… <-> 555…
+    if (digits.startsWith('1')) set.add(digits.slice(1));
+  }
+  return Array.from(set);
+}
+
 // Inbound calls are user-initiated and uncapped by nature. This bounds a single
 // user's daily voice spend; scheduled calls have their own cap in call.service.
 const INBOUND_DAILY_CALL_CAP = 8;
@@ -609,15 +641,39 @@ class WebhookController {
 
       logger.info(`Retell inbound call from ${fromNumber} (${retellCallId})`);
 
-      // Identify user by phone number
-      const user = await prisma.user.findUnique({
-        where: { phone: fromNumber },
-        select: { id: true, firstName: true, isActive: true, isOnboarded: true, subscriptionTier: true },
-      });
+      // Identify user by phone number.
+      //
+      // Matched on a normalised form rather than raw equality: the write path
+      // (updateUser) does not normalise, so a member whose number was saved as
+      // "07432 846353" instead of "+447432846353" would fail an exact match and
+      // be treated as a stranger on their own account.
+      const normalisedFrom = normalisePhoneForMatch(fromNumber);
+      const user = normalisedFrom
+        ? await prisma.user.findFirst({
+            where: { phone: { in: phoneMatchCandidates(normalisedFrom) } },
+            select: { id: true, firstName: true, isActive: true, isOnboarded: true, subscriptionTier: true },
+          })
+        : null;
 
       if (!user?.isActive || !user?.isOnboarded) {
-        // Unknown or inactive — connect with base agent, no personalisation
-        res.json({ agent_id: config.retell.agentIds.b2c ?? '' });
+        // Genuine stranger. The number is published nowhere — only people Ivy has
+        // called know it — so there is no first-contact case to protect, and
+        // handing an unidentified caller an open-ended agent was an uncapped
+        // spend on a line anyone could dial. One scripted line and hang up: a few
+        // cents instead of unbounded minutes, and more useful than a generic
+        // agent for the likeliest case (a member ringing from a second line).
+        logger.warn(`Retell inbound from unrecognised number ${fromNumber} — short-answering`);
+        res.json({
+          agent_id: config.retell.agentIds.b2c ?? '',
+          retell_llm_dynamic_variables: {
+            system_prompt:
+              'You are Ivy, an AI accountability coach. The person calling is not recognised. ' +
+              'Say EXACTLY this and then END THE CALL: "Hi — this is Ivy. I only take calls from ' +
+              'members, and I don\'t recognise this number. If you\'re a member, give me a ring from ' +
+              'the phone on your account, or open the app and I\'ll call you. Take care." ' +
+              'Do not answer questions. Do not continue the conversation. Keep it under fifteen seconds.',
+          },
+        });
         return;
       }
 
