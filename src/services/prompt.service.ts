@@ -995,7 +995,12 @@ class PromptService {
   private standingRules(ctx: Record<string, any>): string {
     const sym = curSym(ctx);
     // Name the forfeit/impact destination where relevant; never name success charity as "where the money goes" on a success
-    const forfeitCharityLine = ctx.forfeit_destination
+    // forfeit_destination is populated for EVERY user (it resolves to the
+    // house-default charity), so gating on it alone put "name the forfeit
+    // destination" into the standing rules — which apply to every call type —
+    // for people with nothing to forfeit. Gate on actually having a stake.
+    const hasStake = ctx.stake_today != null || ctx.stake_weekly != null || ctx.foundation_stake != null;
+    const forfeitCharityLine = hasStake && ctx.forfeit_destination
       ? `- Forfeit destination: "${ctx.forfeit_destination}" — name it if the forfeit consequence is relevant to this call.`
       : '';
     const successCharityLine = ctx.success_charity_name
@@ -1017,7 +1022,12 @@ class PromptService {
       `- Keep calls to the target length — and treat targets as CEILINGS, never quotas. When the call's purpose is done, wrap warmly in one line and end; padding to fill time reads as fake.`,
       `- READ THE PICKUP: the first seconds tell you their state. If they sound rushed, distracted, driving, or mid-something ("sorry, just—", background noise, curt answers), name it and offer the out: "Sounds like I caught you mid-thing — want the 20-second version, or shall I ring back?" Never plough through a scheduled agenda at someone who's clearly not there.`,
       `- CLOSE WITH AN OPEN LOOP: end every call naming the specific thing you'll be listening/asking for next time ("tomorrow I want to hear how the 6am session went") — never a generic goodbye`,
-      `- VOICEMAIL: if you hear an answering-machine greeting or a beep instead of a person, say ONE short line ("It's Ivy — I'll catch you properly later") and END THE CALL immediately. Never deliver the session content to a machine.`,
+      // Inbound is wired: both Twilio numbers point at /webhooks/twilio-inbound,
+      // which dials Retell's SIP endpoint, and handleRetellInbound answers with a
+      // prompt built from live DB context. So a returned call reaches Ivy knowing
+      // exactly who is ringing — and the voicemail should say so. "I'll catch you
+      // later" was a dead end on a number that answers.
+      `- VOICEMAIL: if you hear an answering-machine greeting or a beep instead of a person, leave ONE short line and END THE CALL immediately — never deliver the session content to a machine. Say: "It's Ivy. Ring me back on this number when you get a minute and we'll close your day off — otherwise I'll try you again."`,
       `- When the conversation is genuinely done (commitment locked, or a rest day accepted, and you've said goodbye), END THE CALL — use the end_call tool to hang up. Don't keep talking after the goodbye.`,
       '',
       `NEVER:`,
@@ -1065,7 +1075,7 @@ export function coachDeliveryRules(): string {
     `- Imperfections are fine. A short "hm", a self-correction ("actually, no — the better example is—"), trailing off when they've clearly got it. Polished delivery reads as canned.`,
     `- READ THE PICKUP: the first seconds tell you their state. Rushed, driving, mid-session with a client? Name it and offer the out: "You sound mid-something — want the 60-second version, or shall I ring back after your session?" Never plough through an agenda at someone who isn't there.`,
     `- Treat the target length as a CEILING, never a quota. When it's done, wrap in one warm line and end the call — use the end_call tool. Padding reads as fake.`,
-    `- VOICEMAIL: an answering-machine greeting or beep gets ONE short line ("It's Ivy — I'll catch you properly later") and an immediate hang-up. Never deliver session content to a machine.`,
+    `- VOICEMAIL: an answering-machine greeting or beep gets ONE short line and an immediate hang-up — never session content to a machine. Say: "It's Ivy. Ring me back on this number when you get a minute and we'll close your day off — otherwise I'll try you again." Calling back reaches you directly; it is not a dead end.`,
     '',
     `NEVER:`,
     `- Open with "Great!", "Absolutely!", "Of course!" or any filler affirmation`,
