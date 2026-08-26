@@ -38,8 +38,8 @@ const CORE_FEATURES = [
     icon: Shield,
     color: 'text-ember-400',
     bg: 'bg-ember-400/10',
-    label: 'Your stake, your money',
-    desc: "You set the weekly amount. Follow through and keep it. Miss and it goes somewhere you'd hate.",
+    label: 'Your stake, your money (optional)',
+    desc: "Add money whenever you want sharper teeth. You set the amount, you keep it when you follow through.",
   },
   {
     icon: Users,
@@ -59,8 +59,8 @@ const CORE_FEATURES = [
     icon: Heart,
     color: 'text-gold-400',
     bg: 'bg-gold-400/10',
-    label: 'Charity forfeit',
-    desc: "Miss a day and that slice funds a charity you'd hate. Follow through and your money comes back.",
+    label: 'Charity forfeit (if you stake)',
+    desc: "Miss a day with money on it and that slice funds a charity you'd hate. Follow through and it comes back.",
   },
   {
     icon: Sparkles,
@@ -257,12 +257,18 @@ export default function PricingPage() {
               {' · '}no card required{' · '}real system from day one
             </p>
 
-            {/* Stake note */}
-            <div className="mt-5 p-3.5 rounded-xl bg-ember-400/[0.06] border border-ember-400/15 flex gap-2.5">
-              <div className="w-1 rounded-full bg-ember-400 shrink-0" />
+            {/* Optional-stake note.
+                Was an ember-bordered alert reading "Plus your own stake —
+                separately, you put money on the line each week": directly under
+                the price, in the forfeit colour, it read as a second mandatory
+                charge. Staking is opt-in, so that was both the scariest element
+                on the page and untrue. Now sage (the kept/safe colour) and
+                framed as the option it is. */}
+            <div className="mt-5 p-3.5 rounded-xl bg-sage-400/[0.06] border border-sage-400/15 flex gap-2.5">
+              <div className="w-1 rounded-full bg-sage-400 shrink-0" />
               <p className="text-xs text-ink-200 leading-relaxed">
-                <span className="text-ember-400 font-semibold">Plus your own stake</span>
-                {' '}— separately, you put money on the line each week (min {sym}{minStake}). That&apos;s not Ivy&apos;s revenue; it&apos;s yours to keep when you follow through.
+                <span className="text-sage-400 font-semibold">Want teeth? Add a stake</span>
+                {' '}— optional, from {sym}{minStake}/week. It&apos;s never Ivy&apos;s revenue: you keep every penny you follow through on. Start without one and let your word be the stake.
               </p>
             </div>
           </div>
