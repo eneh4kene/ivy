@@ -117,6 +117,50 @@ existing sprint/season architecture — a sponsored 4-week sprint paying out at
 Season Close. Naturally time-boxed, clean start and end, no open-ended
 relationship required.
 
+**Why a brand would actually pay (the strongest framing — founder, 26 Aug):**
+ordinary CSR spend is invisible — money moves, a logo lands in an annual report,
+nobody feels anything. The same budget here produces *"Nike just sent £2 to
+Shelter because you showed up"*: the brand arriving at the moment of
+follow-through, attached to a real person's hard day, in a voice they trust. Not
+a logo impression — **earned** presence in exactly the emotional territory
+sports brands spend billions trying to buy. So the pitch is not "give us your
+CSR budget", it is **"you're spending this anyway; spend it where it does the
+marketing too."** Same money, two outcomes.
+
+Two constraints that come with that:
+- **Attribution must stay quiet or it poisons what it is buying.** The value is
+  that Ivy is *the member's*. "This call brought to you by X" destroys that and
+  the product with it. Attribution belongs at Season Close / the impact story —
+  the ceremonial moment, never the daily one. The restraint IS the asset; a
+  sponsor pushing for more prominence is asking to break what they are paying for.
+- **Marketing value raises the verification bar.** "We funded 4,000 verified kept
+  days" is a claim a sponsor's legal team will audit. Self-reported days will not
+  survive it. This makes the Circles-witness dependency harder, not softer.
+
+**Consent is mandatory, not a nicety (founder, 26 Aug):** members are asked, per
+sponsor, before anything is attached — "Nike will put £2 towards [your charity]
+every day you keep this season. Want that on?" Three reasons it is load-bearing:
+1. **Lawful basis.** A brand's money attached to a person's activity record is
+   third-party commercial processing of personal data. Consent is the clean
+   basis; silent enrolment is not. Disclosure rules apply to brand-funded
+   messaging too.
+2. **It is the difference between being backed and being sold.** The product's
+   premise is that Ivy is on the member's side. Monetising their effort without
+   asking betrays exactly that, and the intimacy is the moat.
+3. **It makes the moment land better.** An accepted sponsorship is agency — "I
+   chose this" — so the later payout reads as something they enabled rather than
+   something done to them. It also gives the sponsor a far better line: *"4,000
+   people chose to have us back them."*
+
+Design notes for when it is built:
+- Frame around the MEMBER'S charity and the member's days; the brand is the
+  payer, not the subject. They already choose the charity (`successCharityId`).
+- **Per-sponsor consent, never blanket.** A member must be able to decline one
+  brand and accept another — a soft-drink brand sponsoring fitness follow-through
+  is a real credibility conflict for the member and for us, in a way Nike is not.
+- Declining costs nothing, is never re-asked aggressively, and is never offered
+  during a pause/hardship moment.
+
 **Trigger to build: witnessed (circle-verified) kept days exist AND a first
 insurer/employer conversation is live.**
 
