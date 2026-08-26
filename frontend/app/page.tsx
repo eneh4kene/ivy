@@ -3,7 +3,9 @@
 /**
  * Landing page — stake-rework model.
  *
- * The product is a commitment device: you stake your own money each week,
+ * The product is a commitment device: you say the day's commitment out loud each
+ * morning and answer for it on an evening call. Staking your own money is the
+ * optional upgrade, not the entry price.
  * arm it every morning with a spoken voice note, and Ivy calls you in the
  * evening to settle. Follow through → keep it. Miss → it forfeits to a
  * charity you'd hate to fund.
@@ -49,8 +51,11 @@ const LOOP = [
     bg: 'bg-ember-400/10',
     ring: 'border-ember-400/20',
     time: 'All day',
-    title: 'The stake holds',
-    desc: 'Your own money is on the line this week. Knowing it\'s sitting there — yours to keep or lose — is what gets you off the couch.',
+    // The middle beat has to be true for everyone. Money is opt-in, so framing
+    // the whole day around "your money is on the line" describes a minority and
+    // leaves the default user with a two-beat loop and a gap in the middle.
+    title: 'It sits with you',
+    desc: 'You said it out loud and someone is going to ask. That quiet pressure is the point — and if you want it sharper, your own money rides on it too.',
   },
   {
     icon: Moon,
@@ -64,22 +69,12 @@ const LOOP = [
 ]
 
 // ── What you get ──────────────────────────────────────────────────────────────
+// Deliberately does NOT repeat the daily loop above. "Voice-note arming",
+// "Real stakes" and "Evening review call" were the same three beats renamed, so
+// the page explained its own mechanic three times — once in the hero, once in
+// the loop, once here. These are the things the loop section doesn't cover.
 const PILLARS = [
-  {
-    icon: Mic,
-    color: 'text-gold-400',
-    bg: 'bg-gold-400/10',
-    title: 'Voice-note arming',
-    desc: 'Saying it out loud is the commitment. Every morning, in your own voice.',
-  },
-  {
-    icon: Shield,
-    color: 'text-ember-400',
-    bg: 'bg-ember-400/10',
-    title: 'Real stakes',
-    desc: 'Your money, your risk. Miss and it funds a charity you\'d hate. That\'s the teeth.',
-  },
-  {
+    {
     icon: Users,
     color: 'text-gold-400',
     bg: 'bg-gold-400/10',
@@ -93,14 +88,7 @@ const PILLARS = [
     title: 'Seasons & sprints',
     desc: '12-week arcs in 4-week sprints. A goal big enough to matter, broken into reachable steps.',
   },
-  {
-    icon: Phone,
-    color: 'text-gold-400',
-    bg: 'bg-gold-400/10',
-    title: 'Evening review call',
-    desc: 'Ivy calls you. Not a notification you swipe away — a conversation that closes the loop.',
-  },
-  {
+    {
     icon: Heart,
     color: 'text-gold-400',
     bg: 'bg-gold-400/10',
@@ -167,18 +155,21 @@ export default function LandingPage() {
             </div>
 
             <h1 className="font-display text-5xl sm:text-6xl text-ink-50 tracking-tight leading-[1.06] mb-6">
-              Your commitment,<br />
-              <em className="text-gradient-gold">kept alive.</em>
+              Say it out loud.<br />
+              <em className="text-gradient-gold">Then actually do it.</em>
             </h1>
 
+            {/* States what happens to EVERY user. Money is opt-in now, so leading
+                with "you stake your own money" promised a mechanic most people
+                will never turn on. */}
             <p className="text-lg text-ink-300 max-w-xl mx-auto lg:mx-0 mb-6 leading-relaxed">
-              You stake your own money on showing up. Every day you keep, your ivy grows a leaf.
-              Ivy calls you each evening to settle — follow through and keep your money, miss and
-              that day&apos;s slice goes to charity.
+              Every morning you name the one thing you&apos;re doing — out loud, in your own voice.
+              Every evening Ivy calls to find out whether you did it. Not a notification.
+              A conversation you have to answer to.
             </p>
 
             <p className="inline-block font-mono text-[11px] uppercase tracking-[0.24em] text-ink-400 border border-ink-600/70 rounded-lg px-3.5 py-2 mb-9">
-              Miss a day <span className="text-ember-400">&amp; a leaf falls · −{sym}2.33</span>
+              Want teeth? <span className="text-ember-400">Put your own money on it · from {sym}7/wk</span>
             </p>
 
             <div className="flex flex-col sm:flex-row gap-3 justify-center lg:justify-start">
@@ -202,7 +193,7 @@ export default function LandingPage() {
           <div className="order-1 lg:order-2 relative">
             <IvyVine days={DEMO_WEEK} className="mx-auto h-64 sm:h-80 w-auto" />
             <p className="text-center font-display text-[15px] text-sage-300 -mt-2">
-              Four days kept. Tonight&apos;s leaf is budding.
+              Four days kept this week. Tonight decides the fifth.
             </p>
           </div>
         </div>
@@ -283,7 +274,7 @@ export default function LandingPage() {
                 <span className="text-base text-ink-400">/mo</span>
               </div>
               <p className="text-sm text-ink-400 mt-2 max-w-sm leading-relaxed">
-                One plan. Everything included. Plus your own weekly stake (min {sym}{minStake}) — that&apos;s your money to keep, not Ivy&apos;s revenue.
+                One plan. Everything included. Add a stake if you want teeth (from {sym}{minStake}/wk) — that money stays yours to keep, it&apos;s never Ivy&apos;s revenue.
               </p>
             </div>
 
