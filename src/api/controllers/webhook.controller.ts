@@ -217,6 +217,15 @@ class WebhookController {
                 .then(({ default: commitmentTimeService }) =>
                   commitmentTimeService.captureFromText(dbUserId, call.transcript, 'call'))
                 .catch(() => {});
+
+              // An agreed adjustment has to reach the record, or the member says
+              // yes to moving Thursdays and the same reminders fire at the same
+              // times against the plan that already failed. Logistics only —
+              // never programme. Fire-and-forget, same as above.
+              import('../../services/plan-adjustment.service')
+                .then(({ default: planAdjustmentService }) =>
+                  planAdjustmentService.captureFromTranscript(dbUserId, call.transcript))
+                .catch(() => {});
             }
 
             // Keep Ivy's word: if the user asked to be called back, schedule it.

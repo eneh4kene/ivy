@@ -176,6 +176,7 @@ const FLOWS: Record<string, FlowFn> = {
       `   After near-miss (if morning_context suggests hesitation): "You almost didn't, but you did. That's the hard part."`,
       '',
       `2. Optional quick reflection: "How was it?" — brief, not required. Don't force it.`,
+      `   HARVEST (only if they have a recurring blocker AND today was one of those usual friction days — otherwise skip; a kept day is not an interview): "What was different about today?" Listen for the mechanism — time of day, place, who they were with, how they started — and reflect it back as a reusable rule: "So mornings are the unlock. Worth protecting that." One question. If they shrug, drop it.`,
       '',
       `3. Tomorrow: "What's the plan?" Seed it lightly — don't over-plan.`,
     ].filter(Boolean).join('\n');
@@ -216,6 +217,7 @@ const FLOWS: Record<string, FlowFn> = {
       `2. If early enough in the evening: "Anything small you could do tonight?" Offer the minimum.`,
       `3. If day is done: "Rest day it is."`,
       forfeitLine ? `4. ${forfeitLine}` : '',
+      `4b. If this is the SECOND OR LATER miss for the same reason, do not go straight to "what's the plan tomorrow" — that asks them to re-commit to a plan that has now failed twice. Propose the change first (see RECURRING BLOCKERS), get agreement, and let the agreed new arrangement BE tomorrow's commitment.`,
       `5. RESET: "Tomorrow — what's the plan?" Get a specific intention.`,
       gift ? `6. ${gift}` : '',
       '',
@@ -247,7 +249,7 @@ const FLOWS: Record<string, FlowFn> = {
       `1. Honour it immediately: "You planned [full] but did [partial]. That counts. Partial is infinitely better than zero."`,
       `2. ${stakeConfirm}`,
       `3. "What happened that cut it short?" — brief, curious, not accusatory.`,
-      `4. "Tomorrow — full session or adjusted plan?"`,
+      `4. USE what they just said. If the same thing has cut sessions short before, name it and propose the adjustment (see RECURRING BLOCKERS) rather than asking them to re-commit to the plan that keeps breaking. First time: "Tomorrow — full session, or adjust for the same problem?"`,
     ].join('\n');
   },
 
@@ -943,7 +945,15 @@ class PromptService {
         .slice(0, 3)
         .map((b: any) => `"${b.blocker}" (${b.times_seen}x)`)
         .join(', ');
-      lines.push(`RECURRING BLOCKERS with real counts: ${bl}. When one comes up again, you may name the count plainly — "that's the ${'$'}{n}th time" lands harder than vague pattern talk. Once, as an observation, never as a scolding.`);
+      // Naming a pattern and then asking for tomorrow's plan is reporting, not
+      // coaching — it asks someone to re-commit to a plan that has already
+      // failed N times. Name it once, then propose ONE change and get an answer.
+      const coachGuard = ctx.coach_name
+        ? ` ADJUST LOGISTICS ONLY — time, day, place, order, or the minimum. NEVER change what the training itself is: that is ${ctx.coach_name}'s call. If they want the programme changed: "that's one for ${ctx.coach_name} — tell them what you told me."`
+        : ' ADJUST LOGISTICS ONLY — time, day, place, order, or the minimum. Change the plan around the commitment before changing the commitment.';
+      lines.push(
+        `RECURRING BLOCKERS with real counts: ${bl}. When one surfaces again, do NOT merely name it. Name it once plainly ("that's the 3rd time work has eaten the evening"), then PROPOSE ONE CONCRETE ADJUSTMENT and get a yes or no: "So Thursdays don't work after six — want to try Thursday mornings, or make Thursday a rest day and move the session to Friday?" Offer a choice of two, never an open question: someone tired at 9pm cannot design a solution, but they can pick one. If they decline both, accept it at once and ask what they think would work; never propose the same adjustment twice if it was refused. If they agree, say the new arrangement back to them in one sentence so it is unambiguous.${coachGuard}`
+      );
     }
     if (ctx.preferred_register && ctx.preferred_register !== 'direct') {
       const reg: Record<string, string> = {
