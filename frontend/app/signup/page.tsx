@@ -50,6 +50,10 @@ function SignupForm() {
     if (typeof window !== 'undefined') {
       if (isCoach) window.localStorage.setItem('ivy_coach_intent', '1')
       else window.localStorage.removeItem('ivy_coach_intent')
+      // Same reason as the coach-intent flag: the magic-link round trip drops the
+      // query string, and a promo the coach was sent should still apply when
+      // they land on /coach/join.
+      if (promoCode) window.localStorage.setItem('ivy_promo', promoCode)
     }
     try {
       // Create user account

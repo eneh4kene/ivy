@@ -91,7 +91,13 @@ function CoachJoinInner() {
     setStarting(true)
     setError('')
     try {
-      const { url } = await paymentsApi.createCoachCheckoutSession(user?.currency ?? 'GBP')
+      // The promo arrives on /signup?as=coach&promo=… but the magic-link round
+      // trip loses the query string, so signup stashes it. Without this a coach
+      // meets the full £79 and has to know to type a code nobody told them about.
+      const promo = typeof window !== 'undefined'
+        ? (new URLSearchParams(window.location.search).get('promo') ?? window.localStorage.getItem('ivy_promo') ?? undefined)
+        : undefined
+      const { url } = await paymentsApi.createCoachCheckoutSession(user?.currency ?? 'GBP', promo || undefined)
       if (url) {
         window.location.href = url
         return

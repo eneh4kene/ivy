@@ -82,6 +82,22 @@ class CoachService {
         subscriptionTier: true,
         lastCallAt: true,
         telegramChatId: true,
+        // Programme-adjacent scheduling only. A coach sets the programme and Ivy
+        // now adjusts logistics around it from calls (plan-adjustment.service),
+        // so without this the coach cannot see that their client moved training
+        // days — the promise Ivy makes on the first call is "what I see gets back
+        // to your coach".
+        //
+        // Deliberately NOT armingWindowStart/End: that is closer to "when this
+        // person wakes up" than to the programme, and belongs to the member.
+        preferredDays: true,
+        eveningCallTime: true,
+        workouts: {
+          where: { status: 'PLANNED', plannedDate: { gte: new Date() } },
+          orderBy: { plannedDate: 'asc' },
+          take: 1,
+          select: { activity: true, plannedDate: true, plannedTime: true },
+        },
         streaks: { select: { currentStreak: true, longestStreak: true } },
         calls: {
           where: { status: { in: ['COMPLETED', 'NO_ANSWER'] } },
@@ -102,6 +118,21 @@ class CoachService {
 
     return clients.map((c) => ({
       ...c,
+      // Presented as a readable schedule rather than raw config — the coach
+      // needs "trains Mon/Wed/Fri, next session Tuesday 10:00", not a settings dump.
+      trainingDays: (() => {
+        try {
+          const d = c.preferredDays ? (JSON.parse(c.preferredDays) as string[]) : null;
+          return d?.length ? d : null;
+        } catch { return null; }
+      })(),
+      nextSession: c.workouts?.[0]
+        ? {
+            activity: c.workouts[0].activity,
+            date: c.workouts[0].plannedDate,
+            time: c.workouts[0].plannedTime,
+          }
+        : null,
       currentStreak: c.streaks?.currentStreak ?? 0,
       lastCallSentiment: c.calls[0]?.sentiment ?? null,
       recentMissedCount: c.calls.filter((call) => call.status === 'NO_ANSWER').length,

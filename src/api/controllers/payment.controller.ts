@@ -71,13 +71,14 @@ class PaymentController {
       const userId = req.user?.id;
       if (!userId) { res.status(401).json({ success: false, error: 'Unauthorized' }); return; }
 
-      const { currency, successUrl, cancelUrl } = req.body;
+      const { currency, successUrl, cancelUrl, promoCode } = req.body;
 
       const session = await paymentService.createCoachCheckoutSession(
         userId,
         successUrl || `${process.env.FRONTEND_URL}/coach/join?from=checkout`,
         cancelUrl || `${process.env.FRONTEND_URL}/coach/join`,
         currency || 'GBP',
+        promoCode,
       );
       res.json({ success: true, data: session });
     } catch (err) { next(err); }

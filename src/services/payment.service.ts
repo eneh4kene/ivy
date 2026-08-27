@@ -265,11 +265,29 @@ class PaymentService {
     successUrl: string,
     cancelUrl: string,
     currency: Currency = 'GBP',
+    promoCode?: string,
   ) {
     if (!this.stripe) throw new BadRequestError('Payment service not configured');
 
     const priceId = process.env[`STRIPE_PRICE_COACH_${currency}`];
     if (!priceId) throw new BadRequestError(`Coach price not configured: STRIPE_PRICE_COACH_${currency}`);
+
+    // Same resolution as the consumer checkout. Stripe rejects `discounts` and
+    // `allow_promotion_codes` together, so it is one or the other.
+    let coachDiscounts: { promotion_code: string }[] | undefined;
+    if (promoCode && this.stripe) {
+      try {
+        const found = await this.stripe.promotionCodes.list({ code: promoCode, active: true, limit: 1 });
+        if (found.data.length > 0) {
+          coachDiscounts = [{ promotion_code: found.data[0].id }];
+          logger.info(`Coach promo code applied: ${promoCode}`);
+        } else {
+          logger.warn(`Coach promo code not found or inactive: ${promoCode}`);
+        }
+      } catch (err) {
+        logger.warn(`Coach promo lookup failed: ${promoCode}`, err);
+      }
+    }
 
     const user = await prisma.user.findUnique({ where: { id: userId } });
     if (!user) throw new NotFoundError('User not found');
@@ -287,7 +305,11 @@ class PaymentService {
       payment_method_types: ['card'],
       currency: currency.toLowerCase(),
       line_items: [{ price: priceId, quantity: 1 }],
-      allow_promotion_codes: true,
+      // A promo carried from the signup link is applied for them. The manual
+      // field stays for anyone who types one in — but a coach who reaches the
+      // £79 wall without realising a code exists is exactly who churns, and
+      // "they were supposed to type IVYBETA" is not a funnel.
+      ...(coachDiscounts ? { discounts: coachDiscounts } : { allow_promotion_codes: true }),
       // Same beta path as the consumer checkout: 100%-off code → no card entry.
       payment_method_collection: 'if_required',
       subscription_data: {
