@@ -77,3 +77,52 @@ describe('unarmed day handling', () => {
     expect(p).not.toMatch(/didn't say it out loud/i);
   });
 });
+
+/**
+ * Coach context on every call.
+ *
+ * The schema says coachNotes are "notes Ivy surfaces in calls", but they used to
+ * reach only the onboarding prompt — read once on day one and never again. The
+ * boundary matters as much as the presence: these steer what she ASKS, and must
+ * never turn her into a second opinion on the programme.
+ */
+describe('coach context', () => {
+  const coached = {
+    ...base,
+    coach_name: 'Joe',
+    coach_programme: '3-day upper/lower split',
+    coach_notes: 'Watch his shoulder — he will push through pain',
+    todays_workout_status: 'COMPLETED',
+    armed_today: true,
+  };
+
+  it('reaches an ordinary evening call, not just onboarding', () => {
+    const p = promptService.buildSystemPrompt('EVENING_REVIEW', coached, false);
+    expect(p).toContain('COACH CONTEXT');
+    expect(p).toContain('3-day upper/lower split');
+  });
+
+  it('uses the coach notes to steer, and forbids quoting them', () => {
+    const p = promptService.buildSystemPrompt('EVENING_REVIEW', coached, false);
+    expect(p).toMatch(/steer what you ask/i);
+    expect(p).toMatch(/never quote them back/i);
+  });
+
+  it('hands programme decisions back to the coach', () => {
+    const p = promptService.buildSystemPrompt('EVENING_REVIEW', coached, false);
+    expect(p).toMatch(/that's Joe's call/i);
+    expect(p).toMatch(/never re-explain, adjudicate or second-guess/i);
+  });
+
+  it('says nothing about a coach for a member who has none', () => {
+    const p = promptService.buildSystemPrompt('EVENING_REVIEW', { ...base, todays_workout_status: 'COMPLETED', armed_today: true }, false);
+    expect(p).not.toContain('COACH CONTEXT');
+  });
+
+  it('handles a coach who has written no notes yet', () => {
+    const { coach_notes, coach_programme, ...noNotes } = coached;
+    const p = promptService.buildSystemPrompt('EVENING_REVIEW', noNotes, false);
+    // Nothing useful to steer with — stay silent rather than emit an empty header.
+    expect(p).not.toContain('COACH CONTEXT');
+  });
+});

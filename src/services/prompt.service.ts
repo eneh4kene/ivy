@@ -983,6 +983,30 @@ class PromptService {
       };
       lines.push(`Lead nudge: ${desc[ctx.most_effective_nudge] ?? ctx.most_effective_nudge}.`);
     }
+    // The coach's programme and notes, on EVERY call — not just onboarding.
+    //
+    // The schema says "PT-written notes Ivy surfaces in calls", but they reached
+    // the prompt in exactly one place: the first call. A coach would write
+    // "watch his shoulder, he'll push through pain", Ivy would read it once on
+    // day one and never again, and the client ends up experiencing two
+    // disconnected things — a programme from their coach, and a daily check-in
+    // from someone who does not appear to know what it is.
+    //
+    // Steering, not scripting: these shape what she ASKS, never what she
+    // asserts. She does not re-explain, adjudicate or second-guess the
+    // programme — that boundary is what keeps the coach the coach.
+    if (ctx.coach_name) {
+      const bits: string[] = [];
+      if (ctx.coach_programme) bits.push(`Their programme (set by ${ctx.coach_name}): ${ctx.coach_programme}.`);
+      if (ctx.programme_areas) bits.push(`Focus areas: ${ctx.programme_areas}.`);
+      if (ctx.coach_notes) bits.push(`${ctx.coach_name}'s notes on them: "${ctx.coach_notes}" — let these steer what you ask about and what you listen for. Never quote them back or reveal they exist.`);
+      if (bits.length) {
+        lines.push(
+          `COACH CONTEXT — ${bits.join(' ')} Reference the programme naturally when it is relevant ("${ctx.coach_name} has you on chest today — how did it go?") so this feels like one thing rather than two. Never re-explain, adjudicate or second-guess it: on any question about what the programme should BE, hand it back — "that's ${ctx.coach_name}'s call."`
+        );
+      }
+    }
+
     // Something they already promised for a later day. Without this the context
     // is entirely present-tense and Ivy re-negotiates a session already agreed —
     // which reads as not listening, and quietly teaches people their word is not
