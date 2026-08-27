@@ -163,6 +163,10 @@ export default function SettingsPage() {
 
   const [preferencesData, setPreferencesData] = useState({
     morningCallTime: user?.morningCallTime || '07:00',
+    // Opt-in by design: the default morning ritual is the async voice note, not
+    // a live call. Nothing could set this before, so the time picker below was a
+    // control that did nothing.
+    morningCallOptIn: user?.morningCallOptIn ?? false,
     eveningCallTime: user?.eveningCallTime || '20:00',
     callFrequency: user?.callFrequency || 7,
     track: user?.track || 'fitness',
@@ -195,6 +199,7 @@ export default function SettingsPage() {
       })
       setPreferencesData({
         morningCallTime: user.morningCallTime || '07:00',
+        morningCallOptIn: user.morningCallOptIn ?? false,
         eveningCallTime: user.eveningCallTime || '20:00',
         callFrequency: user.callFrequency || 7,
         track: user.track || 'fitness',
@@ -487,6 +492,7 @@ export default function SettingsPage() {
                 <Input
                   type="time"
                   value={preferencesData.morningCallTime}
+                  disabled={!preferencesData.morningCallOptIn}
                   onChange={(e) => setPreferencesData({ ...preferencesData, morningCallTime: e.target.value })}
                 />
               </div>
@@ -498,6 +504,26 @@ export default function SettingsPage() {
                   onChange={(e) => setPreferencesData({ ...preferencesData, eveningCallTime: e.target.value })}
                 />
               </div>
+            </div>
+
+            {/* The morning call is opt-in: the default is the spoken voice note,
+                which is the commitment mechanic. Without this control the time
+                picker above was inert — a designed feature no user could reach. */}
+            <div className="flex items-start gap-3 rounded-xl border border-border p-3">
+              <input
+                id="morning-call-optin"
+                type="checkbox"
+                className="mt-1"
+                checked={preferencesData.morningCallOptIn}
+                onChange={(e) => setPreferencesData({ ...preferencesData, morningCallOptIn: e.target.checked })}
+              />
+              <label htmlFor="morning-call-optin" className="text-sm leading-snug">
+                <span className="font-medium">Also call me in the morning</span>
+                <span className="block text-xs text-muted-foreground mt-0.5">
+                  Off by default — your morning is the voice note, which is the commitment itself.
+                  Turn this on only if you want Ivy to ring you as well.
+                </span>
+              </label>
             </div>
             <div className="space-y-1.5">
               <label className="text-sm font-medium">Calls per Week</label>

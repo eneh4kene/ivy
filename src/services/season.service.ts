@@ -175,8 +175,25 @@ class SeasonService {
       prisma.sprint.findUnique({ where: { id: sprintId }, select: { number: true } }),
     ]);
 
+    // Only promise a story that exists. This push says "[charity] has a message
+    // for you about what your follow-through funded" and links to /donations —
+    // but impactStoryService.createStory is not wired to anything, there are no
+    // ImpactStory rows, and no route serves them. So a member finished a sprint,
+    // was told their charity had written to them, tapped through and found
+    // nothing: a broken promise at the exact moment they'd done well.
+    //
+    // Gated rather than deleted, so the notification starts working by itself
+    // the day stories are actually created.
     if (user?.preferredCharity) {
-      await sendPushToUser(userId, pushTemplates.impactStory(user.preferredCharity.name)).catch(() => {});
+      const hasStory = await prisma.impactStory.findFirst({
+        where: { userId },
+        select: { id: true },
+      }).catch(() => null);
+      if (hasStory) {
+        await sendPushToUser(userId, pushTemplates.impactStory(user.preferredCharity.name)).catch(() => {});
+      } else {
+        logger.info(`Impact-story push skipped for ${userId} — no story exists to link to`);
+      }
     }
 
     // If user is in a Circle, create/ensure a sprint session is scheduled

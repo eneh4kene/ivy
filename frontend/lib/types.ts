@@ -28,6 +28,7 @@ export interface User {
   commStyle: CommStyle
   circleOptIn: boolean
   morningCallTime?: string
+  morningCallOptIn?: boolean
   eveningCallTime?: string
   callFrequency: number
   preferredDays?: string
@@ -306,6 +307,7 @@ export interface UpdateProfileInput {
   commStyle?: CommStyle
   circleOptIn?: boolean
   morningCallTime?: string
+  morningCallOptIn?: boolean
   eveningCallTime?: string
   callFrequency?: number
   preferredDays?: string

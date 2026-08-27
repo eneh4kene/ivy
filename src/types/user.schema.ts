@@ -34,6 +34,11 @@ export const updateUserSchema = z.object({
     circleOptIn: z.boolean().optional(),
     preferredCharityId: z.string().uuid().optional(),
     morningCallTime: z.string().regex(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/).optional(), // HH:MM
+    // The live morning call is opt-in by design (§1c — the default loop is the
+    // async voice note). But nothing anywhere could set this, so the branch in
+    // scheduleDailyCalls that checks it was unreachable: a designed feature that
+    // could never happen for any user.
+    morningCallOptIn: z.boolean().optional(),
     eveningCallTime: z.string().regex(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/).optional(), // HH:MM
     callFrequency: z.number().min(1).max(7).optional(), // 1-7 calls per week
     preferredDays: z.string().optional(), // JSON array
