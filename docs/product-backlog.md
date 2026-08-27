@@ -177,6 +177,36 @@ Design notes for when it is built:
 
 ---
 
+### 7. Wearable corroboration (Strava) — the only hard-evidence route, and only for fitness
+**Parked 27 Aug 2026.** The strongest verification available, deliberately NOT
+built yet: it is real integration work for a customer who does not exist.
+
+**Apple Health is OFF THE TABLE.** HealthKit requires a native iOS app; Ivy is a
+PWA (`next-pwa`, `manifest.json`). Any "just read Apple Health" suggestion means
+shipping a native app first — a far larger decision than verification.
+
+**So the realistic option is Strava** (web OAuth, activity webhooks). Google Fit /
+Fitbit are possible but smaller populations for this audience.
+
+**What it would take:** OAuth connect + token refresh, activity ingest
+(webhook or poll), and matching an activity to a kept day within a time window.
+The matching is the fiddly part — a run at 6pm against a day armed at 07:00 with
+a 20:00 check-in — and false negatives are worse than false positives here,
+because telling an honest member their real session "doesn't count" is the
+fastest way to lose them.
+
+**Only covers one track.** Fitness has wearables; focus, sleep and balance
+largely do not. So this can never be the whole verification story — it is a
+premium tier, not a floor. Sponsors pay more for corroborated days; everyone
+else still has accounted days (see integrity.service).
+
+**Trigger to build: a sponsor or insurer explicitly asks for corroboration
+beyond accounted days.** Not before — the accounted-days framing plus anomaly
+signals is enough for a first conversation, and building an integration for a
+hypothetical buyer is how the last two months of unreachable features happened.
+
+---
+
 ## THE ALIVE/VIRAL QUEUE (founder-endorsed direction, sequenced after beta data)
 
 4. **Season garden** — each settled week becomes a permanent plant; your history is a

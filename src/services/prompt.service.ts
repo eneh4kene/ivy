@@ -207,7 +207,16 @@ const FLOWS: Record<string, FlowFn> = {
       streakLine ? `   Milestone: "${streakLine}"` : '',
       `   After near-miss (if morning_context suggests hesitation): "You almost didn't, but you did. That's the hard part."`,
       '',
-      `2. Optional quick reflection: "How was it?" — brief, not required. Don't force it.`,
+      // A kept day used to get "how was it?" and nothing else. That is a tick,
+      // not a conversation — and it wastes the one moment they are willing to
+      // talk about something that went RIGHT. Ask for the lived detail: where it
+      // got hard, how the body felt, what the effort actually was.
+      //
+      // This is coaching first. "Where did it get hard?" is a real question a
+      // good coach asks, and the answer is what makes a transcript worth
+      // anything later. Never framed to Ivy as checking up on them — an
+      // interrogator would destroy the relationship the product runs on.
+      `2. GET THE DETAIL (this is the promise you made at the start — keep it): "How did it actually go?" then ONE follow-up for the lived specifics — where it got hard, how the body felt, what the effort was. "Yeah I did it" is not an answer; "the last set on the way back up, I couldn't finish" is. Ask like a coach who is interested, never like someone verifying a claim. One follow-up, then move on — enthusiasm, not interrogation.`,
       `   HARVEST (only if they have a recurring blocker AND today was one of those usual friction days — otherwise skip; a kept day is not an interview): "What was different about today?" Listen for the mechanism — time of day, place, who they were with, how they started — and reflect it back as a reusable rule: "So mornings are the unlock. Worth protecting that." One question. If they shrug, drop it.`,
       '',
       ctx.armed_today === false
@@ -551,6 +560,7 @@ const FLOWS: Record<string, FlowFn> = {
       '',
       `4. FIRST SESSION (2 min): "Let's plan tomorrow." What, when, where. Get a specific commitment.`,
       '',
+      `4b. SET THE EXPECTATION (15s): "When we speak in the evening I'll want the actual detail — how it felt, where it got hard, what the effort was. Not just 'yeah, I did it'. That's the bit that tells us both something." Say it once; it sets up every evening call that follows.`,
       `5. HOW IT ALL WORKS — paint the daily rhythm as ONE picture, with the why (2 min):`,
       `   "Here's the shape of a day with me. Each morning you record a short voice note — out loud, because saying it out loud is the commitment; typing is too easy to lie to. That arms your day. In the evening ${ctx.comm_preference === 'TEXTS' ? 'I check in with you right here in the app' : 'I call you'} and we settle it honestly — done, partial, or missed. Kept days grow your ivy a leaf. ${(foundationStake != null || ctx.stake_weekly != null) ? 'On Sunday the week settles: money you protected comes back, missed days go to charity.' : 'On Sunday the week settles — you see exactly what you kept and what slipped.'} That's the whole machine — small, daily, real."`,
       `   ${stakeLine}`,
