@@ -433,6 +433,15 @@ class CallService {
     //   - MIDDLE mode → house-default charity (a vetted charity the user did NOT choose)
     //   - SAVAGE mode → the charity they actively dislike
     // success_charity_name: their preferred charity (for Phase-6 corporate success donations)
+    // The next session they've already committed to on a LATER day. Without this
+    // the context is entirely present-tense: a member reschedules to Tuesday,
+    // and the next call has no idea a session is owed.
+    const upcomingSession = await prisma.workout.findFirst({
+      where: { userId, status: 'PLANNED', plannedDate: { gt: endOfDay(now) } },
+      orderBy: { plannedDate: 'asc' },
+      select: { activity: true, plannedDate: true, plannedTime: true },
+    }).catch(() => null);
+
     const stake_weekly = user?.stakeWeeklyAmount != null
       ? Number(user.stakeWeeklyAmount)
       : null;
@@ -591,6 +600,12 @@ class CallService {
       todays_plan: todaysWorkout?.activity ?? null,
       workout_time: todaysWorkout?.plannedTime ?? null,
       todays_workout_status: todaysOutcome?.status ?? null,  // used for evening sub-typing
+
+      // Forward-looking: what they already promised for a later day, so Ivy can
+      // hold them to it rather than re-negotiating something already agreed.
+      next_session: upcomingSession
+        ? `${upcomingSession.activity}${upcomingSession.plannedTime ? ` at ${upcomingSession.plannedTime}` : ''} on ${upcomingSession.plannedDate.toLocaleDateString('en-GB', { weekday: 'long', timeZone: user?.timezone || 'Europe/London' })}`
+        : null,
       day_of_week: now.toLocaleDateString('en-US', { weekday: 'long' }),
       days_since_workout,
       previous_streak: streak?.longestStreak ?? 0,

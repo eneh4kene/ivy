@@ -935,6 +935,13 @@ class PromptService {
       };
       lines.push(`Lead nudge: ${desc[ctx.most_effective_nudge] ?? ctx.most_effective_nudge}.`);
     }
+    // Something they already promised for a later day. Without this the context
+    // is entirely present-tense and Ivy re-negotiates a session already agreed —
+    // which reads as not listening, and quietly teaches people their word is not
+    // being tracked.
+    if (ctx.next_session) {
+      lines.push(`ALREADY COMMITTED: ${ctx.next_session}. They said this themselves — hold them to it rather than re-negotiating it. Reference it naturally when the future comes up ("you've got ${ctx.next_session} — still good?"), never as though hearing it for the first time.`);
+    }
     const risks = Array.isArray(ctx.high_risk_signals) ? ctx.high_risk_signals : [];
     if (risks.length) {
       lines.push(`Listen for: ${risks.join(', ')} — these precede misses. Probe gently if you hear them.`);

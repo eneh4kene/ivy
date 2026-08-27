@@ -226,6 +226,14 @@ class WebhookController {
                 .then(({ default: planAdjustmentService }) =>
                   planAdjustmentService.captureFromTranscript(dbUserId, call.transcript))
                 .catch(() => {});
+
+              // "I'll do legs Tuesday at 10" — the commonest thing said on an
+              // evening call, and previously captured by nothing: commitment-time
+              // only handles today, plan-adjustment only permanent patterns.
+              import('../../services/future-commitment.service')
+                .then(({ default: futureCommitmentService }) =>
+                  futureCommitmentService.captureFromTranscript(dbUserId, call.transcript))
+                .catch(() => {});
             }
 
             // Keep Ivy's word: if the user asked to be called back, schedule it.
