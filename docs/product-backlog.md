@@ -161,8 +161,19 @@ Design notes for when it is built:
 - Declining costs nothing, is never re-asked aggressively, and is never offered
   during a pause/hardship moment.
 
-**Trigger to build: witnessed (circle-verified) kept days exist AND a first
-insurer/employer conversation is live.**
+**Trigger to build (two conditions, both required):**
+1. **Witnessed (circle-verified) kept days exist.** Non-negotiable, whoever the
+   payer is — and note the marketing framing makes this HARDER, not softer,
+   because a sponsor claiming "we funded 4,000 verified kept days" has lawyers
+   who will check.
+2. **A first real payer conversation is live** — an insurer, an employer, OR a
+   brand/CSR conversation. The brand route was originally ruled the wrong first
+   customer on sales-cycle and brand-safety grounds, and that reasoning still
+   stands for cold outreach to a Coca-Cola. But an inbound brand conversation
+   changes the maths entirely: the marketing framing above ("you're spending
+   this anyway; spend it where it does the marketing too") is a stronger pitch
+   than the charity one, and a warm brand beats a cold insurer. Do not chase
+   brands — but do not turn one away either.
 
 ---
 
