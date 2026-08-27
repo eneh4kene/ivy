@@ -433,6 +433,33 @@ class CallService {
     //   - MIDDLE mode → house-default charity (a vetted charity the user did NOT choose)
     //   - SAVAGE mode → the charity they actively dislike
     // success_charity_name: their preferred charity (for Phase-6 corporate success donations)
+    // Arming facts. The VN is the keystone: no voice note means no armed day,
+    // no kept day, no streak and no stake protection — so a ritual that quietly
+    // erodes reads downstream as failure, and the member churns believing the
+    // product didn't work when they simply stopped doing the one thing that
+    // makes it work. Without these, an unarmed day and a skipped workout arrive
+    // at the evening call looking identical.
+    const armingFacts = await (async () => {
+      try {
+        const [todayArmed, weekWorkouts] = await Promise.all([
+          prisma.workout.findFirst({
+            where: { userId, plannedDate: { gte: startOfDay(now), lte: endOfDay(now) } },
+            select: { armedAt: true },
+          }),
+          prisma.workout.findMany({
+            where: { userId, plannedDate: { gte: weekAgo, lt: startOfDay(now) } },
+            select: { armedAt: true },
+          }),
+        ]);
+        return {
+          armed_today: todayArmed ? todayArmed.armedAt != null : null,
+          unarmed_days_7d: weekWorkouts.filter((w) => w.armedAt == null).length,
+        };
+      } catch {
+        return { armed_today: null, unarmed_days_7d: 0 };
+      }
+    })();
+
     // The next session they've already committed to on a LATER day. Without this
     // the context is entirely present-tense: a member reschedules to Tuesday,
     // and the next call has no idea a session is owed.
@@ -600,6 +627,10 @@ class CallService {
       todays_plan: todaysWorkout?.activity ?? null,
       workout_time: todaysWorkout?.plannedTime ?? null,
       todays_workout_status: todaysOutcome?.status ?? null,  // used for evening sub-typing
+
+      // Did they say it out loud today, and how often have they skipped it lately.
+      armed_today: armingFacts.armed_today,
+      unarmed_days_7d: armingFacts.unarmed_days_7d,
 
       // Forward-looking: what they already promised for a later day, so Ivy can
       // hold them to it rather than re-negotiating something already agreed.

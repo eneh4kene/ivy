@@ -10,6 +10,38 @@
  * Adding a new flow: add a key to FLOWS and a case in resolveFlowKey. That's it.
  */
 
+
+/**
+ * The morning voice note is the keystone: no VN means no armed day, which means
+ * no kept day, no streak and no stake protection. When it slips, that is a
+ * different failure from a missed session and deserves a different conversation
+ * — the ritual broke, not necessarily the training.
+ *
+ * Escalates deliberately. A first slip is logistics. A repeated one usually is
+ * not: people avoid saying it out loud on the days they are wavering, because
+ * speaking it makes it real. That avoidance is diagnostic, and naming it gently
+ * is more useful than another reminder to press record.
+ */
+function unarmedBlock(ctx: Record<string, any>): string {
+  if (ctx.armed_today !== false) return '';
+  const slips = Number(ctx.unarmed_days_7d ?? 0);
+
+  const escalation = slips >= 3
+    ? `This is the ${slips + 1}th unarmed day in a week. Do NOT ask them to remember harder — that is not the problem. Ask the real question, once, gently: "I notice the mornings you skip the voice note are often the ones you're on the fence about. What's making it hard to say out loud?" Then listen. Reluctance to say it aloud is usually reluctance to commit, and that is the thing worth talking about.`
+    : slips >= 1
+      ? `That's ${slips + 1} unarmed days this week. Ask what's getting in the way of the recording specifically — is it timing, forgetting, or not wanting to commit to it yet? Take the answer at face value and solve for it.`
+      : `First one — keep it light, no lecture.`;
+
+  return [
+    `UNARMED TODAY — handle the RITUAL, not just the result:`,
+    `- They did not record a morning voice note today, so the day is unarmed. Separate the two questions: FIRST "did you actually do it?" — a done session with no voice note is a completely different day from a skipped one, and treating them the same is how you lose someone who genuinely trained.`,
+    `- If they DID it: say so plainly ("so you did the thing — you just didn't say it out loud"). Don't scold. Then handle the recording.`,
+    `- ${escalation}`,
+    `- WHY IT MATTERS — say this ONCE, only if the ritual is genuinely slipping, and only in your own words: saying it out loud is what makes it a commitment rather than an intention. It's not for my records — it's that a promise you've spoken is much harder to quietly drop than one you only thought about. Never preach it, never repeat it in the same call.`,
+    `- Close with a specific commitment to TOMORROW'S RECORDING, not just tomorrow's session: "So — voice note tomorrow morning, before you do anything else?" Get an actual yes.`,
+  ].join('\n');
+}
+
 // ── Flow library ───────────────────────────────────────────────────────────────
 // Each entry is a function taking ctx and returning the flow string.
 // Values are baked in — not Retell-placeholder-dependent.
@@ -178,6 +210,9 @@ const FLOWS: Record<string, FlowFn> = {
       `2. Optional quick reflection: "How was it?" — brief, not required. Don't force it.`,
       `   HARVEST (only if they have a recurring blocker AND today was one of those usual friction days — otherwise skip; a kept day is not an interview): "What was different about today?" Listen for the mechanism — time of day, place, who they were with, how they started — and reflect it back as a reusable rule: "So mornings are the unlock. Worth protecting that." One question. If they shrug, drop it.`,
       '',
+      ctx.armed_today === false
+        ? `   NOTE: they completed the day but never recorded a morning voice note. Name it warmly, once — "you did it, you just didn't say it out loud this morning" — and ask for tomorrow's recording. A kept day with no VN still doesn't count as armed, and they should hear that from you before it costs them.`
+        : '',
       `3. Tomorrow: "What's the plan?" Seed it lightly — don't over-plan.`,
     ].filter(Boolean).join('\n');
   },
@@ -217,6 +252,8 @@ const FLOWS: Record<string, FlowFn> = {
       `2. If early enough in the evening: "Anything small you could do tonight?" Offer the minimum.`,
       `3. If day is done: "Rest day it is."`,
       forfeitLine ? `4. ${forfeitLine}` : '',
+      unarmedBlock(ctx),
+      '',
       `4b. If this is the SECOND OR LATER miss for the same reason, do not go straight to "what's the plan tomorrow" — that asks them to re-commit to a plan that has now failed twice. Propose the change first (see RECURRING BLOCKERS), get agreement, and let the agreed new arrangement BE tomorrow's commitment.`,
       `5. RESET: "Tomorrow — what's the plan?" Get a specific intention.`,
       gift ? `6. ${gift}` : '',
@@ -279,6 +316,7 @@ const FLOWS: Record<string, FlowFn> = {
       `   COMPLETED → ${completedStakeLine}`,
       `   PARTIAL → "That counts. Partial beats zero."${stakeToday ? " Your stake's intact." : ''}`,
       `   MISSED → ${missedStakeLine}`,
+      unarmedBlock(ctx),
       `3. Tomorrow: plant a seed for the plan. Don't over-commit.`,
     ].join('\n');
   },
