@@ -211,8 +211,22 @@ class WebhookController {
 
             // The spoken "when" → Workout.plannedTime, so the T-60 pre-commit
             // nudge fires for times stated on calls, not just typed in the app.
-            // Skipped for COACH_PONDER (the speaker is the coach, not a client).
-            if (dbCallType !== 'COACH_PONDER') {
+            // Skipped for COACH_PONDER (the speaker is the coach, not a client),
+            // and for calls that never reached a human.
+            //
+            // A voicemail still produces a transcript — Ivy's own message — which
+            // sailed past the length gate and had three separate Haiku
+            // extractions asking what commitments were agreed on an answering
+            // machine. Wasted spend, and a pointless failure surface: the
+            // plan-adjustment ops alert that surfaced this was raised on a
+            // voicemail. Same threshold as an "accounted day" in
+            // integrity.service, so the two definitions cannot drift.
+            const reachedAHuman =
+              call.call_analysis?.in_voicemail !== true &&
+              durationSecs >= 30 &&
+              (call.transcript?.length ?? 0) > 200;
+
+            if (dbCallType !== 'COACH_PONDER' && reachedAHuman) {
               import('../../services/commitment-time.service')
                 .then(({ default: commitmentTimeService }) =>
                   commitmentTimeService.captureFromText(dbUserId, call.transcript, 'call'))
