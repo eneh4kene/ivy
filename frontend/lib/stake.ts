@@ -82,7 +82,7 @@ export function clearDeferredStakeGate(): void {
  * does NOT open checkout — the whole point is that no card is required. Money
  * stays a lever they can add later, offered when they're actually struggling.
  */
-export async function startWithoutStake(state: StakeSetupState): Promise<void> {
+export async function startWithoutStake(state: StakeSetupState): Promise<{ redirected: boolean }> {
   await stakeApi.saveConfig({
     stakeWeeklyAmount: null,
     // Required by the API and harmless with no stake: it only decides where a
@@ -93,6 +93,22 @@ export async function startWithoutStake(state: StakeSetupState): Promise<void> {
     armingWindowStart: state.armingWindowStart,
     armingWindowEnd: state.armingWindowEnd,
   })
+
+  // The stake is optional; the SUBSCRIPTION is not. Saving a window without
+  // subscribing leaves the member on FREE, and FREE is excluded from the arming
+  // loop and the evening call — so they would finish setup with a configured
+  // ritual and still get nothing. That is the exact dead end this path was
+  // written to remove, one layer up.
+  //
+  // Checkout collects no card when the total is zero (payment_method_collection:
+  // 'if_required'), so a beta member on a 100%-off code passes straight through.
+  const res = await paymentsApi.createCheckoutSession('PRO')
+  if (res?.alreadySubscribed) return { redirected: false }
+  if (res?.url && typeof window !== 'undefined') {
+    window.location.href = res.url
+    return { redirected: true }
+  }
+  throw new Error("We couldn't finish setting you up. Please try again.")
 }
 
 export async function activateStake(state: StakeSetupState): Promise<{ redirected: boolean }> {

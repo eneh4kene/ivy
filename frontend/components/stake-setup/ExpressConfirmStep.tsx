@@ -69,8 +69,9 @@ export function ExpressConfirmStep({ onActivated, onStartedFree, onCustomise, on
     setBusy('free')
     setError(null)
     try {
-      await startWithoutStake(defaults)
-      onStartedFree()
+      const { redirected } = await startWithoutStake(defaults)
+      // If checkout took over the tab there is nothing to render.
+      if (!redirected) onStartedFree()
     } catch (e: any) {
       setError(e?.message ?? "Couldn't finish setup — please try again.")
       setBusy(null)
