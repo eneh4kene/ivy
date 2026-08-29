@@ -983,6 +983,17 @@ class PromptService {
       };
       lines.push(`Lead nudge: ${desc[ctx.most_effective_nudge] ?? ctx.most_effective_nudge}.`);
     }
+    // Only promise contact that is actually scheduled.
+    if (ctx.next_contact) {
+      lines.push(
+        `WHEN YOU ARE NEXT IN TOUCH: ${ctx.next_contact}. Never promise contact outside this. ` +
+        (ctx.morning_is_a_conversation
+          ? `A morning call is scheduled, so "I'll check in tomorrow morning" is a promise you can keep.`
+          : `There is NO morning call — do not say "I'll check in tomorrow morning" or anything like it. The morning prompt is automated and you do not speak to them. If you want to follow something up, attach it to the next real conversation: "I'll want to hear how the recovery went when we speak tomorrow evening."`) +
+        ` Breaking your word about being in touch costs you more than any missed session costs them.`
+      );
+    }
+
     // The coach's programme and notes, on EVERY call — not just onboarding.
     //
     // The schema says "PT-written notes Ivy surfaces in calls", but they reached

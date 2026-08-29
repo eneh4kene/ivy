@@ -126,3 +126,45 @@ describe('coach context', () => {
     expect(p).not.toContain('COACH CONTEXT');
   });
 });
+
+/**
+ * Promises about being back in touch.
+ *
+ * Observed live: Ivy closed a call with "I'm checking in on his recovery
+ * tomorrow morning" for a member with no morning call — he would get an
+ * automated voice-note prompt and not hear from her until the following
+ * evening. She had no idea when she next spoke to anyone.
+ */
+describe('contact promises', () => {
+  it('forbids a morning check-in when there is no morning call', () => {
+    const p = promptService.buildSystemPrompt('EVENING_REVIEW', {
+      ...base,
+      next_contact: 'an automated voice-note prompt at 07:00 (NOT a conversation — you do not speak to them), then the evening call at 20:00',
+      morning_is_a_conversation: false,
+      todays_workout_status: 'COMPLETED',
+      armed_today: true,
+    }, false);
+    expect(p).toMatch(/There is NO morning call/i);
+    expect(p).toMatch(/do not say "I'll check in tomorrow morning"/i);
+    expect(p).toMatch(/when we speak tomorrow evening/i);
+  });
+
+  it('allows it when a morning call really is scheduled', () => {
+    const p = promptService.buildSystemPrompt('EVENING_REVIEW', {
+      ...base,
+      next_contact: 'a morning call at 07:00, then the evening call at 20:00',
+      morning_is_a_conversation: true,
+      todays_workout_status: 'COMPLETED',
+      armed_today: true,
+    }, false);
+    expect(p).toMatch(/a promise you can keep/i);
+    expect(p).not.toMatch(/There is NO morning call/i);
+  });
+
+  it('says nothing when no contact is scheduled at all', () => {
+    const p = promptService.buildSystemPrompt('EVENING_REVIEW', {
+      ...base, next_contact: null, todays_workout_status: 'COMPLETED', armed_today: true,
+    }, false);
+    expect(p).not.toContain('WHEN YOU ARE NEXT IN TOUCH');
+  });
+});

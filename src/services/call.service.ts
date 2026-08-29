@@ -433,6 +433,39 @@ class CallService {
     //   - MIDDLE mode → house-default charity (a vetted charity the user did NOT choose)
     //   - SAVAGE mode → the charity they actively dislike
     // success_charity_name: their preferred charity (for Phase-6 corporate success donations)
+    // When Ivy will next actually SPEAK to them — and whether the morning is a
+    // real conversation or just an automated nudge.
+    //
+    // She had no idea, so she invented plausible follow-ups the schedule cannot
+    // support: on a live call she told a member "I'm checking in on his recovery
+    // tomorrow morning" when he has morningCallOptIn=false and no morning call
+    // time. Tomorrow morning he gets a voice-note prompt from a cron; the next
+    // conversation is a full day later. For an accountability product, Ivy
+    // breaking her word about contact is the worst failure available — it is
+    // exactly the thing she holds members to.
+    const contactPlan = (() => {
+      const morningIsCall = !!(user as any)?.morningCallOptIn && !!(user as any)?.morningCallTime;
+      const eveningTime = (user as any)?.eveningCallTime as string | null;
+      const commStyle = (user as any)?.commStyle as string | null;
+      const armingStart = (user as any)?.armingWindowStart as string | null;
+
+      const parts: string[] = [];
+      if (morningIsCall) {
+        parts.push(`a morning call at ${(user as any).morningCallTime}`);
+      } else if (armingStart) {
+        parts.push(`an automated voice-note prompt at ${armingStart} (NOT a conversation — you do not speak to them)`);
+      }
+      if (eveningTime) {
+        parts.push(commStyle === 'TEXTS'
+          ? `an evening check-in message around ${eveningTime}`
+          : `the evening call at ${eveningTime}`);
+      }
+      return {
+        next_contact: parts.length ? parts.join(', then ') : null,
+        morning_is_a_conversation: morningIsCall,
+      };
+    })();
+
     // Arming facts. The VN is the keystone: no voice note means no armed day,
     // no kept day, no streak and no stake protection — so a ritual that quietly
     // erodes reads downstream as failure, and the member churns believing the
@@ -627,6 +660,10 @@ class CallService {
       todays_plan: todaysWorkout?.activity ?? null,
       workout_time: todaysWorkout?.plannedTime ?? null,
       todays_workout_status: todaysOutcome?.status ?? null,  // used for evening sub-typing
+
+      // What Ivy can honestly promise about being back in touch.
+      next_contact: contactPlan.next_contact,
+      morning_is_a_conversation: contactPlan.morning_is_a_conversation,
 
       // Did they say it out loud today, and how often have they skipped it lately.
       armed_today: armingFacts.armed_today,
