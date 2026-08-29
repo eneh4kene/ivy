@@ -119,7 +119,13 @@ class BriefService {
       // Stake commitment device — these drive the framing for every call now
       stake_weekly: ctx.stake_weekly,         // weekly stake amount (£) — null if not set
       stake_today: ctx.stake_today,           // daily slice (£) — SUCCESS=kept, MISS=forfeits
-      forfeit_destination: ctx.forfeit_destination,   // charity the daily slice forfeits to on a miss
+      // Withheld entirely when there is no stake. The system prompt already says
+      // "omit stake framing if stake_today is null", but handing the model a
+      // charity name it has been told not to use invites exactly the leak we
+      // keep finding. Don't instruct around temptation — remove it.
+      forfeit_destination: ctx.stake_today != null || ctx.stake_weekly != null
+        ? ctx.forfeit_destination
+        : null,
       success_charity_name: ctx.success_charity_name, // charity that benefits on success (Phase 6, not live yet)
 
       // Memory (Layers 1 + 2 — Layer 3 long-term memories are in the system prompt memory block)
