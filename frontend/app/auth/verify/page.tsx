@@ -9,8 +9,10 @@ import { postLoginDestination } from '@/lib/auth-routing'
 function VerifyContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const [status, setStatus] = useState<'verifying' | 'success' | 'error'>('verifying')
+  const [status, setStatus] = useState<'verifying' | 'coach_consent' | 'success' | 'error'>('verifying')
   const [error, setError] = useState<string>('')
+  const [coachAction, setCoachAction] = useState<'idle' | 'loading'>('idle')
+  const [pendingCoachName, setPendingCoachName] = useState<string | null>(null)
   const { setUser, setToken } = useAuthStore()
 
   useEffect(() => {
@@ -43,6 +45,20 @@ function VerifyContent() {
         }
 
         setUser(authedUser)
+
+        // An EXISTING account invited by a coach carries pendingCoachId — the
+        // link is proposed, not applied. This page never asked, so an invited
+        // member sailed past it and stayed unlinked; the only way to accept was
+        // to find it buried in Settings. (Brand-new invitees are linked at
+        // creation, which is why this only bit people who already had Ivy.)
+        if (authedUser?.pendingCoachId) {
+          setPendingCoachName(
+            (authedUser as { pendingCoach?: { firstName?: string } }).pendingCoach?.firstName ?? null
+          )
+          setStatus('coach_consent')
+          return
+        }
+
         setStatus('success')
 
         // postLoginDestination is the single source of truth for post-auth
@@ -57,6 +73,31 @@ function VerifyContent() {
     verifyToken()
   }, [searchParams, router, setUser, setToken])
 
+  const handleAcceptCoach = async () => {
+    setCoachAction('loading')
+    try {
+      const updated = await usersApi.acceptCoachInvite()
+      setUser(updated)
+      setStatus('success')
+      setTimeout(() => router.push(postLoginDestination(updated)), 1200)
+    } catch {
+      setCoachAction('idle')
+    }
+  }
+
+  const handleDeclineCoach = async () => {
+    setCoachAction('loading')
+    try {
+      await usersApi.leaveCoach()
+      const current = useAuthStore.getState().user
+      if (current) setUser({ ...current, pendingCoachId: null })
+      setStatus('success')
+      setTimeout(() => router.push(current ? postLoginDestination(current) : '/home'), 1200)
+    } catch {
+      setCoachAction('idle')
+    }
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white flex items-center justify-center px-4">
       <div className="max-w-md w-full">
@@ -70,6 +111,36 @@ function VerifyContent() {
               <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4" />
               <h1 className="text-2xl font-bold mb-2">Verifying...</h1>
               <p className="text-muted-foreground">Please wait while we log you in</p>
+            </div>
+          )}
+
+          {status === 'coach_consent' && (
+            <div className="text-left">
+              <h1 className="text-2xl font-bold mb-2 text-center">One thing first</h1>
+              <p className="text-sm text-muted-foreground mb-2">
+                <strong className="text-foreground">{pendingCoachName ?? 'A coach'}</strong>{' '}
+                has invited you to join their accountability programme.
+              </p>
+              <p className="text-xs text-muted-foreground mb-6">
+                Ivy will run your daily accountability as part of their programme, and what she sees
+                gets back to them. You can leave any time from Settings.
+              </p>
+              <div className="flex flex-col gap-2">
+                <button
+                  disabled={coachAction === 'loading'}
+                  onClick={handleAcceptCoach}
+                  className="w-full bg-primary text-primary-foreground px-6 py-3 rounded-lg hover:bg-primary/90 transition disabled:opacity-60"
+                >
+                  {coachAction === 'loading' ? 'One moment…' : 'Join their programme'}
+                </button>
+                <button
+                  disabled={coachAction === 'loading'}
+                  onClick={handleDeclineCoach}
+                  className="w-full text-muted-foreground px-6 py-2 rounded-lg hover:bg-muted transition disabled:opacity-60"
+                >
+                  No thanks — carry on solo
+                </button>
+              </div>
             </div>
           )}
 
