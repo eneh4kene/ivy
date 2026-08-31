@@ -30,7 +30,7 @@ jest.mock('../utils/prisma', () => ({
   __esModule: true,
   default: {
     user: { findUnique: jest.fn(), findMany: jest.fn(), update: jest.fn() },
-    workout: { findFirst: jest.fn(), findUnique: jest.fn(), update: jest.fn() },
+    workout: { findFirst: jest.fn(), findUnique: jest.fn(), update: jest.fn(), create: jest.fn() },
     stakeCycle: { findMany: jest.fn(), count: jest.fn() },
     pushSubscription: { count: jest.fn() },
     voiceNote: { create: jest.fn() },
@@ -347,11 +347,23 @@ describe('enforceArmingDeadline', () => {
     expect(mockPrisma.workout.update).not.toHaveBeenCalled()
   })
 
-  it('A12: no-ops if no workout exists for the day', async () => {
+  // Was "no-ops if no workout exists". That no-op WAS the bug: a day the member
+  // simply ignored left no trace at all — no miss, no kept day, a blank ledger —
+  // and it silently disabled the unarmed-day escalation, which counts workouts.
+  // A day someone signed up to show up for and didn't is a record.
+  it('A12: records a miss when no workout exists for the day', async () => {
     ;(mockPrisma.workout.findFirst as jest.Mock).mockResolvedValue(null)
+    ;(mockPrisma.user.findUnique as jest.Mock).mockResolvedValue({ track: 'fitness' })
+    ;(mockPrisma.workout.create as jest.Mock).mockResolvedValue({ id: 'workout-new' })
 
     await enforceArmingDeadline('user-1', new Date())
 
+    expect(mockPrisma.workout.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ status: 'MISSED', sliceOutcome: 'FORFEITED' }),
+      }),
+    )
+    // Nothing to update — the row did not exist until now.
     expect(mockPrisma.workout.update).not.toHaveBeenCalled()
   })
 })
