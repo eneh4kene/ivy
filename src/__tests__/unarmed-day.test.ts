@@ -168,3 +168,39 @@ describe('contact promises', () => {
     expect(p).not.toContain('WHEN YOU ARE NEXT IN TOUCH');
   });
 });
+
+/**
+ * Pressing, and knowing when to stop.
+ *
+ * Observed live: a member deflected a request for a specific commitment, Ivy
+ * pushed twice more, he stopped answering and the call ended on inactivity —
+ * his last experience of her was being harangued. Also, she attributed a Sunday
+ * miss to "the second time Monday has eaten it": a confident, checkable error,
+ * which is the fastest way to make every count she cites worthless.
+ */
+describe('pressing and precision', () => {
+  const withBlockers = {
+    ...base,
+    todays_workout_status: 'MISSED',
+    armed_today: true,
+    day_of_week: 'Sunday',
+    recurring_blockers: [{ blocker: 'work ran late', times_seen: 2, last_seen: '2026-08-30' }],
+  };
+
+  it('permits one push, then requires acceptance', () => {
+    const p = promptService.buildSystemPrompt('EVENING_REVIEW', withBlockers, false);
+    expect(p).toMatch(/ASK ONCE, THEN LET IT GO/);
+    expect(p).toMatch(/Never ask a third time/i);
+  });
+
+  it('tells her today\'s weekday so she cannot misattribute a pattern', () => {
+    const p = promptService.buildSystemPrompt('EVENING_REVIEW', withBlockers, false);
+    expect(p).toMatch(/TODAY IS Sunday/);
+    expect(p).toMatch(/check that before attributing a miss to a particular day/i);
+  });
+
+  it('still names the blocker with its real count', () => {
+    const p = promptService.buildSystemPrompt('EVENING_REVIEW', withBlockers, false);
+    expect(p).toMatch(/"work ran late" \(2x\)/);
+  });
+});

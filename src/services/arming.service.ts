@@ -406,9 +406,37 @@ export async function sendArmingFinalNotice(userId: string, date: Date): Promise
  * No live call is made here — the stake consequence is the enforcement (§4).
  */
 export async function enforceArmingDeadline(userId: string, date: Date): Promise<void> {
-  const workout = await getTodaysWorkout(userId, date)
+  let workout = await getTodaysWorkout(userId, date)
+
+  // No workout row meant the deadline silently did nothing — so a day the member
+  // simply ignored left NO trace at all. They configured an arming window, were
+  // nudged three times, never recorded, and the ledger stayed blank: no miss, no
+  // kept day, nothing. Seen live — a member with an active window and a week of
+  // nudges had zero workout rows, which also meant the unarmed-day escalation
+  // (which counts workouts) could never fire.
+  //
+  // A day someone signed up to show up for, and didn't, IS a record. Create it
+  // so the miss exists.
   if (!workout) {
-    logger.info(`Deadline enforcement: no workout found for user ${userId} on ${date.toDateString()}`)
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { track: true },
+    })
+    workout = await prisma.workout.create({
+      data: {
+        userId,
+        plannedDate: startOfDay(date),
+        status: 'MISSED',
+        sliceOutcome: 'FORFEITED',
+        activity: `${user?.track ?? 'training'} session (never armed)`,
+      },
+    })
+    logger.info(`Deadline: recorded an unarmed miss for ${userId} on ${date.toDateString()}`)
+
+    const { linkWorkoutToCycle } = await import('./stake.service')
+    await linkWorkoutToCycle(workout.id, userId).catch((err) =>
+      logger.warn(`Deadline: could not link created workout ${workout!.id} to cycle`, err),
+    )
     return
   }
 
