@@ -29,10 +29,19 @@ const dmMono = DM_Mono({
 })
 
 /* ── Metadata ────────────────────────────────────────────────────────────── */
+/*
+ * These are the site-wide defaults, and nothing overrode them — so every URL
+ * on the domain unfurled as the consumer staking pitch, including the coach
+ * signup link. Two things were wrong with the old copy beyond the audience:
+ * money is now OPTIONAL (the teeth ladder — a member can run the whole loop
+ * stake-less), and "somewhere you hate" only describes SAVAGE forfeit mode.
+ * The default is MIDDLE: a house charity they did not choose. Route segments
+ * that speak to someone specific override these below.
+ */
 export const metadata: Metadata = {
-  title: "Ivy — The accountability that has teeth",
-  description: "Your money. Your commitment. Your chosen charity gets it when you follow through — or somewhere you hate when you don't.",
-  keywords: ["accountability", "commitment", "voice note", "charity", "habit", "stake"],
+  title: "Ivy — Say it out loud. Then actually do it.",
+  description: "An accountability coach who calls you every evening. Say what you'll do tomorrow, then account for whether you did it. Put money on it when you want it to bite.",
+  keywords: ["accountability", "commitment", "voice note", "coaching", "habit", "stake"],
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,
@@ -42,8 +51,8 @@ export const metadata: Metadata = {
   },
   formatDetection: { telephone: false },
   openGraph: {
-    title: "Ivy — The accountability that has teeth",
-    description: "Put your money where your commitment is. Follow through — or it goes somewhere you'd hate.",
+    title: "Ivy — Say it out loud. Then actually do it.",
+    description: "An accountability coach who calls you every evening. Say what you'll do tomorrow, then account for whether you did it.",
     type: "website",
   },
   icons: {
