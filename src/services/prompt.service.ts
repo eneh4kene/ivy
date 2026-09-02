@@ -252,12 +252,20 @@ const FLOWS: Record<string, FlowFn> = {
         ? `STAKE: Mention once, gently: "That day's ${sym}${stakeToday} forfeits." Don't dwell.`
         : '';
 
+    // "MISSED" is the status of a day nobody recorded, not a day we watched
+    // someone skip. On an unarmed day there was no morning voice note, so
+    // nothing could ever have moved it off MISSED — the label is an absence of
+    // evidence, and stating it as fact is how she gets caught being wrong.
+    const unverified = ctx.armed_today === false;
+
     return [
-      `THIS CALL: Evening Review — MISSED`,
+      unverified ? `THIS CALL: Evening Review — NO RECORD OF TODAY` : `THIS CALL: Evening Review — MISSED`,
       `Target: 60-90 seconds.`,
       '',
       `FLOW:`,
-      `1. "Got it. No judgment. What happened?" — listen, validate briefly, don't linger.`,
+      unverified
+        ? `1. OPEN BY ASKING, NOT TELLING. Nothing was recorded today, which is NOT the same as them skipping — you genuinely do not know what they did. Ask it open: "How did today go?" Then listen. Observed live: she opened with "you missed today — walk me through what happened" at a member who had trained that morning; he had to correct her, and after that every count she cited was worth less.`
+        : `1. "Got it. No judgment. What happened?" — listen, validate briefly, don't linger.`,
       `2. If early enough in the evening: "Anything small you could do tonight?" Offer the minimum.`,
       `3. If day is done: "Rest day it is."`,
       forfeitLine ? `4. ${forfeitLine}` : '',
@@ -734,7 +742,7 @@ class PromptService {
     ].filter(Boolean);
 
     const prompt = sections.join('\n\n');
-    const tails = this.tailDirectives(ctx, isCoachCall);
+    const tails = this.tailDirectives(ctx, isCoachCall, callType);
     if (!tails.length) return prompt;
     // Lowest priority first: the model weights the END of the system prompt
     // hardest (verified on prod — crown vs. chat brevity), so the highest
@@ -756,8 +764,27 @@ class PromptService {
   private tailDirectives(
     ctx: Record<string, any>,
     isCoachCall: boolean,
+    callType?: string,
   ): Array<{ priority: number; text: string }> {
     const tails: Array<{ priority: number; text: string }> = [];
+
+    // The opening is where script-reading shows worst: she has the whole flow
+    // in front of her and nobody has spoken yet, so she performs three beats at
+    // a silent line. The FLOW section reads as a numbered script to recite, and
+    // it sits thousands of characters above the pacing rules — so it wins.
+    // Structure fixes what prose could not: the rule that must win goes last,
+    // where this prompt weights hardest.
+    if (!isCoachCall && callType !== 'CHAT') {
+      tails.push({
+        priority: 90,
+        text: [
+          `YOUR FIRST TURN IS SHORT — this outranks the FLOW above.`,
+          `Say hello and ask ONE thing. That is the entire turn. Then stop talking and wait, however long it takes.`,
+          `Do not stack a second question behind it. Do not explain why you're asking. Do not preview what the call will cover. Do not pass judgment on their day before they have said a word — you have not heard from them yet, and the record in front of you may simply be a day nobody has written down.`,
+          `The FLOW is the shape of the WHOLE call, not a script for the opening. Getting through it in two turns is a failed call even if every word was right.`,
+        ].join('\n'),
+      });
+    }
 
     if (ctx.circle_crown_game && !isCoachCall) {
       tails.push({
@@ -1115,10 +1142,12 @@ class PromptService {
       : '';
 
     return [
+      `HOW TO TALK LIKE A PERSON, NOT A SCRIPT:`,
+      conversationFloor(),
+      '',
       `ALWAYS:`,
       `- Get specifics before confirming any plan (at minimum: what + when)`,
       `- If they say "probably", "maybe", "I'll try", "hopefully" — treat as avoidance. Probe once: "What would it take to make that a yes?"`,
-      `- Ask one question at a time`,
       forfeitCharityLine,
       successCharityLine,
       stakeReminder,
@@ -1164,18 +1193,36 @@ class PromptService {
 export const promptService = new PromptService();
 export default promptService;
 
+// The conversational floor — how she takes turns, on every call.
+//
+// These rules existed, and reached coaches only: coachDeliveryRules() is wired
+// to coach onboarding and the ponder call, so members — every actual user —
+// got none of them. What they got instead was one buried bullet ("Ask one
+// question at a time") at ~90% through an 8k-character prompt, which loses to
+// the numbered FLOW above it every time.
+//
+// Observed live: an evening call opened with a greeting, a verdict, a question,
+// an elaboration and a SECOND question before the member had said a word; she
+// then asked "what time did you get it done, and was it a full session or
+// something lighter?" and finished her own sentence over his answer.
+function conversationFloor(): string {
+  return [
+    `- Talk in turns, not paragraphs. One thought, then let them respond. If you've been talking for more than ~15 seconds straight, stop and hand it back.`,
+    `- React BEFORE you redirect. When they tell you something, your first words respond to THAT ("Mm — since when?" / "That explains a lot, actually") — never a segue to your next point.`,
+    `- ONE question per turn, and the question ENDS the turn. Never stack a second sentence behind it, never bundle two questions into one breath ("what time, and was it full or lighter?" is two questions), and never answer your own question — a question you answer yourself teaches them that yours are rhetorical, after which they stop replying to any of them.`,
+    `- Silence after a question is them thinking, not them gone. Let it breathe — don't fill it, don't rephrase the question.`,
+    `- If they interrupt, they win: drop your thread, deal with theirs, and only return to yours if it still matters.`,
+    `- Imperfections are fine. A short "hm", a self-correction ("actually, no — the better example is—"), trailing off when they've clearly got it. Polished delivery reads as canned.`,
+  ].join('\n');
+}
+
 // Delivery rules for any call where the person on the line is a COACH partner.
 // Shared by buildSystemPrompt (coach onboarding) and buildPonderPrompt — this is
 // where "sounds like a human colleague" lives, so keep it in one place.
 export function coachDeliveryRules(): string {
   return [
     `HOW TO SOUND LIKE A PERSON, NOT A SYSTEM:`,
-    `- Talk in turns, not paragraphs. One thought, then let them respond. If you've been talking for more than ~15 seconds straight, stop and hand it back.`,
-    `- React BEFORE you redirect. When they tell you something, your first words respond to THAT ("Mm — since when?" / "That explains a lot, actually") — never a segue to your next point.`,
-    `- One question at a time. A question deserves an answer before the next one exists.`,
-    `- Silence after a question is them thinking. Let it breathe — don't fill it, don't rephrase the question.`,
-    `- If they interrupt, they win: drop your thread, deal with theirs, and only return to yours if it still matters.`,
-    `- Imperfections are fine. A short "hm", a self-correction ("actually, no — the better example is—"), trailing off when they've clearly got it. Polished delivery reads as canned.`,
+    conversationFloor(),
     `- READ THE PICKUP: the first seconds tell you their state. Rushed, driving, mid-session with a client? Name it and offer the out: "You sound mid-something — want the 60-second version, or shall I ring back after your session?" Never plough through an agenda at someone who isn't there.`,
     `- Treat the target length as a CEILING, never a quota. When it's done, wrap in one warm line and end the call — use the end_call tool. Padding reads as fake.`,
     `- VOICEMAIL: an answering-machine greeting or beep gets ONE short line and an immediate hang-up — never session content to a machine. Say: "It's Ivy. Ring me back on this number when you get a minute and we'll close your day off — otherwise I'll try you again." Calling back reaches you directly; it is not a dead end.`,

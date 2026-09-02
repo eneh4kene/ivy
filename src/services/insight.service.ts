@@ -181,21 +181,28 @@ class InsightService {
 
       const insights: CallInsights = parseModelJson<CallInsights>(raw);
 
-      await prisma.call.update({
+      const updated = await prisma.call.update({
         where: { id: callId },
         data: {
           callInsights: insights as object,
           callSummary: insights.call_summary ?? null,
         },
+        select: { endedAt: true, scheduledAt: true },
       });
 
       if (insights.memorable_moments?.length) {
+        // Stamp memories with when the CONVERSATION happened, not when we got
+        // round to extracting it. Identical on the normal path (the call just
+        // ended); it matters when a stuck call is recovered days later, where
+        // "now" would file a week-old memory as the freshest thing she knows.
+        const spokenAt = updated.endedAt ?? updated.scheduledAt ?? new Date();
         await prisma.callMemory.createMany({
           data: insights.memorable_moments.map((m) => ({
             userId,
             callId,
             content: m.content,
             category: m.category,
+            createdAt: spokenAt,
           })),
         });
       }
