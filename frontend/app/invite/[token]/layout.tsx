@@ -13,7 +13,22 @@ const title = 'Join your coach on Ivy'
 const description =
   'Your coach uses Ivy to keep the days between sessions honest — a short call each evening to say how it went and what is next.'
 
-export const metadata: Metadata = { title, description, openGraph: { title, description, type: 'website' } }
+export const metadata: Metadata = {
+  title,
+  description,
+  openGraph: {
+    title,
+    description,
+    type: 'website',
+    images: [{ url: '/og/invite.png', width: 1200, height: 630, alt: 'Join your coach on Ivy' }],
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title,
+    description,
+    images: ['/og/invite.png'],
+  },
+}
 
 export default function InviteLayout({ children }: { children: React.ReactNode }) {
   return children

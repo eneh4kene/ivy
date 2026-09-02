@@ -1,0 +1,178 @@
+<!doctype html>
+<!--
+  Source for the Open Graph share cards. Rendered to PNG by scripts/make-og.mjs
+  (Playwright, 1200x630) and committed to public/og/. Kept in the repo so the
+  cards can be regenerated when the copy changes, rather than being an opaque
+  binary nobody dares touch.
+
+  Palette and type follow docs/design-constitution.md — abyss base, lumen
+  accent, Newsreader italic as Ivy's voice, DM Mono as the system's. The vine
+  metaphor is deliberately NOT used in the copy here: it belongs to the app's
+  interior, not to a card that meets people before anything is explained.
+-->
+<html>
+<head>
+<meta charset="utf-8" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,wght@0,400;1,300;1,400&family=Instrument+Sans:wght@400;500&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 1200px; height: 630px; }
+  body {
+    /* The page is a vertical dive, never a flat fill. */
+    background: linear-gradient(170deg, #041219 0%, #02090d 55%, #010507 100%);
+    font-family: 'Instrument Sans', system-ui, sans-serif;
+    position: relative;
+    overflow: hidden;
+  }
+
+  /* Lumen bloom, off-centre so the card has a light source rather than a glow. */
+  .bloom {
+    position: absolute; border-radius: 50%; filter: blur(90px); pointer-events: none;
+  }
+  .bloom-a { width: 620px; height: 620px; left: -140px; top: -260px; background: rgba(70,240,200,.16); }
+  .bloom-b { width: 460px; height: 460px; right: -120px; bottom: -220px; background: rgba(70,240,200,.10); }
+
+  /* A single hairline stem with nodes: the organism, stated once, abstractly. */
+  .stem { position: absolute; left: 0; top: 0; width: 1200px; height: 630px; }
+
+  .frame {
+    position: absolute; inset: 0;
+    padding: 74px 86px;
+    display: flex; flex-direction: column; justify-content: space-between;
+  }
+
+  .kicker {
+    font-family: 'DM Mono', ui-monospace, monospace;
+    font-size: 15px; font-weight: 500;
+    letter-spacing: 0.28em; text-transform: uppercase;
+    color: #46f0c8;
+    display: flex; align-items: center; gap: 16px;
+  }
+  .kicker .dot {
+    width: 9px; height: 9px; border-radius: 50%;
+    background: #46f0c8; box-shadow: 0 0 14px 2px rgba(70,240,200,.85);
+  }
+
+  h1 {
+    font-family: 'Newsreader', Georgia, serif;
+    font-style: italic; font-weight: 300;
+    font-size: 82px; line-height: 1.06;
+    letter-spacing: -0.018em;
+    color: #d7f7ef;
+    max-width: 960px;
+  }
+  h1 em { font-style: italic; color: #9ffbe4; }
+
+  .sub {
+    font-size: 27px; line-height: 1.46; font-weight: 400;
+    color: #6b9d94;
+    max-width: 840px;
+    margin-top: 26px;
+  }
+
+  .foot {
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .wordmark {
+    font-family: 'Newsreader', Georgia, serif;
+    font-style: italic; font-weight: 400;
+    font-size: 34px; color: #d7f7ef;
+    display: flex; align-items: baseline; gap: 14px;
+  }
+  .wordmark .url {
+    font-family: 'DM Mono', ui-monospace, monospace;
+    font-style: normal; font-size: 14px; font-weight: 400;
+    letter-spacing: 0.2em; text-transform: uppercase;
+    color: #46f0c8; opacity: .82;
+  }
+  .mech {
+    font-family: 'DM Mono', ui-monospace, monospace;
+    font-size: 14px; font-weight: 400;
+    letter-spacing: 0.24em; text-transform: uppercase;
+    color: #6b9d94;
+    border: 1px solid rgba(70,240,200,.20);
+    border-radius: 999px;
+    padding: 11px 22px;
+    background: rgba(8,34,48,.5);
+  }
+</style>
+</head>
+<body>
+  <div class="bloom bloom-a"></div>
+  <div class="bloom bloom-b"></div>
+
+  <svg class="stem" viewBox="0 0 1200 630" fill="none">
+    <path id="stem-path"
+      d="M -40 512 C 210 470, 330 560, 560 498 C 790 436, 940 520, 1240 452"
+      stroke="rgba(70,240,200,.22)" stroke-width="1.5" />
+    <g id="nodes"></g>
+  </svg>
+
+  <div class="frame">
+    <div class="kicker"><span class="dot"></span><span id="kicker">Accountability, out loud</span></div>
+    <div>
+      <h1 id="headline"></h1>
+      <p class="sub" id="sub"></p>
+    </div>
+    <div class="foot">
+      <div class="wordmark">Ivy <span class="url">ivykeeps.life</span></div>
+      <div class="mech" id="mech">EVERY EVENING · 90 SECONDS</div>
+    </div>
+  </div>
+
+<script>
+  // Nodes sit ON the stem path, so the light reads as growth along a line
+  // rather than dots scattered near a curve.
+  const path = document.getElementById('stem-path');
+  const g = document.getElementById('nodes');
+  const len = path.getTotalLength();
+  // Brightest at the right: the run is still going.
+  const stops = [0.18, 0.34, 0.50, 0.64, 0.78, 0.90];
+  stops.forEach((t, i) => {
+    const p = path.getPointAtLength(len * t);
+    const lit = i / (stops.length - 1);
+    const c = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+    c.setAttribute('cx', p.x); c.setAttribute('cy', p.y);
+    c.setAttribute('r', 4 + lit * 3);
+    c.setAttribute('fill', '#46f0c8');
+    c.setAttribute('opacity', String(0.20 + lit * 0.75));
+    c.setAttribute('filter', 'url(#glow)');
+    g.appendChild(c);
+  });
+  const defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
+  defs.innerHTML = '<filter id="glow" x="-300%" y="-300%" width="700%" height="700%">' +
+    '<feGaussianBlur stdDeviation="6" result="b"/>' +
+    '<feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>';
+  document.querySelector('.stem').prepend(defs);
+
+  // Variant copy is injected by the generator via ?v=
+  const VARIANTS = {
+    root: {
+      kicker: 'Accountability, out loud',
+      headline: 'Say it out loud.<br/><em>Then actually do it.</em>',
+      sub: 'An accountability coach who calls you every evening — say what you’ll do tomorrow, then account for whether you did it.',
+      mech: 'EVERY EVENING · 90 SECONDS',
+    },
+    coach: {
+      kicker: 'Ivy for coaches',
+      headline: 'You can’t be there<br/><em>on a Tuesday night.</em>',
+      sub: 'Ivy rings your clients each evening and tells you who’s slipping — before they ghost you.',
+      mech: 'YOUR INVITE LINK · UNLIMITED CLIENTS',
+    },
+    invite: {
+      kicker: 'You’ve been invited',
+      headline: 'Your coach wants<br/><em>the days in between.</em>',
+      sub: 'A short call each evening — how today went, and what you’re doing tomorrow.',
+      mech: 'ONE CALL · EVERY EVENING',
+    },
+  };
+  const v = VARIANTS[new URLSearchParams(location.search).get('v') || 'root'];
+  document.getElementById('kicker').textContent = v.kicker;
+  document.getElementById('headline').innerHTML = v.headline;
+  document.getElementById('sub').textContent = v.sub;
+  document.getElementById('mech').textContent = v.mech;
+</script>
+</body>
+</html>

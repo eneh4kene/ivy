@@ -39,6 +39,10 @@ const dmMono = DM_Mono({
  * that speak to someone specific override these below.
  */
 export const metadata: Metadata = {
+  // Required for og:image to resolve absolutely — WhatsApp, iMessage and X all
+  // discard a relative image URL silently, which is exactly the failure that
+  // looks like "the card just has no picture".
+  metadataBase: new URL("https://www.ivykeeps.life"),
   title: "Ivy — Say it out loud. Then actually do it.",
   description: "An accountability coach who calls you every evening. Say what you'll do tomorrow, then account for whether you did it. Put money on it when you want it to bite.",
   keywords: ["accountability", "commitment", "voice note", "coaching", "habit", "stake"],
@@ -54,6 +58,13 @@ export const metadata: Metadata = {
     title: "Ivy — Say it out loud. Then actually do it.",
     description: "An accountability coach who calls you every evening. Say what you'll do tomorrow, then account for whether you did it.",
     type: "website",
+    images: [{ url: "/og/root.png", width: 1200, height: 630, alt: "Ivy — say it out loud, then actually do it." }],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Ivy — Say it out loud. Then actually do it.",
+    description: "An accountability coach who calls you every evening. Say what you'll do tomorrow, then account for whether you did it.",
+    images: ["/og/root.png"],
   },
   icons: {
     icon: [
