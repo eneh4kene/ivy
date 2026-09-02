@@ -307,7 +307,7 @@ const stuckCallRecovery = cronFunction(
       const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000);
       const stuck = await prisma.call.findMany({
         where: { status: 'IN_PROGRESS', startedAt: { lt: twoHoursAgo } },
-        select: { id: true, retellCallId: true },
+        select: { id: true, retellCallId: true, callType: true, userId: true },
       });
       let backfilled = 0;
       let failed = 0;
@@ -337,6 +337,28 @@ const stuckCallRecovery = cronFunction(
                 });
                 backfilled++;
                 rescued = true;
+
+                // Restoring the transcript is not restoring the call. Insights
+                // and memories are derived by the webhook path, which by
+                // definition did not run for a stuck call — so a recovered call
+                // came back with its words and none of its meaning, and Ivy
+                // reads memories, not old transcripts.
+                //
+                // Seen live: a member told Ivy his birthday on a call that got
+                // stuck. The transcript was recovered; the memory never was, so
+                // she had no idea days later and he noticed. Data restored,
+                // meaning lost.
+                // Two guards. Extraction is createMany with no dedupe, so a
+                // second pass would duplicate every memory; and a voicemail or
+                // a three-second pickup has no meaning to extract, only Haiku
+                // spend. Same bar the webhook uses for a real conversation.
+                const alreadyHasMemories = await prisma.callMemory.count({ where: { callId: call.id } });
+                const reachedAHuman = !analysis.in_voicemail && (rc.transcript?.length ?? 0) > 200;
+                if (!alreadyHasMemories && reachedAHuman) {
+                  await insightService
+                    .extractCallInsights(call.id, rc.transcript || '', call.callType, call.userId)
+                    .catch((err) => logger.warn(`stuck-call-recovery: insight extraction failed for ${call.id}`, err));
+                }
               }
             }
           } catch (err) {
