@@ -19,6 +19,7 @@ jest.mock('../../utils/prisma', () => ({
     circleGame: { findFirst: jest.fn(), update: jest.fn() },
     circleGameEvent: { create: jest.fn(), findMany: jest.fn(), findFirst: jest.fn() },
     ivyCircleMember: { findFirst: jest.fn(), findMany: jest.fn() },
+    memberBlock: { findFirst: jest.fn() },
     user: { findUnique: jest.fn() },
     $transaction: jest.fn((ops: any[]) => Promise.all(ops)),
   },
@@ -85,6 +86,7 @@ beforeEach(() => {
   mockPrisma.circleGame.update.mockResolvedValue({})
   mockPrisma.circleGameEvent.create.mockResolvedValue({ id: 'e1' })
   mockPrisma.user.findUnique.mockResolvedValue({ timezone: 'Europe/London', firstName: 'Amara' })
+  mockPrisma.memberBlock.findFirst.mockResolvedValue(null) // no blocks by default
 })
 
 describe('banking takes two', () => {
@@ -210,5 +212,43 @@ describe('the room wins together', () => {
     expect(won![0].data.payload.collective).toBe(true)
 
     expect(posted().some(([, b]) => b.includes('not one of them counted alone'))).toBe(true)
+  })
+})
+
+describe('a block silences the pair without breaking the game', () => {
+  it('stops the named nudge, and still banks the day', async () => {
+    // A block stops CONTACT. A beat arriving in your thread with the name of
+    // the person you blocked in it IS contact — but banking needs no
+    // interaction at all, so the game underneath carries on untouched.
+    mockPrisma.memberBlock.findFirst.mockResolvedValue({ id: 'block-1' })
+    mockPrisma.circleGame.findFirst.mockResolvedValue(pairsGame())
+
+    await circleGameService.processArmingEvent(AMARA, true)
+    await flush()
+
+    expect(posted().filter(([uid]) => uid === SAM)).toHaveLength(0)
+
+    // Their half is still recorded — the pair can still bank.
+    const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Europe/London' })
+    expect(writtenState().day_kept[today]).toContain(AMARA)
+  })
+
+  it('keeps the partner out of the standing Ivy reads aloud', async () => {
+    mockPrisma.memberBlock.findFirst.mockResolvedValue({ id: 'block-1' })
+    mockPrisma.circleGame.findFirst.mockResolvedValue(pairsGame())
+
+    const active = await circleGameService.getActiveGameForUser(AMARA)
+
+    expect(active!.stateSummary).not.toContain('Sam')
+    expect(active!.stateSummary).toContain('Do NOT name their partner')
+  })
+
+  it('names the partner normally when there is no block', async () => {
+    mockPrisma.circleGame.findFirst.mockResolvedValue(pairsGame())
+
+    const active = await circleGameService.getActiveGameForUser(AMARA)
+
+    expect(active!.stateSummary).toContain('Sam')
+    expect(active!.stateSummary).not.toContain('Do NOT name')
   })
 })

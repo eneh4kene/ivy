@@ -429,13 +429,20 @@ class CircleGameService {
         // the reason they hear from anyone tonight. Notified, because a nudge
         // that arrives tomorrow is not a nudge. Positive framing only — this
         // fires on a SUCCESS, and never says anyone missed.
-        this.announceBeat(game.circleId, '', {
-          gameId: game.id,
-          personal: {
-            userId: pair.partnerId,
-            message: `${name(userId)} kept their day — yours is the one that banks it. ${Math.max(0, target - banked)} to go for the room.`,
-            notify: true,
-          },
+        //
+        // Unless contact between them is blocked, in which case the game keeps
+        // running and simply stops speaking their names at each other.
+        const waiting = pair.partnerId;
+        this.contactBlocked(userId, waiting).then((blocked) => {
+          if (blocked) return;
+          return this.announceBeat(game.circleId, '', {
+            gameId: game.id,
+            personal: {
+              userId: waiting,
+              message: `${name(userId)} kept their day — yours is the one that banks it. ${Math.max(0, target - banked)} to go for the room.`,
+              notify: true,
+            },
+          });
         }).catch(() => {});
       }
 
@@ -677,8 +684,24 @@ class CircleGameService {
     );
   }
 
+  /**
+   * Is contact between these two blocked, in either direction?
+   *
+   * A block stops CONTACT, and a beat naming the person you blocked is contact
+   * — arriving in your thread, with their name in it, whether you asked or not.
+   * The game itself carries on underneath: banking a paired day needs no
+   * interaction, so there is nothing here to break.
+   */
+  private async contactBlocked(a: string, b: string): Promise<boolean> {
+    const hit = await prisma.memberBlock.findFirst({
+      where: { OR: [{ blockerId: a, blockedId: b }, { blockerId: b, blockedId: a }] },
+      select: { id: true },
+    });
+    return hit !== null;
+  }
+
   /** The partner (or null when unpaired) and the pair's state key. */
-  private pairOf(rules: Record<string, any>, userId: string): { partnerId: string | null; key: string } | null {
+  pairOf(rules: Record<string, any>, userId: string): { partnerId: string | null; key: string } | null {
     const pairs: string[][] = rules.pairs ?? [];
     for (const pair of pairs) {
       if (pair.includes(userId)) {
@@ -926,8 +949,13 @@ class CircleGameService {
         const banked = Number(state.banked ?? 0);
         const pair = this.pairOf(rules, userId);
         const mine = pair ? Number((state.pair_banked ?? {})[pair.key] ?? 0) : 0;
-        const who = pair?.partnerId
+        // Blocked contact means Ivy stops naming them too — the standing she
+        // reads out loud is as much "contact" as a beat is.
+        const blocked = pair?.partnerId ? await this.contactBlocked(userId, pair.partnerId) : false;
+        const who = pair?.partnerId && !blocked
           ? `Paired with ${names.get(pair.partnerId) ?? 'a circle-mate'} (${mine} banked together).`
+          : pair?.partnerId
+            ? `Paired for this sprint (${mine} banked together). Do NOT name their partner or refer to them — contact between them is blocked.`
           : pair
             ? `Unpaired this sprint — your kept days bank on their own (${mine} so far).`
             : `Not paired in this game.`;
@@ -1217,7 +1245,7 @@ class CircleGameService {
           description: `${memberCount} of you, paired up. A day banks for the room only when BOTH of a pair keep it.`,
           templateType: 'pairs',
           rules: { deadline_days: days },
-          ivyInstruction: `The circle is running Two by Two — everyone is paired for the sprint, and a day banks for the room only when BOTH of a pair keep it. If their partner has already kept today, say so plainly: theirs is the one that banks it. NEVER tell anyone their partner missed — a partner's bad day is that partner's to talk about, not yours to report.${crownTail}`,
+          ivyInstruction: `The circle is running Two by Two — everyone is paired for the sprint, and a day banks for the room only when BOTH of a pair keep it. If their partner has already kept today, say so plainly: theirs is the one that banks it. NEVER tell anyone their partner missed — a partner's bad day is that partner's to talk about, not yours to report. They can send their partner a short note in the app if they want to — mention it only when it would actually help, never as a feature.${crownTail}`,
         })
       : asRelay
       ? await this.createGame(circleId, {
