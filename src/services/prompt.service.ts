@@ -811,8 +811,14 @@ class PromptService {
       blocks.push([
         `CIRCLE GAME — ${ctx.circle_game_name}`,
         `Standing: ${ctx.circle_game_state_summary}`,
+        // A standing can only be recited; a beat can be talked about. When
+        // something actually happened, that is the aside worth spending — the
+        // number is just the backdrop it happened against.
+        ctx.circle_game_recent_beats
+          ? `SINCE YOU LAST SPOKE: ${ctx.circle_game_recent_beats}\nThis is the interesting half. If you spend one aside on the game, spend it here — on what MOVED — and let the standing be the backdrop rather than the point. They have already read these in their thread, so react to it as shared news, never announce it as if it were new. If none of it is theirs, a passing nod to the room is plenty.`
+          : '',
         ctx.circle_game_ivy_instruction ? `How to weave it in: ${ctx.circle_game_ivy_instruction}` : '',
-        `Reference it naturally only if it fits — one aside, not a lecture. Never invent scores or standings; use only the standing above.`,
+        `Reference it naturally only if it fits — one aside, not a lecture. The game is never the reason for the call. Never invent scores, standings or events; use only what is above.`,
       ].filter(Boolean).join('\n'));
     }
     // The winner's unclaimed pledge right. They likely saw one push and forgot;

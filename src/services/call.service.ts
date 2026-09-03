@@ -736,6 +736,7 @@ class CallService {
         circle_game_name: null,
         circle_game_state_summary: null,
         circle_game_ivy_instruction: null,
+        circle_game_recent_beats: null,
       }),
 
       // Coach context (set when user has a PT/coach)

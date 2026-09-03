@@ -24,7 +24,26 @@ describe('buildSystemPrompt — circle game standing on the no-brief path', () =
     expect(prompt).toContain('You hold the baton (since Fri 09:00). 2 lives left.');
     expect(prompt).toContain('Nudge them warmly');
     // Guardrail against invented standings must ride along.
-    expect(prompt).toContain('Never invent scores or standings');
+    expect(prompt).toContain('Never invent scores, standings or events');
+  });
+
+  // A standing is weather; a beat is news. The beats are what make one aside
+  // worth spending, so they must reach every path the standing reaches.
+  it('surfaces what MOVED since the last call, not just where things stand', () => {
+    const prompt = promptService.buildSystemPrompt('CHAT', {
+      ...gameCtx,
+      circle_game_recent_beats: 'Amara kept the day and passed the baton to Sam.',
+    }, false);
+    expect(prompt).toContain('SINCE YOU LAST SPOKE');
+    expect(prompt).toContain('Amara kept the day and passed the baton to Sam.');
+    // They read these in their own thread already — reacting, not announcing.
+    expect(prompt).toContain('shared news');
+  });
+
+  it('drops the beats line when nothing has happened since the last call', () => {
+    const prompt = promptService.buildSystemPrompt('CHAT', gameCtx, false);
+    expect(prompt).toContain('CIRCLE GAME — Streak Relay');
+    expect(prompt).not.toContain('SINCE YOU LAST SPOKE');
   });
 
   it('omits the section entirely when there is no active game', () => {

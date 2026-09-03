@@ -62,6 +62,8 @@ class CircleGameService {
   /** The auto-seeded sprint game: the room holding 80% together for a sprint. */
   static readonly PACT_SPRINT_DAYS = 14;
   static readonly PACT_RATE = 0.8;
+  /** Below this a relay is just two people alternating days — fall back to the Pact. */
+  static readonly RELAY_MIN_MEMBERS = 3;
 
   // ── Names & beats ────────────────────────────────────────────────────────────
   // Games live or die on being FELT between calls. Beats are the sound a game
@@ -298,27 +300,34 @@ class CircleGameService {
     let extraEventType: string | null = null;
     let extraPayload: Record<string, any> = {};
 
+    // Names are resolved BEFORE the processors so notes are written as sentences.
+    // CircleGameEvent.note is documented as "plain sentence Ivy can surface in a
+    // call"; until it was read by anything, every processor interpolated a raw
+    // UUID into it, which no one would ever have said out loud.
+    const names = await this.memberNames(game.circleId);
+    const name = (id: string | null | undefined) => (id ? names.get(id) ?? 'someone' : 'someone');
+
     switch (game.templateType) {
       case 'relay':
         ({ updatedState, note, extraEventType, extraPayload } = await this.processRelayEvent(
-          game, userId, isSuccess, updatedState
+          game, userId, isSuccess, updatedState, name
         ));
         break;
 
       case 'points_race':
-        ({ updatedState, note } = this.processPointsRaceEvent(game, userId, isSuccess, updatedState));
+        ({ updatedState, note } = this.processPointsRaceEvent(game, userId, isSuccess, updatedState, name));
         if (isSuccess) extraEventType = 'points_awarded';
         break;
 
       case 'collective':
-        ({ updatedState, note } = await this.processCollectiveEvent(game, userId, isSuccess, updatedState));
+        ({ updatedState, note } = await this.processCollectiveEvent(game, userId, isSuccess, updatedState, name));
         break;
 
       default:
         // custom — just log the event, Ivy handles everything via ivyInstruction
         note = isSuccess
-          ? `${userId} completed a workout`
-          : `${userId} missed a workout`;
+          ? `${name(userId)} kept the day.`
+          : `${name(userId)} missed.`;
         break;
     }
 
@@ -340,8 +349,6 @@ class CircleGameService {
     if (extraEventType) serverAnalytics.circleGameEvent(userId, game.id, extraEventType);
 
     // ── Beats + win conditions ─────────────────────────────────────────────
-    const names = await this.memberNames(game.circleId);
-    const name = (id: string | null | undefined) => (id ? names.get(id) ?? 'someone' : 'someone');
     const rules = game.rules as Record<string, any>;
 
     if (game.templateType === 'relay' && userId === (game.state as Record<string, any>).current_holder_id) {
@@ -440,7 +447,8 @@ class CircleGameService {
   }
 
   private async processRelayEvent(
-    game: any, userId: string, isSuccess: boolean, state: Record<string, any>
+    game: any, userId: string, isSuccess: boolean, state: Record<string, any>,
+    name: (id: string | null | undefined) => string
   ) {
     const rules = game.rules as Record<string, any>;
     const turnOrder: string[] = rules.turn_order ?? [];
@@ -473,7 +481,7 @@ class CircleGameService {
       state.current_holder_id = nextHolder;
       state.baton_held_since = new Date().toISOString();
       state.passes = (state.passes ?? 0) + 1;
-      note = `Baton passed from ${userId} to ${nextHolder}`;
+      note = `${name(userId)} kept the day and passed the baton to ${name(nextHolder)}.`;
       extraEventType = 'baton_passed';
       extraPayload = { from: userId, to: nextHolder };
 
@@ -504,7 +512,7 @@ class CircleGameService {
               // GUARDRAIL note: forfeited to userId's OWN destination — not another user
               forfeit_destination: 'own_stake_destination',
             },
-            note: `Baton drop: ${userId}'s elevated stake slice (×${batonMultiplier}) forfeits to their own destination.`,
+            note: `Baton drop: ${name(userId)}'s elevated stake slice (×${batonMultiplier}) forfeits to their own destination.`,
           },
         });
         // Elevate new holder's slice
@@ -515,14 +523,14 @@ class CircleGameService {
       state.current_holder_id = nextHolder;
       state.baton_held_since = new Date().toISOString();
       state.lives_remaining = Math.max(0, (state.lives_remaining ?? 3) - 1);
-      note = `Baton dropped by ${userId} — life lost. ${state.lives_remaining} lives remaining. Passed to ${nextHolder}.`;
+      note = `${name(userId)} dropped the baton — ${state.lives_remaining} ${state.lives_remaining === 1 ? 'life' : 'lives'} left. ${name(nextHolder)} has it now.`;
       if (state.lives_remaining === 0) {
         await this.completeGame(game.id);
         note += ' Game over — no lives left.';
       }
     } else if (!isSuccess && userId !== holderId) {
       // Non-holder missed — no mechanical effect, but log it
-      note = `${userId} missed a workout (not the current holder, no effect)`;
+      note = `${name(userId)} missed, but wasn't holding the baton — no effect on the relay.`;
     }
 
     return { updatedState: state, note, extraEventType, extraPayload };
@@ -621,7 +629,8 @@ class CircleGameService {
   }
 
   private processPointsRaceEvent(
-    game: any, userId: string, isSuccess: boolean, state: Record<string, any>
+    game: any, userId: string, isSuccess: boolean, state: Record<string, any>,
+    name: (id: string | null | undefined) => string
   ) {
     if (!isSuccess) return { updatedState: state, note: null };
 
@@ -640,7 +649,7 @@ class CircleGameService {
     state.scores = scores;
     state.streak_days = streakDays;
 
-    const note = `${userId} scored. Total: ${scores[userId]} pts`;
+    const note = `${name(userId)} scored — ${scores[userId]} points.`;
     return { updatedState: state, note };
   }
 
@@ -656,7 +665,8 @@ class CircleGameService {
    *               the corporate funding layer is live (product-pricing-rework.md §6).
    */
   private async processCollectiveEvent(
-    game: any, userId: string, isSuccess: boolean, state: Record<string, any>
+    game: any, userId: string, isSuccess: boolean, state: Record<string, any>,
+    name: (id: string | null | undefined) => string
   ) {
     if (!isSuccess) return { updatedState: state, note: null };
 
@@ -668,7 +678,7 @@ class CircleGameService {
     const rules = game.rules as Record<string, any>;
     const target = rules.target ?? 30;
     const remaining = Math.max(0, target - state.total);
-    const note = `${userId} contributed. Group total: ${state.total}/${target}. ${remaining} to go.`;
+    const note = `${name(userId)} contributed — the room is at ${state.total} of ${target}, ${remaining} to go.`;
 
     // Phase 4b mechanic 2: if the game has a linked sprint (and the sprint has a
     // collective charity goal), mark the moment when target is hit.
@@ -913,17 +923,17 @@ class CircleGameService {
       const holderId: string | null = state.current_holder_id ?? null;
       if (!holderId || !Number.isFinite(heldMs) || Date.now() < heldMs + windowMs) return 0;
 
+      const names = await this.memberNames(game.circleId);
+      const name = (id: string | null | undefined) => (id ? names.get(id) ?? 'someone' : 'someone');
+
       // Window blown in silence — same consequence as a logged miss.
-      const { updatedState, note } = await this.processRelayEvent(game, holderId, false, state);
+      const { updatedState, note } = await this.processRelayEvent(game, holderId, false, state, name);
       await prisma.$transaction([
         prisma.circleGameEvent.create({
           data: { gameId: game.id, userId: holderId, eventType: 'baton_timeout', payload: {}, note },
         }),
         prisma.circleGame.update({ where: { id: game.id }, data: { state: updatedState } }),
       ]);
-
-      const names = await this.memberNames(game.circleId);
-      const name = (id: string | null) => (id ? names.get(id) ?? 'someone' : 'someone');
       const next = updatedState.current_holder_id as string | null;
       const lives = Number(updatedState.lives_remaining ?? 0);
       const msg = lives > 0
@@ -958,10 +968,22 @@ class CircleGameService {
 
   /**
    * Seed the sprint's game so every circle has one without anyone lifting a
-   * finger: The 80% Pact — the room holding 80% of member-days for a sprint,
-   * the same number the weekly pulse already speaks. Called at circle
-   * formation and at every sprint roll (session close); a no-op when a game
-   * is already running or the room is too small.
+   * finger. Called at circle formation and at every sprint roll (session
+   * close); a no-op when a game is already running or the room is too small.
+   *
+   * The default is the BATON RELAY, not the 80% Pact.
+   *
+   * The Pact is a shared counter: a kept day increments it, and there is
+   * nothing a member can do differently because the game is running. It can be
+   * reported but not played, which is why it produced standings Ivy could only
+   * ever recite. The relay is the one legacy mechanic with an actual turn —
+   * the baton is in YOUR hands, for a window, and dropping it costs the room a
+   * life rather than costing you a number. That is the version with a moment
+   * in it, and it was the one template that never auto-started.
+   *
+   * The Pact survives as the fallback for a room too small to pass a baton
+   * around (a two-person relay is just alternating days), and as an explicit
+   * choice via createGame.
    */
   async seedSprintPact(circleId: string): Promise<{ id: string } | null> {
     const existing = await prisma.circleGame.findFirst({
@@ -978,6 +1000,7 @@ class CircleGameService {
 
     // The reigning crown carries over as narrative, not mechanics.
     const names = await this.memberNames(circleId);
+    const asRelay = memberCount >= CircleGameService.RELAY_MIN_MEMBERS;
     const lastWin = await prisma.circleGameEvent.findFirst({
       where: { eventType: 'game_won', game: { circleId } },
       orderBy: { createdAt: 'desc' },
@@ -987,17 +1010,80 @@ class CircleGameService {
       ?? (lastWin?.payload as { winner?: string } | null)?.winner ?? lastWin?.userId;
     const champName = champId ? names.get(champId) : undefined;
 
-    const game = await this.createGame(circleId, {
-      name: 'The 80% Pact',
-      description: `${memberCount} of you, one number: ${target} kept days in ${days} — the room holding 80% together. Everyone counts or nobody crowns.`,
-      templateType: 'collective',
-      rules: { target, deadline_days: days },
-      ivyInstruction: `The circle is running The 80% Pact: ${target} kept days in ${days} days — that's the whole room holding 80% together. Every armed morning adds one. Mention the running total when it fits naturally, celebrate contributions, and if the pace slips say what's needed per day without pressure. When the target lands, make it a moment.${champName ? ` ${champName} wears the crown from the last game — a light nod to the reigning champion is fair game.` : ''}`,
+    const crownTail = champName ? ` ${champName} wears the crown from the last game — a light nod to the reigning champion is fair game.` : '';
+    const crownBeat = champName ? ` ${champName} defends the crown.` : '';
+
+    const game = asRelay
+      ? await this.createGame(circleId, {
+          name: 'The Baton',
+          description: `${memberCount} of you, one baton. Keep your day to pass it on. Drop it and the room loses a life — three drops and the run is over.`,
+          templateType: 'relay',
+          rules: { window_hours: 24, lives: 3 },
+          ivyInstruction: `The circle is running The Baton — a relay. Whoever holds it has 24 hours to keep their day and pass it on; a drop costs the room one of its three lives. If they are the current holder, that is worth a line: the baton is theirs right now and the room is waiting on them. If they are not, keep it to a passing mention of where it sits. Never pressure someone about another member's drop.${crownTail}`,
+        })
+      : await this.createGame(circleId, {
+          name: 'The 80% Pact',
+          description: `${memberCount} of you, one number: ${target} kept days in ${days} — the room holding 80% together. Everyone counts or nobody crowns.`,
+          templateType: 'collective',
+          rules: { target, deadline_days: days },
+          ivyInstruction: `The circle is running The 80% Pact: ${target} kept days in ${days} days — that's the whole room holding 80% together. Every armed morning adds one. Mention the running total when it fits naturally, celebrate contributions, and if the pace slips say what's needed per day without pressure. When the target lands, make it a moment.${crownTail}`,
+        });
+
+    const firstHolder = asRelay
+      ? names.get(((game as { state?: Record<string, unknown> }).state?.current_holder_id as string) ?? '')
+      : undefined;
+
+    await this.announceBeat(
+      circleId,
+      asRelay
+        ? `New game on the table: The Baton. One of you holds it at a time — keep your day, pass it on. Three drops and the run is over.${firstHolder ? ` ${firstHolder} starts with it.` : ''}${crownBeat}`
+        : `New game on the table: The 80% Pact. ${target} kept days in the next ${days} — that's this room holding 80% together. Every armed morning counts, and I'm keeping score.${crownBeat}`,
+      { gameId: game.id },
+    );
+    logger.info(
+      asRelay
+        ? `Sprint relay seeded for circle ${circleId}: ${memberCount} members, 24h window, 3 lives`
+        : `Sprint pact seeded for circle ${circleId}: target ${target} over ${days}d (${memberCount} members)`,
+    );
+    return game;
+  }
+
+  /**
+   * What the game DID since Ivy last spoke to this person — not where it stands.
+   *
+   * A standing ("41 of 56") is weather: it can be mentioned but not discussed.
+   * A beat ("Amara took the lead this afternoon") is news, and news is what makes
+   * one aside worth spending. The beats are read back from the member's OWN chat
+   * thread, which means they are already public to them by construction — a
+   * private miss that was never announced can never leak into a call this way.
+   *
+   * Window: since their last completed call ("since we last spoke"), clamped to
+   * 7 days so a returning user isn't read a fortnight of history, and defaulting
+   * to 48h for someone who has never had a call.
+   */
+  private async gameBeatsSince(userId: string): Promise<string | null> {
+    const lastCall = await prisma.call.findFirst({
+      where: { userId, status: 'COMPLETED' },
+      orderBy: { createdAt: 'desc' },
+      select: { createdAt: true },
     });
 
-    await this.announceBeat(circleId, `New game on the table: The 80% Pact. ${target} kept days in the next ${days} — that's this room holding 80% together. Every armed morning counts, and I'm keeping score.${champName ? ` ${champName} defends the crown.` : ''}`, { gameId: game.id });
-    logger.info(`Sprint pact seeded for circle ${circleId}: target ${target} over ${days}d (${memberCount} members)`);
-    return game;
+    const now = Date.now();
+    const floor = now - 7 * 86_400_000;
+    const since = new Date(
+      lastCall ? Math.max(lastCall.createdAt.getTime(), floor) : now - 2 * 86_400_000,
+    );
+
+    const beats = await prisma.message.findMany({
+      where: { userId, messageType: 'circle_game', createdAt: { gte: since } },
+      orderBy: { createdAt: 'desc' },
+      take: 3,
+      select: { content: true },
+    });
+    if (beats.length === 0) return null;
+
+    // Oldest first — the order they happened in, which is the order they read in.
+    return beats.reverse().map((b) => b.content).join(' ');
   }
 
   /**
@@ -1081,6 +1167,7 @@ class CircleGameService {
     circle_game_name: string | null;
     circle_game_state_summary: string | null;
     circle_game_ivy_instruction: string | null;
+    circle_game_recent_beats: string | null;
     circle_crown_game?: string;
     circle_crown_days_left?: number;
     circle_crown_material?: string;
@@ -1088,15 +1175,17 @@ class CircleGameService {
     // The crown check runs regardless of an active game: the next sprint's
     // pact auto-seeds at session close, so a fresh game and an unclaimed
     // crown from the previous one routinely coexist.
-    const [result, crown] = await Promise.all([
+    const [result, crown, beats] = await Promise.all([
       this.getActiveGameForUser(userId),
       this.getUnclaimedCrownForUser(userId).catch(() => null),
+      this.gameBeatsSince(userId).catch(() => null),
     ]);
     if (!result && !crown) return null;
     return {
       circle_game_name: result?.game.name ?? null,
       circle_game_state_summary: result?.stateSummary ?? null,
       circle_game_ivy_instruction: result?.game.ivyInstruction ?? null,
+      circle_game_recent_beats: beats,
       ...(crown ? {
         circle_crown_game: crown.gameName,
         circle_crown_days_left: crown.daysLeft,
