@@ -1512,10 +1512,18 @@ class CircleGameService {
       where: { eventType: 'game_won', createdAt: { gte: since }, game: { circleId: membership.circleId } },
       orderBy: { createdAt: 'desc' },
       take: 3,
-      select: { userId: true, createdAt: true, payload: true, game: { select: { id: true, name: true, state: true } } },
+      select: { userId: true, createdAt: true, payload: true, game: { select: { id: true, name: true, state: true, templateType: true } } },
     });
     const win = wins.find((w) => {
-      const p = w.payload as { winner_id?: string; winner?: string } | null;
+      const p = w.payload as { winner_id?: string; winner?: string; collective?: boolean } | null;
+      // A win the whole ROOM earned crowns nobody. Without this the fallback to
+      // w.userId hands the spoils — naming the room's pledge AND authoring the
+      // next game — to whoever happened to land the final day, which is an
+      // accident of timing rather than anything won. crownLineage already
+      // refused to count these; this is the half that grants the prize, and the
+      // two disagreeing meant the lineage showed no champion while somebody was
+      // quietly being offered the champion's rights.
+      if (w.game?.templateType === 'collective' || p?.collective === true) return false;
       return (p?.winner_id ?? p?.winner ?? w.userId) === userId;
     });
     if (!win) return null;

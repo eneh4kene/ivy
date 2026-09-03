@@ -57,7 +57,7 @@ function crownWin(state: Record<string, unknown> = {}) {
       userId: WINNER,
       createdAt: new Date(Date.now() - 2 * 86_400_000),
       payload: { winner_id: WINNER },
-      game: { id: WON_GAME_ID, name: 'The Baton', state },
+      game: { id: WON_GAME_ID, name: 'The Baton', state, templateType: 'relay' },
     },
   ])
   mockPrisma.circleGame.findUnique.mockResolvedValue({ state })
@@ -110,6 +110,38 @@ describe('getCrownRights — the two spoils are independent', () => {
 
   it('goes quiet once both are spent', async () => {
     crownWin({ pledge_claimed: true, game_authored: true })
+    expect(await circleGameService.getCrownRights(WINNER)).toBeNull()
+  })
+
+  it('offers nothing for a win the whole room earned', async () => {
+    // The spoils fall back to the event's userId, which for a collective or a
+    // Two by Two win is just whoever landed the final day — an accident of
+    // timing. crownLineage already refused to count these; this is the half
+    // that grants the prize.
+    mockPrisma.ivyCircleMember.findFirst.mockResolvedValue({ circleId: CIRCLE_ID })
+    mockPrisma.circleGameEvent.findMany.mockResolvedValue([
+      {
+        userId: WINNER,
+        createdAt: new Date(Date.now() - 86_400_000),
+        payload: { collective: true },
+        game: { id: WON_GAME_ID, name: 'Two by Two', state: {}, templateType: 'pairs' },
+      },
+    ])
+
+    expect(await circleGameService.getCrownRights(WINNER)).toBeNull()
+  })
+
+  it('offers nothing for a collective game win either', async () => {
+    mockPrisma.ivyCircleMember.findFirst.mockResolvedValue({ circleId: CIRCLE_ID })
+    mockPrisma.circleGameEvent.findMany.mockResolvedValue([
+      {
+        userId: WINNER,
+        createdAt: new Date(Date.now() - 86_400_000),
+        payload: {},
+        game: { id: WON_GAME_ID, name: 'The 80% Pact', state: {}, templateType: 'collective' },
+      },
+    ])
+
     expect(await circleGameService.getCrownRights(WINNER)).toBeNull()
   })
 
