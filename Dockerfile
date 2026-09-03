@@ -29,5 +29,7 @@ COPY --from=builder /app/dist ./dist
 
 EXPOSE 8080
 
-# Run migrations then start
+# NOTE: fly.toml's [processes] block overrides this CMD, so the migrate step
+# here never ran on Fly. Migrations are now fly.toml's release_command. This
+# CMD is kept for plain `docker run` (local, CI), where it IS the entrypoint.
 CMD ["sh", "-c", "npx prisma migrate deploy && node dist/index.js"]

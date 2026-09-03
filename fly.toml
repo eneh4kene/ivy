@@ -3,6 +3,21 @@ primary_region = "lhr"
 
 [build]
 
+# Migrations run HERE, not from the Dockerfile.
+#
+# The Dockerfile ends with `CMD sh -c "npx prisma migrate deploy && node
+# dist/index.js"`, and that CMD is dead: the [processes] block below replaces
+# it entirely, so migrate deploy had never once run on Fly. Nobody noticed
+# because no migration was added between 14 Jul and 3 Sep — the first one after
+# that deployed "successfully" while its column silently did not exist, which
+# would have failed at runtime instead of at deploy time.
+#
+# release_command runs once per deploy, before the new machines take traffic,
+# and a failure here aborts the deploy rather than shipping code that expects a
+# schema it does not have.
+[deploy]
+  release_command = "npx prisma migrate deploy"
+
 [env]
   NODE_ENV = "production"
   PORT = "8080"
