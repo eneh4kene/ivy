@@ -46,6 +46,28 @@ describe('buildSystemPrompt — circle game standing on the no-brief path', () =
     expect(prompt).not.toContain('SINCE YOU LAST SPOKE');
   });
 
+  // The only two things that persist across sprints. Both are deliberately
+  // un-rankable: a run one person is on, and a number belonging to the room.
+  it('carries the crown run and the room record, and forbids ranking members', () => {
+    const prompt = promptService.buildSystemPrompt('CHAT', {
+      ...gameCtx,
+      circle_crown_run: 'Amara has held the crown 3 sprints running.',
+      circle_room_record: 'This room kept 44 days last sprint; its best is 48.',
+    }, false)
+    expect(prompt).toContain('CROWN RUN')
+    expect(prompt).toContain('Amara has held the crown 3 sprints running.')
+    expect(prompt).toContain('ROOM RECORD')
+    expect(prompt).toContain('This room kept 44 days last sprint; its best is 48.')
+    expect(prompt).toContain('Never rank members against each other')
+  })
+
+  it('omits both cross-sprint lines for a room with no history', () => {
+    const prompt = promptService.buildSystemPrompt('CHAT', gameCtx, false)
+    expect(prompt).toContain('CIRCLE GAME — Streak Relay')
+    expect(prompt).not.toContain('CROWN RUN')
+    expect(prompt).not.toContain('ROOM RECORD')
+  })
+
   it('omits the section entirely when there is no active game', () => {
     const prompt = promptService.buildSystemPrompt('CHAT', baseCtx, false);
     expect(prompt).not.toContain('CIRCLE GAME');

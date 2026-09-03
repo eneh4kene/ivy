@@ -818,7 +818,13 @@ class PromptService {
           ? `SINCE YOU LAST SPOKE: ${ctx.circle_game_recent_beats}\nThis is the interesting half. If you spend one aside on the game, spend it here — on what MOVED — and let the standing be the backdrop rather than the point. They have already read these in their thread, so react to it as shared news, never announce it as if it were new. If none of it is theirs, a passing nod to the room is plenty.`
           : '',
         ctx.circle_game_ivy_instruction ? `How to weave it in: ${ctx.circle_game_ivy_instruction}` : '',
-        `Reference it naturally only if it fits — one aside, not a lecture. The game is never the reason for the call. Never invent scores, standings or events; use only what is above.`,
+        // The two cross-sprint facts. Both are deliberately about the ROOM or
+        // about one person's run — never a ranking, because a ranking would
+        // become a permanent record of the struggling member losing, and they
+        // are the reason the circle exists.
+        ctx.circle_crown_run ? `CROWN RUN: ${ctx.circle_crown_run}` : '',
+        ctx.circle_room_record ? `ROOM RECORD: ${ctx.circle_room_record}` : '',
+        `Reference it naturally only if it fits — one aside, not a lecture. The game is never the reason for the call. Never rank members against each other or read anyone a standing; the room's own past is the only thing worth measuring against. Never invent scores, standings or events; use only what is above.`,
       ].filter(Boolean).join('\n'));
     }
     // The winner's unclaimed pledge right. They likely saw one push and forgot;

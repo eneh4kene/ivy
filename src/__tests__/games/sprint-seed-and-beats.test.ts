@@ -16,8 +16,9 @@
 jest.mock('../../utils/prisma', () => ({
   __esModule: true,
   default: {
-    circleGame: { findFirst: jest.fn(), create: jest.fn(), findUnique: jest.fn() },
+    circleGame: { findFirst: jest.fn(), create: jest.fn(), findUnique: jest.fn(), count: jest.fn() },
     circleGameEvent: { findFirst: jest.fn(), findMany: jest.fn() },
+    workout: { findMany: jest.fn() },
     ivyCircleMember: { count: jest.fn(), findMany: jest.fn(), findFirst: jest.fn() },
     message: { findMany: jest.fn() },
     call: { findFirst: jest.fn() },
@@ -55,7 +56,11 @@ function seedMembers(n: number) {
 beforeEach(() => {
   jest.clearAllMocks()
   mockPrisma.circleGame.findFirst.mockResolvedValue(null)   // no game running
+  mockPrisma.circleGame.count.mockResolvedValue(0)          // first game the room has had
   mockPrisma.circleGameEvent.findFirst.mockResolvedValue(null) // no reigning champion
+  mockPrisma.circleGameEvent.findMany.mockResolvedValue([]) // no crown lineage
+  mockPrisma.workout.findMany.mockResolvedValue([])         // no room record yet
+  mockPrisma.user.findUnique.mockResolvedValue({ timezone: 'Europe/London' })
   mockPrisma.circleGame.create.mockImplementation(({ data }: any) =>
     Promise.resolve({ id: 'game-001', ...data }),
   )
@@ -87,6 +92,44 @@ describe('seedSprintPact — the relay is the default game', () => {
     const created = mockPrisma.circleGame.create.mock.calls[0][0].data
     expect(created.templateType).toBe('collective')
     expect(created.name).toBe('The 80% Pact')
+  })
+
+  it('alternates to Two by Two on the room\'s second game', async () => {
+    // A room plays both shapes across a season rather than the same one
+    // forever — and it is the only way pairs get played without being chosen.
+    seedMembers(4)
+    mockPrisma.circleGame.count.mockResolvedValue(1)
+
+    await circleGameService.seedSprintPact(CIRCLE_ID)
+
+    const created = mockPrisma.circleGame.create.mock.calls[0][0].data
+    expect(created.templateType).toBe('pairs')
+    expect(created.name).toBe('Two by Two')
+    // Paired off in join order, no one left over in an even room.
+    expect(created.rules.pairs).toEqual([['u1', 'u2'], ['u3', 'u4']])
+    expect(created.rules.solo).toEqual([])
+    // Ivy is forbidden from reporting a partner's miss.
+    expect(created.ivyInstruction).toContain('NEVER tell anyone their partner missed')
+  })
+
+  it('stays on the relay when the room is too small to pair off cleanly', async () => {
+    seedMembers(3)
+    mockPrisma.circleGame.count.mockResolvedValue(1)
+
+    await circleGameService.seedSprintPact(CIRCLE_ID)
+
+    expect(mockPrisma.circleGame.create.mock.calls[0][0].data.templateType).toBe('relay')
+  })
+
+  it('leaves an odd member unpaired rather than forcing a trio', async () => {
+    seedMembers(5)
+    mockPrisma.circleGame.count.mockResolvedValue(1)
+
+    await circleGameService.seedSprintPact(CIRCLE_ID)
+
+    const created = mockPrisma.circleGame.create.mock.calls[0][0].data
+    expect(created.rules.pairs).toEqual([['u1', 'u2'], ['u3', 'u4']])
+    expect(created.rules.solo).toEqual(['u5'])
   })
 
   it('stays a no-op when a game is already running', async () => {
@@ -152,5 +195,69 @@ describe('gameBeatsSince — what moved, not where things stand', () => {
     mockPrisma.message.findMany.mockResolvedValue([])
 
     expect(await beatsFor('u1')).toBeNull()
+  })
+})
+
+describe('crownLineage — a run, never a ranking', () => {
+  it('counts consecutive wins by the same champion', async () => {
+    mockPrisma.circleGameEvent.findMany.mockResolvedValue([
+      { userId: 'u1', payload: { winner_id: 'u1' }, game: { templateType: 'relay' } },
+      { userId: 'u1', payload: { winner_id: 'u1' }, game: { templateType: 'points_race' } },
+      { userId: 'u2', payload: { winner_id: 'u2' }, game: { templateType: 'relay' } },
+    ])
+
+    expect(await circleGameService.crownLineage(CIRCLE_ID)).toEqual({ championId: 'u1', defences: 2 })
+  })
+
+  it('breaks the run on a collective win, which crowns nobody', async () => {
+    mockPrisma.circleGameEvent.findMany.mockResolvedValue([
+      { userId: null, payload: { collective: true }, game: { templateType: 'collective' } },
+      { userId: 'u1', payload: { winner_id: 'u1' }, game: { templateType: 'relay' } },
+    ])
+
+    expect(await circleGameService.crownLineage(CIRCLE_ID)).toBeNull()
+  })
+
+  it('is silent for a room that has never finished a game', async () => {
+    mockPrisma.circleGameEvent.findMany.mockResolvedValue([])
+    expect(await circleGameService.crownLineage(CIRCLE_ID)).toBeNull()
+  })
+})
+
+describe('roomRecord — the room against its own past, with nobody ranked', () => {
+  const sprintMs = 14 * 86_400_000
+  /** A kept day `sprintsAgo` sprints back (0 = the live sprint). */
+  const keptAt = (sprintsAgo: number) => ({
+    status: 'COMPLETED',
+    armedAt: null,
+    plannedDate: new Date(Date.now() - sprintsAgo * sprintMs - 86_400_000),
+  })
+
+  beforeEach(() => {
+    mockPrisma.ivyCircleMember.findMany.mockResolvedValue([{ userId: 'u1' }, { userId: 'u2' }])
+  })
+
+  it('reports the last finished sprint, the one before, and the best', async () => {
+    mockPrisma.workout.findMany.mockResolvedValue([
+      ...Array(3).fill(null).map(() => keptAt(0)),  // live sprint — excluded
+      ...Array(9).fill(null).map(() => keptAt(1)),  // last finished
+      ...Array(12).fill(null).map(() => keptAt(2)), // the best
+    ])
+
+    expect(await circleGameService.roomRecord(CIRCLE_ID)).toEqual({ last: 9, prior: 12, best: 12 })
+  })
+
+  it('counts an armed day that was never marked missed', async () => {
+    mockPrisma.workout.findMany.mockResolvedValue([
+      { status: 'PENDING', armedAt: new Date(), plannedDate: new Date(Date.now() - sprintMs - 86_400_000) },
+      { status: 'MISSED', armedAt: new Date(), plannedDate: new Date(Date.now() - sprintMs - 86_400_000) },
+    ])
+
+    expect(await circleGameService.roomRecord(CIRCLE_ID)).toMatchObject({ last: 1 })
+  })
+
+  it('is silent until a sprint has actually finished', async () => {
+    mockPrisma.workout.findMany.mockResolvedValue([keptAt(0), keptAt(0)])
+    expect(await circleGameService.roomRecord(CIRCLE_ID)).toBeNull()
   })
 })

@@ -47,6 +47,20 @@ export const GAME_TEMPLATES = {
     },
     defaultInstruction: `The group is chasing a collective target of {target} kept days in {deadline_days} days. You're at {total} so far — {remaining} to go. Celebrate each contribution. If the pace is behind, note it without pressure: "you need {daily_rate} kept days a day to hit it — still doable." When you hit the target, make it a moment.`,
   },
+  pairs: {
+    name: 'Two by Two',
+    description: 'You are paired for the sprint. A day banks only when BOTH of you keep it.',
+    defaultRules: {
+      pairs: [],             // [[userA, userB], ...]; built from members at game start
+      solo: [],              // odd member out — their kept days bank on their own
+      target: 20,            // paired days the room needs
+      deadline_days: 14,
+    },
+    // Interdependence, not opposition: nobody can win by anyone else failing,
+    // and the only thing that ever crosses between two members is whether a day
+    // counts. No money moves between people — it cannot, by design.
+    defaultInstruction: `The circle is running Two by Two — everyone is paired for the sprint, and a day banks for the room only when BOTH of a pair keep it. The room needs {target}. Their partner is {partner_name}. Keep it warm and mutual, never a reprimand: if their partner has already kept today, say so plainly — theirs is the one that banks it. Never tell anyone that their partner MISSED; a partner's bad day is that partner's to talk about, not yours to report.`,
+  },
   custom: {
     name: 'Custom Game',
     description: 'Define your own game. Write the rules in plain language and Ivy will run it.',
@@ -65,8 +79,12 @@ class CircleGameService {
   static readonly PACT_RATE = 0.8;
   /** Below this a relay is just two people alternating days — fall back to the Pact. */
   static readonly RELAY_MIN_MEMBERS = 3;
+  /** Pairs wants two clean pairs before it is worth running. */
+  static readonly PAIRS_MIN_MEMBERS = 4;
   /** Matches the GameSpec StakeEffects fence (multiplierMax ≤ 3). */
   static readonly MAX_BATON_MULTIPLIER = 3;
+  /** How far back the room's own record looks (sprints, including the live one). */
+  static readonly ROOM_RECORD_SPRINTS = 6;
 
   // ── Names & beats ────────────────────────────────────────────────────────────
   // Games live or die on being FELT between calls. Beats are the sound a game
@@ -151,6 +169,21 @@ class CircleGameService {
       };
     } else if (data.templateType === 'collective') {
       initialState = { total: 0, contributors: [] };
+    } else if (data.templateType === 'pairs') {
+      if (!rules.pairs?.length) {
+        const ids = await this.activeMemberIds(circleId);
+        const built: string[][] = [];
+        for (let i = 0; i + 1 < ids.length; i += 2) built.push([ids[i], ids[i + 1]]);
+        rules.pairs = built;
+        // An odd room leaves one person unpaired rather than forcing an
+        // awkward trio: their kept days bank on their own, and they are told so.
+        rules.solo = ids.length % 2 === 1 ? [ids[ids.length - 1]] : [];
+      }
+      if (!rules.target) {
+        const payingDays = (rules.pairs as string[][]).length + (rules.solo as string[]).length;
+        rules.target = Math.max(1, Math.ceil(payingDays * CircleGameService.PACT_SPRINT_DAYS * CircleGameService.PACT_RATE));
+      }
+      initialState = { banked: 0, pair_banked: {}, day_kept: {} };
     }
 
     const game = await prisma.circleGame.create({
@@ -326,6 +359,10 @@ class CircleGameService {
         ({ updatedState, note } = await this.processCollectiveEvent(game, userId, isSuccess, updatedState, name));
         break;
 
+      case 'pairs':
+        ({ updatedState, note } = await this.processPairsEvent(game, userId, isSuccess, updatedState, name));
+        break;
+
       default:
         // custom — just log the event, Ivy handles everything via ivyInstruction
         note = isSuccess
@@ -374,6 +411,39 @@ class CircleGameService {
         }).catch(() => {});
       } else {
         this.announceBeat(game.circleId, `That was the last life. The relay is over — ${updatedState.passes ?? 0} passes was the run. New game with the next sprint.`, { gameId: game.id }).catch(() => {});
+      }
+    }
+
+    if (game.templateType === 'pairs' && isSuccess) {
+      const pair = this.pairOf(rules, userId);
+      const target = Number(rules.target ?? 20);
+      const banked = Number(updatedState.banked ?? 0);
+      const justBanked = banked > Number((game.state as Record<string, any>).banked ?? 0);
+
+      if (justBanked && pair?.partnerId) {
+        this.announceBeat(game.circleId, `${name(userId)} and ${name(pair.partnerId)} both kept it — banked. The room is at ${banked} of ${target}.`, { gameId: game.id }).catch(() => {});
+      } else if (justBanked) {
+        this.announceBeat(game.circleId, `${name(userId)} banked a day — the room is at ${banked} of ${target}.`, { gameId: game.id }).catch(() => {});
+      } else if (pair?.partnerId) {
+        // THE moment the whole mechanic exists for: their partner's kept day is
+        // the reason they hear from anyone tonight. Notified, because a nudge
+        // that arrives tomorrow is not a nudge. Positive framing only — this
+        // fires on a SUCCESS, and never says anyone missed.
+        this.announceBeat(game.circleId, '', {
+          gameId: game.id,
+          personal: {
+            userId: pair.partnerId,
+            message: `${name(userId)} kept their day — yours is the one that banks it. ${Math.max(0, target - banked)} to go for the room.`,
+            notify: true,
+          },
+        }).catch(() => {});
+      }
+
+      if (banked >= target) {
+        prisma.circleGameEvent.create({
+          data: { gameId: game.id, userId, eventType: 'game_won', payload: { ...updatedState, collective: true }, note: `The room banked ${banked} paired days.` },
+        }).then(() => this.completeGame(game.id)).catch(() => {});
+        this.announceBeat(game.circleId, `TARGET HIT — ${banked} paired days. 🏆 ${game.name} is won, and not one of them counted alone.`, { gameId: game.id }).catch(() => {});
       }
     }
 
@@ -607,6 +677,96 @@ class CircleGameService {
     );
   }
 
+  /** The partner (or null when unpaired) and the pair's state key. */
+  private pairOf(rules: Record<string, any>, userId: string): { partnerId: string | null; key: string } | null {
+    const pairs: string[][] = rules.pairs ?? [];
+    for (const pair of pairs) {
+      if (pair.includes(userId)) {
+        return { partnerId: pair.find((id) => id !== userId) ?? null, key: [...pair].sort().join('|') };
+      }
+    }
+    const solo: string[] = rules.solo ?? [];
+    return solo.includes(userId) ? { partnerId: null, key: userId } : null;
+  }
+
+  /**
+   * The day the room shares is each member's OWN day.
+   *
+   * Bucketing on server time would put a partner in Denver arming at 8pm onto
+   * the next UTC date and silently break their pair. The accountability unit
+   * has always been the person's own day — the same principle that moved calls
+   * to follow the person — so two partners each keeping "their Tuesday" bank
+   * Tuesday, wherever they are.
+   */
+  private async localDayKey(userId: string): Promise<string> {
+    const u = await prisma.user.findUnique({ where: { id: userId }, select: { timezone: true } });
+    return new Date().toLocaleDateString('en-CA', { timeZone: u?.timezone || 'Europe/London' });
+  }
+
+  /**
+   * processPairsEvent — a day banks for the room only when BOTH of a pair keep it.
+   *
+   * Deliberately asymmetric in what it says out loud: a kept day is announced,
+   * a miss never is. Naming someone's miss to their partner would turn the
+   * mechanic into surveillance; the absence of a bank says everything needed,
+   * and the useful nudge ("theirs is the one that banks it") is generated by
+   * the partner's SUCCESS rather than by anyone's failure.
+   */
+  private async processPairsEvent(
+    game: any, userId: string, isSuccess: boolean, state: Record<string, any>,
+    name: (id: string | null | undefined) => string
+  ) {
+    const rules = game.rules as Record<string, any>;
+    const pair = this.pairOf(rules, userId);
+    if (!pair) return { updatedState: state, note: null };
+
+    const day = await this.localDayKey(userId);
+    const dayKept: Record<string, string[]> = state.day_kept ?? {};
+    const keptToday = new Set(dayKept[day] ?? []);
+
+    if (!isSuccess) {
+      // Recorded, never announced. A pair that does not bank simply does not bank.
+      keptToday.delete(userId);
+      dayKept[day] = [...keptToday];
+      state.day_kept = dayKept;
+      return { updatedState: state, note: `${name(userId)} missed — the pair doesn't bank today.` };
+    }
+
+    keptToday.add(userId);
+    dayKept[day] = [...keptToday];
+    state.day_kept = dayKept;
+
+    const target = Number(rules.target ?? 20);
+    const banksAlone = pair.partnerId === null;
+    const partnerKept = pair.partnerId ? keptToday.has(pair.partnerId) : false;
+
+    if (banksAlone || partnerKept) {
+      const pairBanked: Record<string, number> = state.pair_banked ?? {};
+      // Idempotent: a second event for the same pair on the same day must not
+      // bank twice (both partners fire an event when they both keep it).
+      const stampKey = `${pair.key}@${day}`;
+      const stamped: string[] = state.banked_days ?? [];
+      if (!stamped.includes(stampKey)) {
+        stamped.push(stampKey);
+        state.banked_days = stamped;
+        state.banked = Number(state.banked ?? 0) + 1;
+        pairBanked[pair.key] = (pairBanked[pair.key] ?? 0) + 1;
+        state.pair_banked = pairBanked;
+      }
+      const remaining = Math.max(0, target - Number(state.banked));
+      const note = banksAlone
+        ? `${name(userId)} banked a day solo — the room is at ${state.banked} of ${target}, ${remaining} to go.`
+        : `${name(userId)} and ${name(pair.partnerId)} both kept it — banked. The room is at ${state.banked} of ${target}, ${remaining} to go.`;
+      return { updatedState: state, note };
+    }
+
+    // Their half is in; the pair is waiting on the other.
+    return {
+      updatedState: state,
+      note: `${name(userId)} kept their half — waiting on ${name(pair.partnerId)} to bank it.`,
+    };
+  }
+
   private processPointsRaceEvent(
     game: any, userId: string, isSuccess: boolean, state: Record<string, any>,
     name: (id: string | null | undefined) => string
@@ -761,6 +921,18 @@ class CircleGameService {
         const pct = Math.round((total / target) * 100);
         return `Group total: ${total}/${target} workouts (${pct}%). ${target - total} to go.`;
       }
+      case 'pairs': {
+        const target = Number(rules.target ?? 20);
+        const banked = Number(state.banked ?? 0);
+        const pair = this.pairOf(rules, userId);
+        const mine = pair ? Number((state.pair_banked ?? {})[pair.key] ?? 0) : 0;
+        const who = pair?.partnerId
+          ? `Paired with ${names.get(pair.partnerId) ?? 'a circle-mate'} (${mine} banked together).`
+          : pair
+            ? `Unpaired this sprint — your kept days bank on their own (${mine} so far).`
+            : `Not paired in this game.`;
+        return `${who} Room: ${banked}/${target} paired days, ${Math.max(0, target - banked)} to go.`;
+      }
       default:
         return `Active game: ${game.name}. ${game.description ?? ''}`.trim();
     }
@@ -811,6 +983,11 @@ class CircleGameService {
         return leadId && Number(leadPts) > 0
           ? `${names.get(leadId) ?? 'Someone'} leads ${game.name} with ${leadPts} pts — first to ${rules.target ?? 20} takes the crown.`
           : `${game.name} is on — first to ${rules.target ?? 20} points takes the crown.`;
+      }
+      case 'pairs': {
+        const target = Number(rules.target ?? 20);
+        const banked = Number(state.banked ?? 0);
+        return `${game.name}: ${banked} of ${target} paired days banked — every one of them took two people.`;
       }
       case 'collective': {
         const target = rules.target ?? 30;
@@ -925,6 +1102,21 @@ class CircleGameService {
       return 1;
     }
 
+    if (game.templateType === 'pairs' && rules.deadline_days) {
+      const deadline = game.createdAt.getTime() + Number(rules.deadline_days) * 86_400_000;
+      if (Date.now() < deadline) return 0;
+      const target = Number(rules.target ?? 20);
+      const banked = Number(state.banked ?? 0);
+      if (banked >= target) return 0; // won at the wire; the win path handled it
+
+      await this.completeGame(game.id);
+      await prisma.circleGameEvent.create({
+        data: { gameId: game.id, userId: null, eventType: 'game_lost', payload: state, note: `Deadline passed at ${banked}/${target} paired days.` },
+      });
+      this.announceBeat(game.circleId, `Time's up on ${game.name} — ${banked} of ${target} paired days banked. Short this sprint, and every one of those still took two of you. New game with the next sprint.`, { gameId: game.id }).catch(() => {});
+      return 1;
+    }
+
     if (game.templateType === 'collective' && rules.deadline_days) {
       const deadline = game.createdAt.getTime() + Number(rules.deadline_days) * 86_400_000;
       if (Date.now() < deadline) return 0;
@@ -978,21 +1170,56 @@ class CircleGameService {
     const target = Math.ceil(memberCount * days * CircleGameService.PACT_RATE);
 
     // The reigning crown carries over as narrative, not mechanics.
-    const names = await this.memberNames(circleId);
-    const asRelay = memberCount >= CircleGameService.RELAY_MIN_MEMBERS;
-    const lastWin = await prisma.circleGameEvent.findFirst({
-      where: { eventType: 'game_won', game: { circleId } },
-      orderBy: { createdAt: 'desc' },
-      select: { userId: true, payload: true },
-    });
-    const champId = (lastWin?.payload as { winner_id?: string; winner?: string } | null)?.winner_id
-      ?? (lastWin?.payload as { winner?: string } | null)?.winner ?? lastWin?.userId;
-    const champName = champId ? names.get(champId) : undefined;
+    const [names, lineage, record, played] = await Promise.all([
+      this.memberNames(circleId),
+      this.crownLineage(circleId).catch(() => null),
+      this.roomRecord(circleId).catch(() => null),
+      prisma.circleGame.count({ where: { circleId } }),
+    ]);
 
-    const crownTail = champName ? ` ${champName} wears the crown from the last game — a light nod to the reigning champion is fair game.` : '';
-    const crownBeat = champName ? ` ${champName} defends the crown.` : '';
+    // Which game the room gets. The relay and Two by Two alternate, so a room
+    // plays both across a season rather than the same shape forever — variety
+    // across sprints is itself worth having, and it is the only way pairs ever
+    // get played without someone choosing them. Pairs wants two clean pairs, so
+    // it waits for a fourth member; below that the relay is the better shape.
+    const canPair = memberCount >= CircleGameService.PAIRS_MIN_MEMBERS;
+    const shape: 'relay' | 'pairs' | 'collective' =
+      memberCount < CircleGameService.RELAY_MIN_MEMBERS ? 'collective'
+        : canPair && played % 2 === 1 ? 'pairs'
+          : 'relay';
+    const asRelay = shape === 'relay';
 
-    const game = asRelay
+    const champName = lineage ? names.get(lineage.championId) : undefined;
+    // The one thing that persists across sprints, and it persists as a story:
+    // a run anyone can end by winning, never a table anyone is ranked in.
+    const defenceTail = champName && lineage && lineage.defences > 1
+      ? ` ${champName} has held the crown ${lineage.defences} sprints running — worth a nod, and worth noting that anyone can end it here.`
+      : champName ? ` ${champName} wears the crown from the last game — a light nod to the reigning champion is fair game.` : '';
+    const defenceBeat = champName && lineage && lineage.defences > 1
+      ? ` ${champName} defends the crown — ${lineage.defences} sprints running now.`
+      : champName ? ` ${champName} defends the crown.` : '';
+
+    // The room measured against itself: competitive in feel, and nobody is
+    // ranked against anyone.
+    const recordTail = record
+      ? ` The room kept ${record.last} days last sprint${record.best > record.last ? ` (its best is ${record.best})` : ''} — beating that is the number worth naming when the pace comes up, and it belongs to the room, never to one member.`
+      : '';
+    const recordBeat = record
+      ? ` Last sprint this room kept ${record.last}${record.best > record.last ? ` — the best it has managed is ${record.best}` : ', its best yet'}.`
+      : '';
+
+    const crownTail = `${defenceTail}${recordTail}`;
+    const crownBeat = `${defenceBeat}${recordBeat}`;
+
+    const game = shape === 'pairs'
+      ? await this.createGame(circleId, {
+          name: 'Two by Two',
+          description: `${memberCount} of you, paired up. A day banks for the room only when BOTH of a pair keep it.`,
+          templateType: 'pairs',
+          rules: { deadline_days: days },
+          ivyInstruction: `The circle is running Two by Two — everyone is paired for the sprint, and a day banks for the room only when BOTH of a pair keep it. If their partner has already kept today, say so plainly: theirs is the one that banks it. NEVER tell anyone their partner missed — a partner's bad day is that partner's to talk about, not yours to report.${crownTail}`,
+        })
+      : asRelay
       ? await this.createGame(circleId, {
           name: 'The Baton',
           description: `${memberCount} of you, one baton. Keep your day to pass it on. Drop it and the room loses a life — three drops and the run is over.`,
@@ -1008,21 +1235,20 @@ class CircleGameService {
           ivyInstruction: `The circle is running The 80% Pact: ${target} kept days in ${days} days — that's the whole room holding 80% together. Every armed morning adds one. Mention the running total when it fits naturally, celebrate contributions, and if the pace slips say what's needed per day without pressure. When the target lands, make it a moment.${crownTail}`,
         });
 
-    const firstHolder = asRelay
-      ? names.get(((game as { state?: Record<string, unknown> }).state?.current_holder_id as string) ?? '')
-      : undefined;
+    const gameState = (game as { state?: Record<string, unknown> }).state ?? {};
+    const gameRules = (game as { rules?: Record<string, unknown> }).rules ?? {};
+    const firstHolder = asRelay ? names.get((gameState.current_holder_id as string) ?? '') : undefined;
 
-    await this.announceBeat(
-      circleId,
-      asRelay
-        ? `New game on the table: The Baton. One of you holds it at a time — keep your day, pass it on. Three drops and the run is over.${firstHolder ? ` ${firstHolder} starts with it.` : ''}${crownBeat}`
-        : `New game on the table: The 80% Pact. ${target} kept days in the next ${days} — that's this room holding 80% together. Every armed morning counts, and I'm keeping score.${crownBeat}`,
-      { gameId: game.id },
-    );
+    const opener = shape === 'pairs'
+      ? `New game on the table: Two by Two. You're paired up, and a day only banks for the room when BOTH of you keep it — ${gameRules.target} of them to win it.${(gameRules.solo as string[])?.length ? ` One of you is odd one out and banks solo.` : ''}`
+      : asRelay
+        ? `New game on the table: The Baton. One of you holds it at a time — keep your day, pass it on. Three drops and the run is over.${firstHolder ? ` ${firstHolder} starts with it.` : ''}`
+        : `New game on the table: The 80% Pact. ${target} kept days in the next ${days} — that's this room holding 80% together. Every armed morning counts, and I'm keeping score.`;
+
+    await this.announceBeat(circleId, `${opener}${crownBeat}`, { gameId: game.id });
     logger.info(
-      asRelay
-        ? `Sprint relay seeded for circle ${circleId}: ${memberCount} members, 24h window, 3 lives`
-        : `Sprint pact seeded for circle ${circleId}: target ${target} over ${days}d (${memberCount} members)`,
+      `Sprint game seeded for circle ${circleId}: ${shape} (${memberCount} members, game #${played + 1})` +
+      `${lineage ? `, champion holding ${lineage.defences}` : ''}${record ? `, last sprint ${record.last} kept` : ''}`,
     );
     return game;
   }
@@ -1210,6 +1436,98 @@ class CircleGameService {
   }
 
   /**
+   * The crown's lineage: who holds it and how many sprints running.
+   *
+   * This is the ONLY thing that persists across sprints, and it is deliberately
+   * narrative rather than mechanical. A cumulative leaderboard would make the
+   * wrong thing accumulate: whoever is already consistent wins every sprint, so
+   * the ladder becomes a permanent record of the struggling member losing — and
+   * the struggling member is the one who most needs the room. It also could not
+   * be escaped by effort, which turns a peer circle into a ranked hierarchy and
+   * stacks a second pressure system on behaviour that already has money on it.
+   *
+   * A defence count carries none of that. It is one fact about one person, any
+   * member can end it by winning the next game, and non-winners accumulate
+   * nothing at all. The games still reset clean every sprint.
+   */
+  async crownLineage(circleId: string): Promise<{ championId: string; defences: number } | null> {
+    const wins = await prisma.circleGameEvent.findMany({
+      where: { eventType: 'game_won', game: { circleId } },
+      orderBy: { createdAt: 'desc' },
+      take: 12,
+      select: { userId: true, payload: true, game: { select: { templateType: true } } },
+    });
+
+    const winnerOf = (w: typeof wins[number]): string | null => {
+      const p = w.payload as { winner_id?: string; winner?: string } | null;
+      // A collective win belongs to the room, so it crowns nobody and breaks
+      // any run rather than extending it.
+      if (w.game?.templateType === 'collective') return null;
+      return p?.winner_id ?? p?.winner ?? w.userId ?? null;
+    };
+
+    const championId = wins.length ? winnerOf(wins[0]) : null;
+    if (!championId) return null;
+
+    let defences = 0;
+    for (const w of wins) {
+      if (winnerOf(w) !== championId) break;
+      defences++;
+    }
+    return { championId, defences };
+  }
+
+  /**
+   * The room measured against its own past — the safe kind of competition.
+   *
+   * Kept days per sprint, bucketed backwards from today. No member appears in
+   * it, so there is nothing here to rank anyone by; the room's own history is
+   * the opponent. One workout query, bucketed in memory.
+   */
+  async roomRecord(circleId: string): Promise<{ last: number; prior: number | null; best: number } | null> {
+    const members = await prisma.ivyCircleMember.findMany({
+      where: { circleId, isActive: true },
+      select: { userId: true },
+    });
+    if (members.length === 0) return null;
+
+    const sprintMs = CircleGameService.PACT_SPRINT_DAYS * 86_400_000;
+    const buckets = CircleGameService.ROOM_RECORD_SPRINTS;
+    const since = new Date(Date.now() - buckets * sprintMs);
+
+    const workouts = await prisma.workout.findMany({
+      where: { userId: { in: members.map((m) => m.userId) }, plannedDate: { gte: since } },
+      select: { status: true, armedAt: true, plannedDate: true },
+    });
+    if (workouts.length === 0) return null;
+
+    // Same "kept" definition the pulse and pledge material use: a logged
+    // completion, or an armed day that was never marked missed or skipped.
+    const kept = workouts.filter((w) =>
+      w.status === 'COMPLETED' || w.status === 'PARTIAL' ||
+      (!!w.armedAt && w.status !== 'MISSED' && w.status !== 'SKIPPED'),
+    );
+
+    const now = Date.now();
+    const counts = new Array(buckets).fill(0) as number[];
+    for (const w of kept) {
+      const age = now - w.plannedDate.getTime();
+      const idx = Math.floor(age / sprintMs);
+      if (idx >= 0 && idx < buckets) counts[idx]++;
+    }
+
+    // Index 0 is the sprint in progress; the record is about FINISHED ones.
+    const finished = counts.slice(1);
+    if (finished.length === 0 || finished.every((c) => c === 0)) return null;
+
+    return {
+      last: finished[0],
+      prior: finished.length > 1 && finished[1] > 0 ? finished[1] : null,
+      best: Math.max(...finished),
+    };
+  }
+
+  /**
    * Which of the crown's spoils this user still holds, if any. Public so the
    * chat path can gate on it with one cheap read before spending a model call.
    */
@@ -1331,6 +1649,8 @@ class CircleGameService {
     circle_game_state_summary: string | null;
     circle_game_ivy_instruction: string | null;
     circle_game_recent_beats: string | null;
+    circle_crown_run: string | null;
+    circle_room_record: string | null;
     circle_crown_game?: string;
     circle_crown_days_left?: number;
     circle_crown_material?: string;
@@ -1340,17 +1660,39 @@ class CircleGameService {
     // The crown check runs regardless of an active game: the next sprint's
     // pact auto-seeds at session close, so a fresh game and an unclaimed
     // crown from the previous one routinely coexist.
-    const [result, crown, beats] = await Promise.all([
+    const membership = await prisma.ivyCircleMember.findFirst({
+      where: { userId, isActive: true },
+      select: { circleId: true },
+    });
+
+    const [result, crown, beats, lineage, record] = await Promise.all([
       this.getActiveGameForUser(userId),
       this.getUnclaimedCrownForUser(userId).catch(() => null),
       this.gameBeatsSince(userId).catch(() => null),
+      membership ? this.crownLineage(membership.circleId).catch(() => null) : null,
+      membership ? this.roomRecord(membership.circleId).catch(() => null) : null,
     ]);
     if (!result && !crown) return null;
+
+    // Read live rather than frozen into ivyInstruction at seed time: a defence
+    // count grows mid-sprint and a record that is a fortnight stale is worse
+    // than none.
+    const names = lineage && membership ? await this.memberNames(membership.circleId) : null;
+    const champName = lineage && names ? names.get(lineage.championId) : undefined;
     return {
       circle_game_name: result?.game.name ?? null,
       circle_game_state_summary: result?.stateSummary ?? null,
       circle_game_ivy_instruction: result?.game.ivyInstruction ?? null,
       circle_game_recent_beats: beats,
+      // The only cross-sprint memory in the system, and it is a story about one
+      // person that anyone can end — never a table anyone is ranked in.
+      circle_crown_run: champName && lineage && lineage.defences > 1
+        ? `${champName} has held the crown ${lineage.defences} sprints running. Anyone can end that by winning this one — say it as a standing fact, at most once, and never as pressure on them to try.`
+        : null,
+      // The room against its own past: competitive in feel, with no member in it.
+      circle_room_record: record
+        ? `This room kept ${record.last} days last sprint${record.best > record.last ? `; its best is ${record.best}` : ' — its best yet'}. If the pace comes up, this is the number worth naming, and it belongs to the room, never to one member.`
+        : null,
       ...(crown ? {
         circle_crown_game: crown.gameName,
         circle_crown_days_left: crown.daysLeft,
