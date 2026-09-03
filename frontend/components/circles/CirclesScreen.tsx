@@ -15,7 +15,8 @@
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { Users, Calendar, Zap, Sparkles, Lock, Send, Eye, EyeOff, UserPlus } from 'lucide-react'
-import { circlesApi, circleGamesApi, type CircleCurrentSession, type WitnessedStakeStatus } from '@/lib/api'
+import { circlesApi, circleGamesApi, peerApi, type CircleCurrentSession, type WitnessedStakeStatus, type PeerPartner } from '@/lib/api'
+import PartnerNote from './PartnerNote'
 import { useAuthStore } from '@/lib/store/auth.store'
 
 type Circle = Awaited<ReturnType<typeof circlesApi.getMy>>[number]
@@ -89,11 +90,13 @@ function NavBar({ title, subtitle }: { title?: string; subtitle?: string }) {
  * pact, a mini leaderboard for the points race, holder + lives for the relay.
  * Ivy's own state summary rides underneath — her voice, our pixels.
  */
-function GameCard({ game, stateSummary, nameOf, myUserId }: {
+function GameCard({ game, stateSummary, nameOf, myUserId, partner, onPartnerChange }: {
   game: NonNullable<ActiveGame>['game']
   stateSummary?: string
   nameOf: (id: string) => string
   myUserId?: string
+  partner?: PeerPartner | null
+  onPartnerChange?: (next: PeerPartner) => void
 }) {
   const state = (game.state ?? {}) as Record<string, any>
   const rules = (game.rules ?? {}) as Record<string, any>
@@ -139,6 +142,37 @@ function GameCard({ game, stateSummary, nameOf, myUserId }: {
         <p className="text-2xs text-ink-400 pt-0.5">First to {rules.target ?? 20} takes the crown.</p>
       </div>
     )
+  } else if (game.templateType === 'pairs') {
+    const target = Number(rules.target ?? 20)
+    const banked = Number(state.banked ?? 0)
+    const pct = Math.min(100, Math.round((banked / Math.max(1, target)) * 100))
+    const pairs = (rules.pairs ?? []) as string[][]
+    const mine = pairs.find((p) => p.includes(myUserId ?? ''))
+    const partnerId = mine?.find((id) => id !== myUserId)
+    const ours = Number((state.pair_banked ?? {})[[...(mine ?? [])].sort().join('|')] ?? 0)
+    const isSolo = !partnerId && ((rules.solo ?? []) as string[]).includes(myUserId ?? '')
+    body = (
+      <div className="mt-3">
+        <div className="flex items-baseline justify-between mb-1.5">
+          <p className="text-sm text-ink-50 font-semibold tabular-nums">
+            {banked} <span className="text-ink-400 font-normal">of {target} paired days</span>
+          </p>
+          {(partnerId || isSolo) && (
+            <p className="text-2xs text-ink-400 tabular-nums">{ours} yours</p>
+          )}
+        </div>
+        <div className="h-2 rounded-full bg-ink-900/70 border border-ink-700 overflow-hidden">
+          <div className="h-full rounded-full bg-gradient-to-r from-sage-500 to-sage-300 transition-all duration-700" style={{ width: `${pct}%` }} />
+        </div>
+        <p className="text-2xs text-ink-400 pt-2 leading-relaxed">
+          {partnerId
+            ? <>You&rsquo;re with <span className="text-ink-100">{nameOf(partnerId)}</span>. A day only counts when you both keep it.</>
+            : isSolo
+              ? <>Odd one out this sprint — your kept days count on their own.</>
+              : <>Every day here took two people.</>}
+        </p>
+      </div>
+    )
   } else if (game.templateType === 'relay') {
     const lives = Number(state.lives_remaining ?? 0)
     const holderId = state.current_holder_id as string | undefined
@@ -165,6 +199,9 @@ function GameCard({ game, stateSummary, nameOf, myUserId }: {
       <h2 className="font-display text-lg text-ink-50">{game.name}</h2>
       {game.description && <p className="text-sm text-ink-400 mt-1">{game.description}</p>}
       {body}
+      {game.templateType === 'pairs' && partner && onPartnerChange && (
+        <PartnerNote partner={partner} onChange={onPartnerChange} />
+      )}
       {stateSummary && (
         <div className="mt-3 flex items-start gap-2 rounded-xl bg-ink-900/60 border border-ink-700 p-3">
           <Sparkles className="w-3.5 h-3.5 text-gold-400 shrink-0 mt-0.5" />
@@ -329,6 +366,7 @@ export function CirclesScreen() {
   const { user } = useAuthStore()
   const [circle, setCircle] = useState<Circle | null>(null)
   const [activeGame, setActiveGame] = useState<ActiveGame>(null)
+  const [partner, setPartner] = useState<PeerPartner | null>(null)
   const [session, setSession] = useState<CircleCurrentSession | null>(null)
   const [pulse, setPulse] = useState<Pulse | null>(null)
   const [stakeStatuses, setStakeStatuses] = useState<WitnessedStakeStatus[]>([])
@@ -360,6 +398,11 @@ export function CirclesScreen() {
 
     circleGamesApi.getActiveGame()
       .then((g) => { if (alive) setActiveGame(g) })
+    // Null for anyone not in a pairs game, and for the odd member out — the
+    // right to write comes from sharing an outcome, and they do not share one.
+    peerApi.getPartner()
+      .then((p) => { if (alive) setPartner(p) })
+      .catch(() => {})
       .catch(() => {})
 
     return () => { alive = false }
@@ -537,6 +580,8 @@ export function CirclesScreen() {
               game={game}
               stateSummary={activeGame?.stateSummary}
               myUserId={myUserId}
+              partner={partner}
+              onPartnerChange={setPartner}
               nameOf={(id) => circle.members.find((m) => m.userId === id)?.user.firstName ?? 'A circle-mate'}
             />
           ) : (

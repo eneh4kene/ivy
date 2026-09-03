@@ -525,6 +525,65 @@ export const gameSuggestionsApi = {
   },
 }
 
+export interface PeerPartner {
+  partnerId: string
+  firstName: string
+  gameId: string
+  gameName: string
+  /** Either side has blocked the other — contact is off, the game is not. */
+  contactBlocked: boolean
+  blockedByMe: boolean
+  sentToday: number
+  dailyLimit: number
+}
+
+export interface PeerMessage {
+  id: string
+  createdAt: string
+  content: string
+  fromUserId: string
+  fromUser: { firstName: string | null }
+}
+
+/** Why a note did not send. Every one of these is an ordinary product state. */
+export type PeerSendRefusal = 'no_partner' | 'blocked' | 'rate_limited' | 'empty' | 'too_long'
+
+export const peerApi = {
+  /** The partner this user may write to, or null when they have none. */
+  getPartner: async (): Promise<PeerPartner | null> => {
+    const response = await client.get<ApiResponse<PeerPartner | null>>('/api/peer/partner')
+    return response.data.data ?? null
+  },
+  listMessages: async (limit = 20): Promise<PeerMessage[]> => {
+    const response = await client.get<ApiResponse<PeerMessage[]>>('/api/peer/messages', { params: { limit } })
+    return response.data.data ?? []
+  },
+  /**
+   * Send a note. Resolves to a refusal reason rather than throwing, because
+   * "you have said your three today" is not an error — it is an answer, and
+   * the UI has to be able to say which one it got.
+   */
+  send: async (content: string): Promise<{ ok: true } | { ok: false; reason: PeerSendRefusal }> => {
+    try {
+      await client.post<ApiResponse<unknown>>('/api/peer/messages', { content })
+      return { ok: true }
+    } catch (err: any) {
+      const reason = err?.response?.data?.error as PeerSendRefusal | undefined
+      if (reason) return { ok: false, reason }
+      throw err
+    }
+  },
+  block: async (targetId: string): Promise<void> => {
+    await client.post('/api/peer/block', { targetId })
+  },
+  unblock: async (targetId: string): Promise<void> => {
+    await client.delete(`/api/peer/block/${targetId}`)
+  },
+  report: async (targetId: string, reason: string, peerMessageId?: string): Promise<void> => {
+    await client.post('/api/peer/report', { targetId, reason, peerMessageId })
+  },
+}
+
 export const circleGamesApi = {
   getTemplates: async (): Promise<GameTemplate[]> => {
     const response = await client.get<ApiResponse<GameTemplate[]>>('/api/circles/games/templates')

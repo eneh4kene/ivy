@@ -214,6 +214,28 @@ function Bubble({
 }) {
   const isIvy = msg.direction === 'OUTBOUND'
   const actions = msg.metadata?.actions ?? []
+  const peer = msg.messageType === 'peer_message' ? msg.metadata?.peer : undefined
+
+  // A note from a circle-mate arrives in this thread, but it is NOT Ivy
+  // speaking — wearing her avatar would misattribute another member's words to
+  // her. Given its own mark and its own name, so who said it is never in doubt.
+  if (peer) {
+    return (
+      <div className="flex items-end gap-2">
+        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-sage-400/30 bg-sage-400/10 text-[10px] font-medium text-sage-300">
+          {(peer.fromName ?? '?').charAt(0).toUpperCase()}
+        </div>
+        <div className="flex max-w-[78%] flex-col gap-1">
+          <p className="font-mono text-[8.5px] uppercase tracking-[0.22em] text-sage-400">
+            {peer.fromName} · your pair
+          </p>
+          <div className="whitespace-pre-wrap rounded-2xl rounded-bl-md border border-sage-400/20 bg-sage-400/05 px-4 py-2.5 text-sm leading-relaxed text-ink-100">
+            {msg.content}
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   if (isIvy) {
     return (

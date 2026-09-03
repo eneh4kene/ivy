@@ -420,5 +420,9 @@ export interface ChatMessage {
   direction: 'INBOUND' | 'OUTBOUND'
   content: string
   messageType?: string | null
-  metadata?: { actions?: ChatActionKind[] } | null
+  metadata?: {
+    actions?: ChatActionKind[]
+    /** Set on a 'peer_message' — a note from a circle-mate, not from Ivy. */
+    peer?: { fromUserId: string; fromName: string; gameId?: string }
+  } | null
 }
