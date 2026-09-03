@@ -43,7 +43,7 @@ const mockPrisma = prisma as any
 const CIRCLE_ID = 'circle-001'
 const [AMARA, SAM, RUTH] = ['u-amara', 'u-sam', 'u-ruth']
 
-function pairsGame(state: Record<string, any> = {}, rules: Record<string, any> = {}) {
+function pairsGame(state: Record<string, any> = {}, rules: Record<string, any> = {}, ageDays = 0) {
   return {
     id: 'game-pairs-001',
     circleId: CIRCLE_ID,
@@ -54,7 +54,7 @@ function pairsGame(state: Record<string, any> = {}, rules: Record<string, any> =
     state: { banked: 0, pair_banked: {}, day_kept: {}, ...state },
     ivyInstruction: 'run it',
     status: 'active',
-    createdAt: new Date(),
+    createdAt: new Date(Date.now() - ageDays * 86_400_000),
   }
 }
 
@@ -250,5 +250,94 @@ describe('a block silences the pair without breaking the game', () => {
 
     expect(active!.stateSummary).toContain('Sam')
     expect(active!.stateSummary).not.toContain('Do NOT name')
+  })
+})
+
+describe('a partner who stops showing up must not cost the sprint', () => {
+  const dayKey = (daysAgo: number) =>
+    new Date(Date.now() - daysAgo * 86_400_000).toISOString().slice(0, 10)
+
+  it('banks alone once the partner has been silent long enough', async () => {
+    // Amara turns up every morning; Sam stopped a week ago. Without this she
+    // banks NOTHING for the rest of the sprint through no fault of her own.
+    mockPrisma.circleGame.findFirst.mockResolvedValue(
+      pairsGame({ day_kept: { [dayKey(8)]: [AMARA, SAM], [dayKey(1)]: [AMARA] } }, {}, 14),
+    )
+
+    await circleGameService.processArmingEvent(AMARA, true)
+    await flush()
+
+    expect(writtenState().banked).toBe(1)
+    expect(writtenState().solo_fallback).toContain(AMARA)
+
+    const toHer = posted().filter(([uid]) => uid === AMARA).map(([, b]) => b)
+    // Told once, about HER game.
+    expect(toHer.some((b) => b.includes('banking on their own for now'))).toBe(true)
+    // Nothing anywhere names Sam or characterises his absence — the room hears
+    // that a day was banked, not who failed to turn up for it.
+    expect(posted().every(([, b]) => !/Sam/.test(b))).toBe(true)
+    // And the room beat must not claim they both kept it, which would be a lie
+    // about a real person in front of their circle.
+    expect(posted().every(([, b]) => !b.includes('both kept it'))).toBe(true)
+  })
+
+  it('says it once, not every morning after', async () => {
+    mockPrisma.circleGame.findFirst.mockResolvedValue(
+      pairsGame({ day_kept: { [dayKey(8)]: [AMARA, SAM] }, solo_fallback: [AMARA] }, {}, 14),
+    )
+
+    await circleGameService.processArmingEvent(AMARA, true)
+    await flush()
+
+    expect(writtenState().banked).toBe(1)
+    // The room still hears the day landed; she is not told again.
+    const toHer = posted().filter(([uid]) => uid === AMARA).map(([, b]) => b)
+    expect(toHer.some((b) => b.includes('banking on their own for now'))).toBe(false)
+    expect(posted().every(([, b]) => !b.includes('both kept it'))).toBe(true)
+  })
+
+  it('infers nothing in the game\'s first days, when silence means nothing yet', async () => {
+    mockPrisma.circleGame.findFirst.mockResolvedValue(pairsGame({}, {}, 1))
+
+    await circleGameService.processArmingEvent(AMARA, true)
+    await flush()
+
+    // Still waiting on Sam, exactly as before.
+    expect(writtenState().banked).toBe(0)
+    expect(posted().filter(([uid]) => uid === SAM)).toHaveLength(1)
+  })
+
+  it('treats a rough week as struggling, not stopped', async () => {
+    // Sam kept a day two days ago. That is someone having a hard time, which
+    // is different from someone who has gone, and the pair stands.
+    mockPrisma.circleGame.findFirst.mockResolvedValue(
+      pairsGame({ day_kept: { [dayKey(2)]: [SAM] } }, {}, 14),
+    )
+
+    await circleGameService.processArmingEvent(AMARA, true)
+    await flush()
+
+    expect(writtenState().banked).toBe(0)
+  })
+
+  it('cannot double-bank a day when the partner comes back the same day', async () => {
+    // Amara banked alone this morning; Sam returns this evening. The stamp is
+    // the PAIR's, so the day counts once.
+    const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Europe/London' })
+    const key = [AMARA, SAM].sort().join('|')
+    mockPrisma.circleGame.findFirst.mockResolvedValue(
+      pairsGame({
+        day_kept: { [today]: [AMARA] },
+        banked: 1,
+        pair_banked: { [key]: 1 },
+        banked_days: [`${key}@${today}`],
+        solo_fallback: [AMARA],
+      }, {}, 14),
+    )
+
+    await circleGameService.processArmingEvent(SAM, true)
+    await flush()
+
+    expect(writtenState().banked).toBe(1)
   })
 })

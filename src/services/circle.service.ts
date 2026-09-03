@@ -124,6 +124,21 @@ class CircleService {
 
     await this.syncCircleSize(circleId)
 
+    // The moment a room becomes a room, it gets its game — and hears about it.
+    //
+    // Before this, seedSprintPact fired only at coach-circle formation and at
+    // session close, so a PEER circle growing to three had no game at all
+    // until the next fortnightly session rolled. The room crossed the
+    // threshold, the Circle tab stopped saying "forming", and nothing
+    // happened: no game, no beat, and nothing for Ivy to mention on the next
+    // call, for up to two weeks.
+    //
+    // Idempotent by construction — seedSprintPact no-ops when a game is
+    // already running, so later joiners cost one cheap query and nothing else.
+    import('./circle-game.service')
+      .then(({ default: circleGameService }) => circleGameService.seedSprintPact(circleId))
+      .catch((err) => logger.warn(`Sprint game seed on join failed for ${circleId}:`, err))
+
     return member
   }
 

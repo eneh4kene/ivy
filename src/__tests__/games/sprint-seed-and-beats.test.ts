@@ -84,14 +84,15 @@ describe('seedSprintPact — the relay is the default game', () => {
     expect(created.ivyInstruction).toContain('current holder')
   })
 
-  it('falls back to the Pact when the room is too small for a relay', async () => {
+  it('seeds nothing for a room that is not a room yet', async () => {
+    // Seeding at two put a game into a room the UI hides below three — and
+    // that invisible game then BLOCKED the real one, because seedSprintPact
+    // no-ops while a game is active. So the third member arrived and nothing
+    // happened.
     seedMembers(2)
 
-    await circleGameService.seedSprintPact(CIRCLE_ID)
-
-    const created = mockPrisma.circleGame.create.mock.calls[0][0].data
-    expect(created.templateType).toBe('collective')
-    expect(created.name).toBe('The 80% Pact')
+    expect(await circleGameService.seedSprintPact(CIRCLE_ID)).toBeNull()
+    expect(mockPrisma.circleGame.create).not.toHaveBeenCalled()
   })
 
   it('alternates to Two by Two on the room\'s second game', async () => {
@@ -130,6 +131,16 @@ describe('seedSprintPact — the relay is the default game', () => {
     const created = mockPrisma.circleGame.create.mock.calls[0][0].data
     expect(created.rules.pairs).toEqual([['u1', 'u2'], ['u3', 'u4']])
     expect(created.rules.solo).toEqual(['u5'])
+  })
+
+  it('is safe to call on every join — no-ops once a game is running', async () => {
+    // addMember fires this on every join now, so the guard is what keeps a
+    // fourth member from replacing the game the room is already playing.
+    seedMembers(5)
+    mockPrisma.circleGame.findFirst.mockResolvedValue({ id: 'already-running' })
+
+    expect(await circleGameService.seedSprintPact(CIRCLE_ID)).toBeNull()
+    expect(mockPrisma.circleGame.create).not.toHaveBeenCalled()
   })
 
   it('stays a no-op when a game is already running', async () => {

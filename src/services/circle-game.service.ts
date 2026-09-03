@@ -81,6 +81,8 @@ class CircleGameService {
   static readonly RELAY_MIN_MEMBERS = 3;
   /** Pairs wants two clean pairs before it is worth running. */
   static readonly PAIRS_MIN_MEMBERS = 4;
+  /** Silence this long from a partner stops costing the other person the sprint. */
+  static readonly PAIR_DORMANT_DAYS = 5;
   /** Matches the GameSpec StakeEffects fence (multiplierMax ≤ 3). */
   static readonly MAX_BATON_MULTIPLIER = 3;
   /** How far back the room's own record looks (sprints, including the live one). */
@@ -420,18 +422,42 @@ class CircleGameService {
       const banked = Number(updatedState.banked ?? 0);
       const justBanked = banked > Number((game.state as Record<string, any>).banked ?? 0);
 
-      if (justBanked && pair?.partnerId) {
+      // Whether this day was earned together or earned alone decides what the
+      // room is told. Saying "both kept it" when one of them has not been seen
+      // in a week is a lie about a real person, in front of their circle.
+      const dormant = pair?.partnerId
+        ? this.partnerDormant(updatedState, pair.partnerId, game.createdAt)
+        : false;
+      const earnedAlone = !pair?.partnerId || dormant;
+
+      // Told once, privately, and only about THEIR game — never about the
+      // other person's misses.
+      const wasTold: string[] = ((game.state as Record<string, any>).solo_fallback ?? []) as string[];
+      const nowTold: string[] = (updatedState.solo_fallback ?? []) as string[];
+      if (!wasTold.includes(userId) && nowTold.includes(userId)) {
+        this.announceBeat(game.circleId, '', {
+          gameId: game.id,
+          personal: {
+            userId,
+            message: `Your days are banking on their own for now — you keep the credit whether or not anyone else turns up. Nothing for you to do, and if your pair picks it back up you'll bank together again.`,
+            notify: false,
+          },
+        }).catch(() => {});
+      }
+
+      if (justBanked && !earnedAlone && pair?.partnerId) {
         this.announceBeat(game.circleId, `${name(userId)} and ${name(pair.partnerId)} both kept it — banked. The room is at ${banked} of ${target}.`, { gameId: game.id }).catch(() => {});
       } else if (justBanked) {
         this.announceBeat(game.circleId, `${name(userId)} banked a day — the room is at ${banked} of ${target}.`, { gameId: game.id }).catch(() => {});
-      } else if (pair?.partnerId) {
+      } else if (pair?.partnerId && !dormant) {
         // THE moment the whole mechanic exists for: their partner's kept day is
         // the reason they hear from anyone tonight. Notified, because a nudge
         // that arrives tomorrow is not a nudge. Positive framing only — this
         // fires on a SUCCESS, and never says anyone missed.
         //
-        // Unless contact between them is blocked, in which case the game keeps
-        // running and simply stops speaking their names at each other.
+        // Suppressed when contact is blocked (the game runs, the names stop),
+        // and when the partner is dormant — nudging someone who has gone quiet
+        // that they are being waited on is pressure, not a nudge.
         const waiting = pair.partnerId;
         this.contactBlocked(userId, waiting).then((blocked) => {
           if (blocked) return;
@@ -700,6 +726,32 @@ class CircleGameService {
     return hit !== null;
   }
 
+  /**
+   * Has this member gone dark for long enough that their partner should stop
+   * paying for it?
+   *
+   * Two by Two's whole point is that a day takes two people — but that turns
+   * cruel the moment one of them stops showing up: the one still turning up
+   * every morning banks NOTHING, through no fault of their own, for the rest
+   * of the sprint. Interdependence has to be able to fail open.
+   *
+   * Deliberately generous. Nothing is inferred in the game's first few days
+   * (there is no evidence yet), and one bad week is not dormancy — this is
+   * about someone who has stopped, not someone who is struggling, which is a
+   * distinction the pause protocol takes seriously everywhere else.
+   */
+  private partnerDormant(state: Record<string, any>, partnerId: string, gameCreatedAt: Date): boolean {
+    const days = CircleGameService.PAIR_DORMANT_DAYS;
+    // Too early to call it: the game has not been running long enough for
+    // silence to mean anything.
+    if (Date.now() - gameCreatedAt.getTime() < days * 86_400_000) return false;
+
+    const dayKept = (state.day_kept ?? {}) as Record<string, string[]>;
+    // Day keys are YYYY-MM-DD, so a string compare is a date compare.
+    const cutoff = new Date(Date.now() - days * 86_400_000).toISOString().slice(0, 10);
+    return !Object.entries(dayKept).some(([day, ids]) => day >= cutoff && ids.includes(partnerId));
+  }
+
   /** The partner (or null when unpaired) and the pair's state key. */
   pairOf(rules: Record<string, any>, userId: string): { partnerId: string | null; key: string } | null {
     const pairs: string[][] = rules.pairs ?? [];
@@ -762,8 +814,11 @@ class CircleGameService {
     const target = Number(rules.target ?? 20);
     const banksAlone = pair.partnerId === null;
     const partnerKept = pair.partnerId ? keptToday.has(pair.partnerId) : false;
+    // A partner who has stopped showing up stops costing this person the sprint.
+    const dormant = !!pair.partnerId && !partnerKept
+      && this.partnerDormant(state, pair.partnerId, game.createdAt);
 
-    if (banksAlone || partnerKept) {
+    if (banksAlone || partnerKept || dormant) {
       const pairBanked: Record<string, number> = state.pair_banked ?? {};
       // Idempotent: a second event for the same pair on the same day must not
       // bank twice (both partners fire an event when they both keep it).
@@ -777,9 +832,26 @@ class CircleGameService {
         state.pair_banked = pairBanked;
       }
       const remaining = Math.max(0, target - Number(state.banked));
+
+      if (dormant) {
+        // Told once, and told plainly. Saying "your days bank on their own for
+        // now" states a change to THIS person's game; enumerating the other
+        // person's misses would be reporting them, which this mechanic never
+        // does. The pairing itself is untouched — the moment their partner
+        // keeps a day again, the pair banks together as before, no repair
+        // step and no conversation needed.
+        const told: string[] = state.solo_fallback ?? [];
+        if (!told.includes(userId)) {
+          told.push(userId);
+          state.solo_fallback = told;
+        }
+      }
+
       const note = banksAlone
         ? `${name(userId)} banked a day solo — the room is at ${state.banked} of ${target}, ${remaining} to go.`
-        : `${name(userId)} and ${name(pair.partnerId)} both kept it — banked. The room is at ${state.banked} of ${target}, ${remaining} to go.`;
+        : dormant
+          ? `${name(userId)} banked a day on their own (partner dormant) — the room is at ${state.banked} of ${target}, ${remaining} to go.`
+          : `${name(userId)} and ${name(pair.partnerId)} both kept it — banked. The room is at ${state.banked} of ${target}, ${remaining} to go.`;
       return { updatedState: state, note };
     }
 
@@ -952,7 +1024,10 @@ class CircleGameService {
         // Blocked contact means Ivy stops naming them too — the standing she
         // reads out loud is as much "contact" as a beat is.
         const blocked = pair?.partnerId ? await this.contactBlocked(userId, pair.partnerId) : false;
-        const who = pair?.partnerId && !blocked
+        const solo = ((state.solo_fallback ?? []) as string[]).includes(userId);
+        const who = solo
+          ? `Their partner has gone quiet, so their days now bank on their own (${mine} banked). Do NOT say their partner has missed or gone quiet — say only that their days count on their own for now, and never suggest they chase them.`
+          : pair?.partnerId && !blocked
           ? `Paired with ${names.get(pair.partnerId) ?? 'a circle-mate'} (${mine} banked together).`
           : pair?.partnerId
             ? `Paired for this sprint (${mine} banked together). Do NOT name their partner or refer to them — contact between them is blocked.`
@@ -1192,7 +1267,7 @@ class CircleGameService {
     if (existing) return null;
 
     const memberCount = await prisma.ivyCircleMember.count({ where: { circleId, isActive: true } });
-    if (memberCount < 2) return null;
+    if (memberCount < CircleGameService.RELAY_MIN_MEMBERS) return null;
 
     const days = CircleGameService.PACT_SPRINT_DAYS;
     const target = Math.ceil(memberCount * days * CircleGameService.PACT_RATE);
