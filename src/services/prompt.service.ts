@@ -736,10 +736,10 @@ class PromptService {
       brief ?? this.resolveFlow(callType, ctx),
       this.gameStanding(ctx, callType),
       this.coachEscalation(callType, ctx),
-      isCoachCall ? '' : this.pauseProtocol(),
-      isCoachCall ? '' : this.travelProtocol(ctx),
+      isCoachCall ? '' : this.pauseProtocol(ctx),
+      isCoachCall ? '' : this.travelProtocol(ctx),   // gated inside — see the method
       isCoachCall ? coachDeliveryRules() : this.standingRules(ctx),
-      this.safetyRules(),
+      this.safetyRules(ctx),
     ].filter(Boolean);
 
     const prompt = sections.join('\n\n');
@@ -1126,6 +1126,15 @@ class PromptService {
    */
   private travelProtocol(ctx: Record<string, any>): string {
     const tz = ctx.timezone ?? 'Europe/London';
+
+    // The full block is 11% of the prompt and applies to nobody on most calls.
+    // It ships when a recent call surfaced a trip; otherwise one line, because
+    // travel can always come up cold and "she had no idea" is not an acceptable
+    // saving. 1,200 characters down to ~200 for the common case.
+    if (!ctx.travel_signal) {
+      return `IF TRAVEL COMES UP: your calls are pinned to ${tz} and do NOT move when they do. Say that, ask what time would work while they're away, and tell them to set it in the app under Settings — you cannot change it from the call.`;
+    }
+
     const at = ctx.local_time ? ` It is ${ctx.local_time} where they are.` : '';
     return [
       `IF THEY MENTION TRAVELLING (a trip, a flight, an interview in another city, "I'm away next week"):`,
@@ -1137,12 +1146,22 @@ class PromptService {
     ].join('\n');
   }
 
-  private pauseProtocol(): string {
+  /**
+   * Injury is NOT gated on a prior signal, unlike travel. Nobody announces a
+   * torn hamstring on last night's call — it arrives cold, mid-sentence, and
+   * "she had no guidance because no previous call predicted it" is not a
+   * saving worth 6% of a prompt. Only the stake sentence is conditional: a
+   * member with no money at risk cannot white-knuckle a stake.
+   */
+  private pauseProtocol(ctx: Record<string, any>): string {
+    const hasRealStake = ctx.stake_weekly != null && ctx.stake_weekly > 0;
     return [
       `IF THEY'RE INJURED, ILL, OR GENUINELY OUT (emergency, unavoidable travel):`,
       `- A real injury or illness is NOT avoidance. Do NOT negotiate a minimum against it. Say it plainly: "That's a real reason, not a miss."`,
       `- One day out: their grace day exists for exactly this — mention it once.`,
-      `- Out for several days or more: "Don't white-knuckle a stake while you're down. Tell me the dates now and say it clearly so it's on record — the team reviews these and you won't lose money while you're genuinely out." Then repeat the dates back so they're captured.`,
+      hasRealStake
+        ? `- Out for several days or more: "Don't white-knuckle a stake while you're down. Tell me the dates now and say it clearly so it's on record — the team reviews these and you won't lose money while you're genuinely out." Then repeat the dates back so they're captured.`
+        : `- Out for several days or more: get the dates and say them back, so the days are on record rather than counted as misses.`,
       `- When they're back: rebuild small. The first day back is the minimum version, never a comeback test.`,
     ].join('\n');
   }
@@ -1197,20 +1216,23 @@ class PromptService {
     ].filter(Boolean).join('\n');
   }
 
-  private safetyRules(): string {
+  private safetyRules(ctx: Record<string, any>): string {
     return [
       `SCOPE:`,
       `You are not a therapist, doctor, nutritionist, or personal trainer. If asked for advice outside accountability: "That's beyond what I can help with. Talk to a [professional]. I'm here to make sure you do what you already know to do."`,
       '',
-      `BILLING & MONEY DISPUTES:`,
-      `You cannot see or change billing, refunds, subscriptions, or holds. If they dispute a charge or a forfeit: never argue the money, never promise a refund, never defend the system. "I can't touch billing myself — message support through the app and a human will review it, usually same day." Acknowledge the frustration once, genuinely, then return to the day. If they're angry, stay calm and let them be angry — don't match it, don't manage it away.`,
+      // A member who has never been through checkout has no charge to dispute —
+      // and during beta a coach's clients are comped with no card at all, so
+      // this shipped to everyone it could not possibly apply to.
+      ctx.has_payment_method ? `BILLING & MONEY DISPUTES:` : '',
+      ctx.has_payment_method ? `You cannot see or change billing, refunds, subscriptions, or holds. If they dispute a charge or a forfeit: never argue the money, never promise a refund, never defend the system. "I can't touch billing myself — message support through the app and a human will review it, usually same day." Acknowledge the frustration once, genuinely, then return to the day. If they're angry, stay calm and let them be angry — don't match it, don't manage it away.` : '',
       '',
       `CRISIS PROTOCOL — if the user mentions suicidal thoughts, self-harm, eating disorders, or severe distress:`,
       `1. "I'm really glad you told me that. That's bigger than what I can help with."`,
       `2. "Samaritans: 116 123 (24/7). Mind: 0300 123 3393."`,
       `3. "Can you reach out to someone today?"`,
       `4. Stop all accountability. Do not continue with any planning. "Let's put all of that aside. Take care of yourself first."`,
-    ].join('\n');
+    ].filter(Boolean).join('\n');
   }
 
 }

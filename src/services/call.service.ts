@@ -302,6 +302,11 @@ class CallService {
     let recent_calls: string | null = null;
     let long_term_memories: string | null = null;
     let recent_chat: string | null = null;
+    // Section gate. The travel block is 11% of the prompt and applies to almost
+    // nobody on almost every call, so it ships only when a recent call actually
+    // surfaced a trip. Travel is announced in advance, which is what makes a
+    // signal from the previous call arrive in time to be useful.
+    let travel_signal = false;
 
     if (callType) {
       const [morningCall, morningVN, eveningCall, recentSummaries, ltMemories, recentChatMsgs] = await Promise.all([
@@ -351,7 +356,7 @@ class CallService {
           where: { userId, status: { in: ['COMPLETED', 'NO_ANSWER'] }, NOT: { callSummary: null } },
           orderBy: { scheduledAt: 'desc' },
           take: 4,
-          select: { callType: true, callSummary: true, scheduledAt: true, status: true },
+          select: { callType: true, callSummary: true, scheduledAt: true, status: true, callInsights: true },
         }),
 
         // Layer 3: long-term curated memories. Fetch a wider window and select
@@ -382,6 +387,10 @@ class CallService {
       // Prefer the spoken morning VN (the default arming mechanic); fall back to the live morning-call summary.
       morning_context = morningVN?.transcript ?? morningCall?.callSummary ?? null;
       last_evening_context = eveningCall?.callSummary ?? null;
+
+      travel_signal = recentSummaries.some(
+        (c) => (c.callInsights as { travel_ahead?: boolean } | null)?.travel_ahead === true,
+      );
 
       if (recentSummaries.length) {
         recent_calls = recentSummaries
@@ -750,6 +759,9 @@ class CallService {
       morning_context,        // Layer 1: today's morning call summary (for EVENING_REVIEW)
       last_evening_context,   // Layer 1: last evening call summary (for MORNING_PLANNING)
       recent_calls,           // Layer 2: last 4 call summaries as rolling narrative
+      travel_signal,          // gate: did a recent call surface an upcoming trip?
+      // gate: a comped beta client with no card cannot have a charge to dispute.
+      has_payment_method: !!user?.stripeCustomerId,
       long_term_memories,     // Layer 3: curated memorable facts about this person
       recent_chat,            // Same-day bridge: latest in-app chat exchange (non-CHAT flows)
 

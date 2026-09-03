@@ -18,6 +18,11 @@ export interface CallInsights {
   call_summary: string;              // 2-3 sentences from Ivy's perspective — surfaced in the next call
   next_intention: string | null;     // explicit next-day commitment ("gym 7am, 40min upper body") — surfaced as the morning VN hint
   next_season_goal: string | null;   // SEASON_CLOSE only: user's stated goal for the next season
+  // Section gates for the NEXT call's prompt. Travel is nearly always announced
+  // in advance ("I fly Thursday"), so a signal from this call reliably arrives
+  // before the guidance is needed — which is what lets the travel block ship
+  // only to people it applies to instead of on every call forever.
+  travel_ahead: boolean;             // they mentioned an upcoming trip, being away, or an event elsewhere
   memorable_moments: Array<{         // specific facts worth remembering long-term
     content: string;
     category: 'motivation' | 'life_event' | 'personal_detail' | 'struggle' | 'breakthrough';
@@ -99,6 +104,9 @@ call_summary
 
 next_intention
   The explicit commitment the person made for their NEXT day or session — what they said they'll do, with time and place if they gave them. Verbatim or close paraphrase ("Gym at 7am before work, 40 min upper body" or "Walk after lunch"). This is shown back to them the next morning as a reminder of what they committed to, so write it as a clean action they'd recognise — not a summary of the conversation. null if no clear next-day intention was stated (e.g. they were vague, only rested, or didn't plan ahead).
+
+travel_ahead
+  true ONLY if they mentioned actually going somewhere in the near future — a trip, a flight, working away, an interview or event in another city. A passing wish ("I'd love a holiday") is false. Being asked about travel and saying no is false.
 
 next_season_goal
   SEASON_CLOSE calls only: the user's stated goal for the next season, in their own words. Extract verbatim or close paraphrase. null for all other call types, or if the user did not state a goal.
