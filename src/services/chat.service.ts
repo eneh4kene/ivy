@@ -123,6 +123,12 @@ class ChatService {
     const travelNote = await this.applyTimezoneMove(userId, text)
     if (travelNote) appliedNote = [appliedNote, travelNote].filter(Boolean).join('\n')
 
+    // Taking the baton double is the relay's one real decision, and Ivy offered
+    // it in this thread — so it has to be takeable in this thread. Money only
+    // ever moves after the word, and only their own.
+    const doubleNote = await this.applyBatonDouble(userId, text)
+    if (doubleNote) appliedNote = [appliedNote, doubleNote].filter(Boolean).join('\n')
+
     const reply = await this.generateReply(userId, appliedNote)
 
     const ivyMsg = await prisma.message.create({
@@ -130,6 +136,44 @@ class ChatService {
     })
 
     return ivyMsg
+  }
+
+  /**
+   * Take the baton double when a chat message accepts the offer Ivy made.
+   *
+   * Deliberately STRICT, unlike the generous travel prefilter: this one moves
+   * money. A false positive doubles someone's exposure on a word they did not
+   * mean, so the message must be a short, unambiguous acceptance — "double",
+   * "double down", "I'm in", "let's do it" — and nothing longer, where the word
+   * is far more likely to be discussion ("not sure I want to double") than
+   * consent. The offer stays open for the rest of the window either way, and
+   * Ivy can be asked again, so a false NEGATIVE costs nothing.
+   *
+   * Every real guardrail lives in acceptBatonDouble (holder-only, once per
+   * hold, window still open, capped, own slice, own destination). This is only
+   * the trigger.
+   */
+  private async applyBatonDouble(userId: string, text: string): Promise<string | undefined> {
+    try {
+      const t = text.toLowerCase().trim().replace(/[.!]+$/, '')
+      if (t.length > 24) return undefined
+      if (/\b(no|not|don'?t|nope|nah|rather not|maybe)\b/.test(t)) return undefined
+      const accepts = /^(double( down)?|i'?m in|let'?s do it|go on then|yes,? double|do it)$/.test(t)
+      if (!accepts) return undefined
+
+      const circleGameService = (await import('./circle-game.service')).default
+      const applied = await circleGameService.acceptBatonDouble(userId)
+      if (!applied) return undefined
+
+      return (
+        `They just took the baton double: today's slice is now ${applied.slice} (×${applied.multiplier}), on their own stake. ` +
+        `Confirm it plainly in one line — the exact number now riding on today, and that keeping the day releases it as normal. ` +
+        `Do not congratulate them for staking more; the thing worth respecting is that they backed themselves, not the size of the number.`
+      )
+    } catch (err) {
+      logger.warn(`Baton double failed for ${userId}:`, err)
+      return undefined
+    }
   }
 
   /**

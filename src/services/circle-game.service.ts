@@ -5,6 +5,7 @@ import { serverAnalytics } from '../lib/analytics';
 import { sendPushToUser, pushTemplates } from './push.service';
 import { createSpecGame as persistSpecGame, runSpecEvent } from './games/runtime';
 import { compileGame, validateSpec } from './games/compiler';
+import env from '../config/env';
 
 // ─── Template definitions ─────────────────────────────────────────────────────
 // Each template describes the mechanical rules Ivy's backend enforces.
@@ -64,6 +65,8 @@ class CircleGameService {
   static readonly PACT_RATE = 0.8;
   /** Below this a relay is just two people alternating days — fall back to the Pact. */
   static readonly RELAY_MIN_MEMBERS = 3;
+  /** Matches the GameSpec StakeEffects fence (multiplierMax ≤ 3). */
+  static readonly MAX_BATON_MULTIPLIER = 3;
 
   // ── Names & beats ────────────────────────────────────────────────────────────
   // Games live or die on being FELT between calls. Beats are the sound a game
@@ -354,15 +357,20 @@ class CircleGameService {
     if (game.templateType === 'relay' && userId === (game.state as Record<string, any>).current_holder_id) {
       // The actor WAS the holder — this outcome moved the baton.
       const next = updatedState.current_holder_id as string | null;
+      // The turn's decision, offered in the same breath as the handover. Never
+      // imposed: the multiplier only ever moves money after they say yes.
+      const doubleOffer = updatedState.double_offered_to === next
+        ? ` Want teeth on it? Say "double" and today's slice doubles for your window — keep the day and it releases like any other, drop it and the bigger number goes to your charity. Your money, your call.`
+        : '';
       if (isSuccess) {
         this.announceBeat(game.circleId, `${name(userId)} kept the day and passed the baton to ${name(next)} — ${updatedState.lives_remaining} lives intact.`, {
           gameId: game.id,
-          personal: next ? { userId: next, message: `${name(userId)} just passed you the baton. Keep today to pass it on — the room's watching.` } : undefined,
+          personal: next ? { userId: next, message: `${name(userId)} just passed you the baton. Keep today to pass it on — the room's watching.${doubleOffer}` } : undefined,
         }).catch(() => {});
       } else if (updatedState.lives_remaining > 0) {
         this.announceBeat(game.circleId, `${name(userId)} dropped the baton — ${updatedState.lives_remaining} ${updatedState.lives_remaining === 1 ? 'life' : 'lives'} left. ${name(next)} picks it up.`, {
           gameId: game.id,
-          personal: next ? { userId: next, message: `The baton's yours after a drop — ${updatedState.lives_remaining} ${updatedState.lives_remaining === 1 ? 'life' : 'lives'} left. Keep today and steady the room.` } : undefined,
+          personal: next ? { userId: next, message: `The baton's yours after a drop — ${updatedState.lives_remaining} ${updatedState.lives_remaining === 1 ? 'life' : 'lives'} left. Keep today and steady the room.${doubleOffer}` } : undefined,
         }).catch(() => {});
       } else {
         this.announceBeat(game.circleId, `That was the last life. The relay is over — ${updatedState.passes ?? 0} passes was the run. New game with the next sprint.`, { gameId: game.id }).catch(() => {});
@@ -469,18 +477,19 @@ class CircleGameService {
       const nextIndex = (currentIndex + 1) % turnOrder.length;
       const nextHolder = turnOrder[nextIndex];
 
-      // Baton-stake: restore previous holder's slice to base, then elevate the new holder's
+      // Baton-stake: the outgoing holder goes back to base. The INCOMING holder
+      // is only ever OFFERED the elevation — see offer state below.
       if (batonMultiplier > 1) {
-        // Restore outgoing holder's slice to base (baton released successfully)
         await this.restoreBaseSlice(userId);
-        // Elevate new holder's slice
-        await this.elevateHolderSlice(nextHolder, batonMultiplier);
       }
 
       state.current_holder_index = nextIndex;
       state.current_holder_id = nextHolder;
       state.baton_held_since = new Date().toISOString();
       state.passes = (state.passes ?? 0) + 1;
+      // A fresh hold: the offer is open again and unspent.
+      state.double_offered_to = batonMultiplier > 1 ? nextHolder : null;
+      state.doubled = false;
       note = `${name(userId)} kept the day and passed the baton to ${name(nextHolder)}.`;
       extraEventType = 'baton_passed';
       extraPayload = { from: userId, to: nextHolder };
@@ -515,13 +524,13 @@ class CircleGameService {
             note: `Baton drop: ${name(userId)}'s elevated stake slice (×${batonMultiplier}) forfeits to their own destination.`,
           },
         });
-        // Elevate new holder's slice
-        await this.elevateHolderSlice(nextHolder, batonMultiplier);
       }
 
       state.current_holder_index = nextIndex;
       state.current_holder_id = nextHolder;
       state.baton_held_since = new Date().toISOString();
+      state.double_offered_to = batonMultiplier > 1 ? nextHolder : null;
+      state.doubled = false;
       state.lives_remaining = Math.max(0, (state.lives_remaining ?? 3) - 1);
       note = `${name(userId)} dropped the baton — ${state.lives_remaining} ${state.lives_remaining === 1 ? 'life' : 'lives'} left. ${name(nextHolder)} has it now.`;
       if (state.lives_remaining === 0) {
@@ -536,15 +545,6 @@ class CircleGameService {
     return { updatedState: state, note, extraEventType, extraPayload };
   }
 
-  /**
-   * elevateHolderSlice — baton-stake mechanic (§4b mechanic 3).
-   *
-   * Finds the new holder's most-recent PENDING workout in the current open stake cycle
-   * and multiplies its stakeSliceAmount by the baton multiplier.
-   *
-   * GUARDRAIL: only the holder's OWN workout is touched.  No other user's slice changes.
-   * Money never moves between users — only the holder's own at-risk amount increases.
-   */
   /**
    * Shared lookup for the baton-stake mechanic: the user's open cycle, their
    * base daily slice, and today's PENDING workout in that cycle.
@@ -582,27 +582,6 @@ class CircleGameService {
     if (!workout) return null;
 
     return { cycleId: cycle.id, baseSlice, workoutId: workout.id };
-  }
-
-  private async elevateHolderSlice(userId: string, multiplier: number): Promise<void> {
-    if (multiplier <= 1) return; // no-op for multiplier ≤ 1
-
-    const target = await this.findTodaysPendingSlice(userId);
-    if (!target) {
-      logger.info(`baton-stake: no open cycle or PENDING workout today for ${userId} — elevation skipped`);
-      return;
-    }
-
-    const elevatedSlice = Math.round(target.baseSlice * multiplier * 100) / 100;
-    await prisma.workout.update({
-      where: { id: target.workoutId },
-      data: { stakeSliceAmount: elevatedSlice },
-    });
-
-    logger.info(
-      `baton-stake: elevated ${userId}'s slice from ${target.baseSlice} → ${elevatedSlice} ` +
-      `(×${multiplier}) for workout ${target.workoutId}`
-    );
   }
 
   /**
@@ -1018,8 +997,8 @@ class CircleGameService {
           name: 'The Baton',
           description: `${memberCount} of you, one baton. Keep your day to pass it on. Drop it and the room loses a life — three drops and the run is over.`,
           templateType: 'relay',
-          rules: { window_hours: 24, lives: 3 },
-          ivyInstruction: `The circle is running The Baton — a relay. Whoever holds it has 24 hours to keep their day and pass it on; a drop costs the room one of its three lives. If they are the current holder, that is worth a line: the baton is theirs right now and the room is waiting on them. If they are not, keep it to a passing mention of where it sits. Never pressure someone about another member's drop.${crownTail}`,
+          rules: { window_hours: 24, lives: 3, baton_stake_multiplier: env.BATON_DOUBLE_ENABLED ? 2 : 1 },
+          ivyInstruction: `The circle is running The Baton — a relay. Whoever holds it has 24 hours to keep their day and pass it on; a drop costs the room one of its three lives. If they are the current holder, that is worth a line: the baton is theirs right now and the room is waiting on them. If they are not, keep it to a passing mention of where it sits. Never pressure someone about another member's drop.${env.BATON_DOUBLE_ENABLED ? ` A holder may double their own slice for their window by saying "double" here — mention it at most once, only to the current holder, and never push it: doubling is theirs to offer themselves, and someone who ignores it has answered.` : ''}${crownTail}`,
         })
       : await this.createGame(circleId, {
           name: 'The 80% Pact',
@@ -1046,6 +1025,98 @@ class CircleGameService {
         : `Sprint pact seeded for circle ${circleId}: target ${target} over ${days}d (${memberCount} members)`,
     );
     return game;
+  }
+
+  /**
+   * Take the baton double — the turn's decision, and the only decision the
+   * legacy relay has ever had.
+   *
+   * Before this, baton_stake_multiplier elevated the incoming holder's slice
+   * automatically. That was both a worse game (nothing to decide) and a worse
+   * product (money moved on someone's behalf without them saying yes). The
+   * multiplier is now an OFFER made once per hold, and this is the only path
+   * that spends it.
+   *
+   * GUARDRAILS, all of them load-bearing:
+   *   - only the CURRENT holder, and only while the offer for this hold is open
+   *   - once per hold (state.doubled short-circuits a second call)
+   *   - capped at MAX_BATON_MULTIPLIER, matching the GameSpec money fence
+   *   - touches the caller's OWN workout slice only; forfeits to their OWN
+   *     destination. No inter-user transfer, ever.
+   *
+   * Returns the new slice when it applied, null when it did not — a no-op is
+   * always safe to call.
+   */
+  async acceptBatonDouble(userId: string): Promise<{ multiplier: number; slice: number } | null> {
+    const result = await this.getActiveGameForUser(userId);
+    if (!result) return null;
+
+    const { game } = result;
+    if (game.templateType !== 'relay') return null;
+
+    const state = { ...(game.state as Record<string, any>) };
+    const rules = game.rules as Record<string, any>;
+
+    // Offer must be open, unspent, and theirs.
+    if (state.current_holder_id !== userId) return null;
+    if (state.double_offered_to !== userId) return null;
+    if (state.doubled === true) return null;
+
+    const multiplier = Math.min(
+      Number(rules.baton_stake_multiplier ?? 1),
+      CircleGameService.MAX_BATON_MULTIPLIER,
+    );
+    if (!(multiplier > 1)) return null;
+
+    // The window must still be open — a double after the baton has effectively
+    // timed out would raise a slice that is about to forfeit anyway.
+    const heldMs = state.baton_held_since ? Date.parse(state.baton_held_since) : NaN;
+    const windowMs = Number(rules.window_hours ?? 24) * 3_600_000;
+    if (Number.isFinite(heldMs) && Date.now() >= heldMs + windowMs) return null;
+
+    const target = await this.findTodaysPendingSlice(userId);
+    if (!target) {
+      logger.info(`baton-double: no open cycle or PENDING workout today for ${userId} — declined`);
+      return null;
+    }
+
+    const slice = Math.round(target.baseSlice * multiplier * 100) / 100;
+    state.doubled = true;
+
+    await prisma.$transaction([
+      prisma.workout.update({
+        where: { id: target.workoutId },
+        data: { stakeSliceAmount: slice },
+      }),
+      prisma.circleGame.update({ where: { id: game.id }, data: { state } }),
+      prisma.circleGameEvent.create({
+        data: {
+          gameId: game.id,
+          userId,
+          eventType: 'baton_doubled',
+          // GUARDRAIL: own slice, own destination — recorded for the settlement audit trail.
+          payload: { baton_multiplier: multiplier, slice, forfeit_destination: 'own_stake_destination' },
+          note: `${await this.firstName(userId)} doubled down on the baton — ${slice} on today.`,
+        },
+      }),
+    ]);
+
+    const names = await this.memberNames(game.circleId);
+    const who = names.get(userId) ?? 'Someone';
+    this.announceBeat(
+      game.circleId,
+      `${who} just doubled down on the baton — twice the slice riding on today.`,
+      { gameId: game.id },
+    ).catch(() => {});
+
+    logger.info(`baton-double: ${userId} elevated ${target.baseSlice} → ${slice} (×${multiplier})`);
+    return { multiplier, slice };
+  }
+
+  /** One name, for a note written about a single member. */
+  private async firstName(userId: string): Promise<string> {
+    const u = await prisma.user.findUnique({ where: { id: userId }, select: { firstName: true } });
+    return u?.firstName || 'Someone';
   }
 
   /**

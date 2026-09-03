@@ -115,6 +115,12 @@ const envSchema = z.object({
   // card. Defaults ON because that is the current commercial position; set it to
   // 'false' the day coach clients are expected to pay, and nothing else changes.
   BETA_COMP_COACH_CLIENTS: z.string().transform((val) => val !== 'false').default('true'),
+  // The baton double: the relay offers the current holder a ×2 slice for their
+  // window. Opt-in per turn, their own money, their own charity on a drop — but
+  // it is still a mechanic that raises a real person's real exposure, so it
+  // defaults OFF and the founder turns it on deliberately. Set 'true' to enable
+  // the offer on newly seeded relays; games already running are unaffected.
+  BATON_DOUBLE_ENABLED: z.string().transform((val) => val === 'true').default('false'),
   INNGEST_APP_ID: z.string().default('ivy'),
   INNGEST_EVENT_KEY: z.string().optional(),
   INNGEST_SIGNING_KEY: z.string().optional(),

@@ -465,215 +465,179 @@ describe('Collective charity goal — coordination/flagging only (§4b mechanic 
 // MECHANIC 3 — Baton-stake (money-touching: raises holder's OWN stake slice)
 // ===========================================================================
 
-describe('Baton-stake — raises holder\'s OWN slice on pass/drop (§4b mechanic 3)', () => {
-  // HARD GUARDRAIL: the elevated slice forfeits to the HOLDER'S OWN destination.
-  // These tests verify the elevation goes to the right user and the "baton_stake_drop"
-  // event explicitly marks the destination as the holder's own.
+describe('Baton-stake — the holder\'s OWN slice, and only on their say-so (§4b mechanic 3)', () => {
+  // HARD GUARDRAIL, unchanged: an elevated slice belongs to the holder and
+  // forfeits to the HOLDER'S OWN destination. What changed is HOW it is taken.
+  //
+  // Elevation used to happen automatically to whoever received the baton. That
+  // moved a real person's money without them agreeing to it, and it made the
+  // relay a game with nothing to decide. The multiplier is now an OFFER, made
+  // once per hold and spent only through acceptBatonDouble.
 
-  it('elevates the new holder\'s OWN workout slice on baton pass (multiplier > 1)', async () => {
-    const game = {
-      ...BASE_RELAY_GAME,
-      rules: {
-        ...BASE_RELAY_GAME.rules,
-        baton_stake_multiplier: 2, // holding the baton doubles the stake for the window
-      },
-    }
+  const doubleGame = (over: Record<string, any> = {}): any => ({
+    ...BASE_RELAY_GAME,
+    rules: { ...BASE_RELAY_GAME.rules, baton_stake_multiplier: 2 },
+    ...over,
+  })
 
-    // USER_A holds → completes → passes to USER_B; USER_B's slice should be elevated
+  /** A hold with the offer open and unspent, belonging to `holder`. */
+  const offerOpenTo = (holder: string) => doubleGame({
+    state: {
+      ...BASE_RELAY_GAME.state,
+      current_holder_id: holder,
+      current_holder_index: BASE_RELAY_GAME.rules.turn_order.indexOf(holder),
+      baton_held_since: new Date().toISOString(),
+      double_offered_to: holder,
+      doubled: false,
+    } as Record<string, any>,
+  })
+
+  it('a pass no longer elevates the incoming holder — it only offers', async () => {
+    // The behaviour change that matters: USER_B receives the baton and their
+    // money is untouched until they say the word.
     ;(mockPrisma.ivyCircleMember.findFirst as jest.Mock).mockResolvedValue({ circleId: CIRCLE_ID })
-    ;(mockPrisma.circleGame.findFirst as jest.Mock).mockResolvedValue(game)
-    ;(mockPrisma.stakeCycle.findFirst as jest.Mock)
-      .mockResolvedValueOnce(OPEN_STAKE_CYCLE)  // for USER_A restore
-      .mockResolvedValueOnce(OPEN_STAKE_CYCLE)  // for USER_B elevate
-    ;(mockPrisma.workout.findFirst as jest.Mock)
-      .mockResolvedValueOnce({ id: 'workout-a', stakeSliceAmount: 4 }) // USER_A's today (elevated base 2 → 4 currently; restore to 2)
-      .mockResolvedValueOnce({ id: 'workout-b', stakeSliceAmount: 2 }) // USER_B's today (base 2; will be elevated to 4)
+    ;(mockPrisma.circleGame.findFirst as jest.Mock).mockResolvedValue(doubleGame())
+    ;(mockPrisma.stakeCycle.findFirst as jest.Mock).mockResolvedValue(OPEN_STAKE_CYCLE)
+    ;(mockPrisma.workout.findFirst as jest.Mock).mockResolvedValue({ id: 'workout-a', stakeSliceAmount: 4 })
     ;(mockPrisma.workout.update as jest.Mock).mockResolvedValue({})
 
     await circleGameService.processWorkoutEvent(USER_A, 'COMPLETED')
 
-    // Expect TWO workout.update calls:
-    // 1. Restore USER_A to base (2)
-    // 2. Elevate USER_B to 2 * 2 = 4
-    const updateCalls = (mockPrisma.workout.update as jest.Mock).mock.calls
-    expect(updateCalls).toHaveLength(2)
+    // The outgoing holder is restored to base; nobody is elevated.
+    const updatedIds = (mockPrisma.workout.update as jest.Mock).mock.calls.map((c: any[]) => c[0].where.id)
+    expect(updatedIds).toEqual(['workout-a'])
+    expect((mockPrisma.workout.update as jest.Mock).mock.calls[0][0].data.stakeSliceAmount).toBe(2)
 
-    // First call: restore USER_A's slice to base £2
-    expect(updateCalls[0][0]).toMatchObject({
-      where: { id: 'workout-a' },
-      data: { stakeSliceAmount: 2 }, // base slice = 14/7 = 2
-    })
-
-    // Second call: elevate USER_B's slice to £4 (2 × multiplier 2)
-    expect(updateCalls[1][0]).toMatchObject({
-      where: { id: 'workout-b' },
-      data: { stakeSliceAmount: 4 }, // elevated: 2 × 2
-    })
+    // And the offer is recorded against the incoming holder, unspent.
+    const stateWrites = (mockPrisma.circleGame.update as jest.Mock).mock.calls
+    const written = stateWrites[stateWrites.length - 1][0].data.state
+    expect(written.current_holder_id).toBe(USER_B)
+    expect(written.double_offered_to).toBe(USER_B)
+    expect(written.doubled).toBe(false)
   })
 
-  it('elevates the new holder\'s CORRECT USER\'s workout (never another user)', async () => {
-    // Specifically verify that when USER_A passes, USER_B (not USER_C) is elevated
-    const game = {
-      ...BASE_RELAY_GAME,
-      rules: {
-        ...BASE_RELAY_GAME.rules,
-        baton_stake_multiplier: 1.5,
-      },
-      state: {
-        ...BASE_RELAY_GAME.state,
-        current_holder_index: 0,
-        current_holder_id: USER_A, // USER_A holds; next is USER_B at index 1
-      },
-    }
-
+  it('accepting elevates the CALLER\'S OWN workout, never another user\'s', async () => {
     ;(mockPrisma.ivyCircleMember.findFirst as jest.Mock).mockResolvedValue({ circleId: CIRCLE_ID })
-    ;(mockPrisma.circleGame.findFirst as jest.Mock).mockResolvedValue(game)
-    ;(mockPrisma.stakeCycle.findFirst as jest.Mock)
-      .mockResolvedValueOnce({ id: 'cycle-a', stakeAmount: 14, status: 'AUTHORIZED' })
-      .mockResolvedValueOnce({ id: 'cycle-b', stakeAmount: 14, status: 'AUTHORIZED' })
-    ;(mockPrisma.workout.findFirst as jest.Mock)
-      .mockResolvedValueOnce({ id: 'workout-a', stakeSliceAmount: 3 })   // USER_A
-      .mockResolvedValueOnce({ id: 'workout-b', stakeSliceAmount: 2 })   // USER_B
+    ;(mockPrisma.circleGame.findFirst as jest.Mock).mockResolvedValue(offerOpenTo(USER_B))
+    ;(mockPrisma.stakeCycle.findFirst as jest.Mock).mockResolvedValue(OPEN_STAKE_CYCLE)
+    ;(mockPrisma.workout.findFirst as jest.Mock).mockResolvedValue({ id: 'workout-b', stakeSliceAmount: 2 })
     ;(mockPrisma.workout.update as jest.Mock).mockResolvedValue({})
 
-    await circleGameService.processWorkoutEvent(USER_A, 'COMPLETED')
+    const applied = await circleGameService.acceptBatonDouble(USER_B)
 
-    const updateCalls = (mockPrisma.workout.update as jest.Mock).mock.calls
-    // workout-b (USER_B) gets elevated; workout-a (USER_A) gets restored
-    const updatedWorkoutIds = updateCalls.map((c: any[]) => c[0].where.id)
-    expect(updatedWorkoutIds).toContain('workout-a')  // USER_A restored
-    expect(updatedWorkoutIds).toContain('workout-b')  // USER_B elevated
-    // workout-c (USER_C) is never touched
-    expect(updatedWorkoutIds).not.toContain('workout-c')
+    expect(applied).toEqual({ multiplier: 2, slice: 4 })
+    const updatedIds = (mockPrisma.workout.update as jest.Mock).mock.calls.map((c: any[]) => c[0].where.id)
+    expect(updatedIds).toEqual(['workout-b'])
+    expect(updatedIds).not.toContain('workout-a')
+    expect(updatedIds).not.toContain('workout-c')
+
+    // The audit trail names the destination as their own.
+    const event = (mockPrisma.circleGameEvent.create as jest.Mock).mock.calls
+      .find((c: any[]) => c[0].data.eventType === 'baton_doubled')
+    expect(event).toBeDefined()
+    expect(event![0].data.userId).toBe(USER_B)
+    expect(event![0].data.payload.forfeit_destination).toBe('own_stake_destination')
   })
 
-  it('GUARDRAIL: on baton DROP, elevated slice stays on the DROPPER\'s OWN workout — not another user', async () => {
-    const game = {
-      ...BASE_RELAY_GAME,
-      rules: {
-        ...BASE_RELAY_GAME.rules,
-        baton_stake_multiplier: 2,
-      },
+  it('GUARDRAIL: only the current holder can spend the offer', async () => {
+    // USER_C tries to take a double offered to USER_B.
+    ;(mockPrisma.ivyCircleMember.findFirst as jest.Mock).mockResolvedValue({ circleId: CIRCLE_ID })
+    ;(mockPrisma.circleGame.findFirst as jest.Mock).mockResolvedValue(offerOpenTo(USER_B))
+    ;(mockPrisma.workout.update as jest.Mock).mockResolvedValue({})
+
+    expect(await circleGameService.acceptBatonDouble(USER_C)).toBeNull()
+    expect(mockPrisma.workout.update).not.toHaveBeenCalled()
+  })
+
+  it('GUARDRAIL: the offer is spendable once per hold', async () => {
+    const spent = offerOpenTo(USER_B)
+    spent.state.doubled = true
+
+    ;(mockPrisma.ivyCircleMember.findFirst as jest.Mock).mockResolvedValue({ circleId: CIRCLE_ID })
+    ;(mockPrisma.circleGame.findFirst as jest.Mock).mockResolvedValue(spent)
+    ;(mockPrisma.workout.update as jest.Mock).mockResolvedValue({})
+
+    expect(await circleGameService.acceptBatonDouble(USER_B)).toBeNull()
+    expect(mockPrisma.workout.update).not.toHaveBeenCalled()
+  })
+
+  it('GUARDRAIL: a double after the window has closed is refused', async () => {
+    // Otherwise it would raise a slice that is already forfeiting.
+    const stale = offerOpenTo(USER_B)
+    stale.state.baton_held_since = new Date(Date.now() - 25 * 3_600_000).toISOString()
+
+    ;(mockPrisma.ivyCircleMember.findFirst as jest.Mock).mockResolvedValue({ circleId: CIRCLE_ID })
+    ;(mockPrisma.circleGame.findFirst as jest.Mock).mockResolvedValue(stale)
+    ;(mockPrisma.workout.update as jest.Mock).mockResolvedValue({})
+
+    expect(await circleGameService.acceptBatonDouble(USER_B)).toBeNull()
+    expect(mockPrisma.workout.update).not.toHaveBeenCalled()
+  })
+
+  it('GUARDRAIL: the multiplier is capped at the GameSpec money fence (×3)', async () => {
+    const greedy = offerOpenTo(USER_B)
+    greedy.rules = { ...greedy.rules, baton_stake_multiplier: 10 }
+
+    ;(mockPrisma.ivyCircleMember.findFirst as jest.Mock).mockResolvedValue({ circleId: CIRCLE_ID })
+    ;(mockPrisma.circleGame.findFirst as jest.Mock).mockResolvedValue(greedy)
+    ;(mockPrisma.stakeCycle.findFirst as jest.Mock).mockResolvedValue(OPEN_STAKE_CYCLE)
+    ;(mockPrisma.workout.findFirst as jest.Mock).mockResolvedValue({ id: 'workout-b', stakeSliceAmount: 2 })
+    ;(mockPrisma.workout.update as jest.Mock).mockResolvedValue({})
+
+    const applied = await circleGameService.acceptBatonDouble(USER_B)
+
+    expect(applied).toEqual({ multiplier: 3, slice: 6 })
+  })
+
+  it('GUARDRAIL: on a DROP the elevated slice stays on the DROPPER\'s own workout', async () => {
+    // USER_A doubled, then dropped: their slice is NOT restored — the bigger
+    // number forfeits, to their own destination.
+    const dropped = doubleGame({
       state: {
         ...BASE_RELAY_GAME.state,
         current_holder_id: USER_A,
         current_holder_index: 0,
+        double_offered_to: USER_A,
+        doubled: true,
       },
-    }
+    })
 
     ;(mockPrisma.ivyCircleMember.findFirst as jest.Mock).mockResolvedValue({ circleId: CIRCLE_ID })
-    ;(mockPrisma.circleGame.findFirst as jest.Mock).mockResolvedValue(game)
-
-    // USER_A drops (MISSED)
-    ;(mockPrisma.stakeCycle.findFirst as jest.Mock)
-      .mockResolvedValueOnce(OPEN_STAKE_CYCLE)  // for USER_B elevate only (dropper NOT restored)
-    ;(mockPrisma.workout.findFirst as jest.Mock)
-      .mockResolvedValueOnce({ id: 'workout-b', stakeSliceAmount: 2 }) // only USER_B's elevation
+    ;(mockPrisma.circleGame.findFirst as jest.Mock).mockResolvedValue(dropped)
     ;(mockPrisma.workout.update as jest.Mock).mockResolvedValue({})
 
     await circleGameService.processWorkoutEvent(USER_A, 'MISSED')
 
-    // On DROP: USER_A's slice is NOT restored (it forfeits at the elevated amount)
-    const updateCalls = (mockPrisma.workout.update as jest.Mock).mock.calls
-    // Only USER_B gets elevated — USER_A's workout is NOT updated (elevated slice stays)
-    const updatedIds = updateCalls.map((c: any[]) => c[0].where.id)
-    expect(updatedIds).not.toContain('workout-a') // dropper's slice NOT restored
-    expect(updatedIds).toContain('workout-b')      // next holder elevated
+    // Nobody's slice is rewritten: the dropper keeps the elevated amount, and
+    // the incoming holder is only offered, never elevated.
+    expect(mockPrisma.workout.update).not.toHaveBeenCalled()
 
-    // The 'baton_stake_drop' event is created with explicit forfeit_destination annotation
-    const eventCalls = (mockPrisma.circleGameEvent.create as jest.Mock).mock.calls
-    const dropEvent = eventCalls.find((c: any[]) =>
-      c[0].data.eventType === 'baton_stake_drop'
-    )
+    const dropEvent = (mockPrisma.circleGameEvent.create as jest.Mock).mock.calls
+      .find((c: any[]) => c[0].data.eventType === 'baton_stake_drop')
     expect(dropEvent).toBeDefined()
     expect(dropEvent![0].data.payload.forfeit_destination).toBe('own_stake_destination')
   })
 
-  it('GUARDRAIL: baton_stake_drop event explicitly marks destination as own (not another user)', async () => {
-    const game = {
-      ...BASE_RELAY_GAME,
-      rules: { ...BASE_RELAY_GAME.rules, baton_stake_multiplier: 3 },
-      state: { ...BASE_RELAY_GAME.state, current_holder_id: USER_B, current_holder_index: 1 },
-    }
-
+  it('declines gracefully when the taker has no open stake cycle', async () => {
     ;(mockPrisma.ivyCircleMember.findFirst as jest.Mock).mockResolvedValue({ circleId: CIRCLE_ID })
-    ;(mockPrisma.circleGame.findFirst as jest.Mock).mockResolvedValue(game)
-    ;(mockPrisma.stakeCycle.findFirst as jest.Mock).mockResolvedValue(OPEN_STAKE_CYCLE)
-    ;(mockPrisma.workout.findFirst as jest.Mock).mockResolvedValue({ id: 'workout-c', stakeSliceAmount: 2 })
-    ;(mockPrisma.workout.update as jest.Mock).mockResolvedValue({})
-
-    // USER_B drops
-    await circleGameService.processWorkoutEvent(USER_B, 'MISSED')
-
-    const eventCalls = (mockPrisma.circleGameEvent.create as jest.Mock).mock.calls
-    const dropEvent = eventCalls.find((c: any[]) => c[0].data.eventType === 'baton_stake_drop')
-    expect(dropEvent).toBeDefined()
-
-    const payload = dropEvent![0].data.payload
-    // The event records the multiplier and explicitly notes "own_stake_destination"
-    expect(payload.baton_multiplier).toBe(3)
-    expect(payload.forfeit_destination).toBe('own_stake_destination')
-    // userId on the event must be USER_B (the dropper) — not USER_A or USER_C
-    expect(dropEvent![0].data.userId).toBe(USER_B)
-  })
-
-  it('GUARDRAIL: no workout.update touches a third user\'s workout during a baton pass', async () => {
-    // USER_A passes to USER_B; USER_C's workout must NEVER be touched
-    const game = {
-      ...BASE_RELAY_GAME,
-      rules: { ...BASE_RELAY_GAME.rules, baton_stake_multiplier: 2 },
-    }
-
-    ;(mockPrisma.ivyCircleMember.findFirst as jest.Mock).mockResolvedValue({ circleId: CIRCLE_ID })
-    ;(mockPrisma.circleGame.findFirst as jest.Mock).mockResolvedValue(game)
-    ;(mockPrisma.stakeCycle.findFirst as jest.Mock)
-      .mockResolvedValue(OPEN_STAKE_CYCLE) // same cycle for both lookups
-    ;(mockPrisma.workout.findFirst as jest.Mock)
-      .mockResolvedValueOnce({ id: 'workout-a', stakeSliceAmount: 4 })
-      .mockResolvedValueOnce({ id: 'workout-b', stakeSliceAmount: 2 })
-    ;(mockPrisma.workout.update as jest.Mock).mockResolvedValue({})
-
-    await circleGameService.processWorkoutEvent(USER_A, 'COMPLETED')
-
-    const updateCalls = (mockPrisma.workout.update as jest.Mock).mock.calls
-    const touchedIds = updateCalls.map((c: any[]) => c[0].where.id)
-    // workout-a and workout-b are touched; workout-c must NOT be
-    expect(touchedIds).not.toContain('workout-c')
-  })
-
-  it('baton-stake no-op when multiplier is 1 (default — no elevation)', async () => {
-    // Default relay game has baton_stake_multiplier: 1 — no workout updates expected
-    const game = { ...BASE_RELAY_GAME } // multiplier = 1
-
-    ;(mockPrisma.ivyCircleMember.findFirst as jest.Mock).mockResolvedValue({ circleId: CIRCLE_ID })
-    ;(mockPrisma.circleGame.findFirst as jest.Mock).mockResolvedValue(game)
-    ;(mockPrisma.workout.update as jest.Mock).mockResolvedValue({})
-
-    await circleGameService.processWorkoutEvent(USER_A, 'COMPLETED')
-
-    // No slice elevation when multiplier = 1
-    expect(mockPrisma.workout.update).not.toHaveBeenCalled()
-  })
-
-  it('baton-stake skips elevation gracefully when user has no open stake cycle', async () => {
-    const game = {
-      ...BASE_RELAY_GAME,
-      rules: { ...BASE_RELAY_GAME.rules, baton_stake_multiplier: 2 },
-    }
-
-    ;(mockPrisma.ivyCircleMember.findFirst as jest.Mock).mockResolvedValue({ circleId: CIRCLE_ID })
-    ;(mockPrisma.circleGame.findFirst as jest.Mock).mockResolvedValue(game)
-    // No stake cycle for either user
+    ;(mockPrisma.circleGame.findFirst as jest.Mock).mockResolvedValue(offerOpenTo(USER_B))
     ;(mockPrisma.stakeCycle.findFirst as jest.Mock).mockResolvedValue(null)
     ;(mockPrisma.workout.update as jest.Mock).mockResolvedValue({})
 
-    // Should complete without error — graceful degradation
-    await expect(
-      circleGameService.processWorkoutEvent(USER_A, 'COMPLETED')
-    ).resolves.not.toThrow()
-
-    // No workout update when no cycle
+    await expect(circleGameService.acceptBatonDouble(USER_B)).resolves.toBeNull()
     expect(mockPrisma.workout.update).not.toHaveBeenCalled()
+  })
+
+  it('no offer at all when the multiplier is 1 (the default)', async () => {
+    ;(mockPrisma.ivyCircleMember.findFirst as jest.Mock).mockResolvedValue({ circleId: CIRCLE_ID })
+    ;(mockPrisma.circleGame.findFirst as jest.Mock).mockResolvedValue(BASE_RELAY_GAME)
+    ;(mockPrisma.workout.update as jest.Mock).mockResolvedValue({})
+
+    await circleGameService.processWorkoutEvent(USER_A, 'COMPLETED')
+    expect(mockPrisma.workout.update).not.toHaveBeenCalled()
+
+    const stateWrites = (mockPrisma.circleGame.update as jest.Mock).mock.calls
+    expect(stateWrites[stateWrites.length - 1][0].data.state.double_offered_to).toBeNull()
   })
 })
 
