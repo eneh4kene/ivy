@@ -18,6 +18,12 @@
  * DELIVERED INTO THE IVY THREAD, not a separate inbox. One place messages
  * live, one place to moderate, and no new surface to build or police.
  *
+ * IT OUTLIVES THE GAME BY A WEEK. Scoping the channel to a running game is
+ * right, but cutting it the instant the game ends severs a fortnight-old
+ * conversation on a sprint roll — and since past notes stay readable, it left
+ * people able to read what someone said and unable to answer. The window now
+ * closes slowly, and the composer says when.
+ *
  * BLOCK AND REPORT SHIP WITH IT, not after. The first bad message is the one
  * that decides whether someone stays in a circle at all.
  */
@@ -41,6 +47,13 @@ export interface PartnerView {
   firstName: string;
   gameId: string;
   gameName: string;
+  /**
+   * Days until the channel closes, when the game that granted it has already
+   * ended. Null while the game is still running. Surfaced so the composer can
+   * SAY the window out loud — a send button that silently disappears reads as
+   * a bug, not as a boundary.
+   */
+  closingInDays: number | null;
   /** True when either side has blocked the other — contact is off, the game is not. */
   contactBlocked: boolean;
   /** Whether THIS user is the one who blocked (so the UI can offer unblock). */
@@ -59,8 +72,18 @@ class PeerMessageService {
    */
   async getPartner(userId: string): Promise<PartnerView | null> {
     const active = await circleGameService.getActiveGameForUser(userId);
-    const game = active?.game;
-    if (!game || game.templateType !== 'pairs') return null;
+
+    // A running pairing always wins, so nobody ever holds two channels: a new
+    // sprint's partner replaces the last one rather than stacking on top.
+    let game = active?.game?.templateType === 'pairs' ? active.game : null;
+    let closingInDays: number | null = null;
+
+    if (!game) {
+      const ending = await circleGameService.recentlyEndedPairsGame(userId);
+      if (!ending) return null;
+      game = ending.game;
+      closingInDays = ending.daysLeft;
+    }
 
     const pair = circleGameService.pairOf(game.rules as Record<string, any>, userId);
     if (!pair?.partnerId) return null;
@@ -88,6 +111,7 @@ class PeerMessageService {
       blockedByMe: blocks.some((b) => b.blockerId === userId),
       sentToday,
       dailyLimit: DAILY_SEND_LIMIT,
+      closingInDays,
     };
   }
 

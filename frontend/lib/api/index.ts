@@ -530,6 +530,11 @@ export interface PeerPartner {
   firstName: string
   gameId: string
   gameName: string
+  /**
+   * Days until the channel closes, when the game that granted it has ended.
+   * Null while it is still running.
+   */
+  closingInDays: number | null
   /** Either side has blocked the other — contact is off, the game is not. */
   contactBlocked: boolean
   blockedByMe: boolean

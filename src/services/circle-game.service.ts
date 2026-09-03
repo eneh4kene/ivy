@@ -83,6 +83,8 @@ class CircleGameService {
   static readonly PAIRS_MIN_MEMBERS = 4;
   /** Silence this long from a partner stops costing the other person the sprint. */
   static readonly PAIR_DORMANT_DAYS = 5;
+  /** Notes stay open this long after a pairs game ends, so nothing severs mid-conversation. */
+  static readonly PAIR_NOTE_GRACE_DAYS = 7;
   /** Matches the GameSpec StakeEffects fence (multiplierMax ≤ 3). */
   static readonly MAX_BATON_MULTIPLIER = 3;
   /** How far back the room's own record looks (sprints, including the live one). */
@@ -1636,6 +1638,47 @@ class CircleGameService {
       prior: finished.length > 1 && finished[1] > 0 ? finished[1] : null,
       best: Math.max(...finished),
     };
+  }
+
+  /**
+   * The pairs game that just ended, while its notes are still open.
+   *
+   * Scoping the note channel to a running game is right — the shared outcome
+   * is what grants the right to write, and it means no permanent DM graph
+   * forms and nothing needs moderating forever. But ending it the INSTANT the
+   * game does is not a design, it is an abruptness: a conversation built over
+   * a fortnight gets severed by a sprint roll with no warning, and because
+   * past notes stay readable in the thread, you are left able to see what
+   * someone said and unable to answer them.
+   *
+   * So the channel outlives the game by a few days and says so while it does.
+   * Only ever the most recent one, and only when no pairs game is running —
+   * an active pairing always wins, so nobody holds two channels at once.
+   */
+  async recentlyEndedPairsGame(userId: string): Promise<{ game: any; daysLeft: number } | null> {
+    const membership = await prisma.ivyCircleMember.findFirst({
+      where: { userId, isActive: true },
+      select: { circleId: true },
+    });
+    if (!membership) return null;
+
+    const graceMs = CircleGameService.PAIR_NOTE_GRACE_DAYS * 86_400_000;
+    const game = await prisma.circleGame.findFirst({
+      where: {
+        circleId: membership.circleId,
+        templateType: 'pairs',
+        status: { not: 'active' },
+        completedAt: { gte: new Date(Date.now() - graceMs) },
+      },
+      orderBy: { completedAt: 'desc' },
+    });
+    if (!game?.completedAt) return null;
+
+    const daysLeft = Math.max(
+      1,
+      Math.ceil((game.completedAt.getTime() + graceMs - Date.now()) / 86_400_000),
+    );
+    return { game, daysLeft };
   }
 
   /**

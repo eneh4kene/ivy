@@ -18,6 +18,7 @@ const base: PeerPartner = {
   firstName: 'Sam',
   gameId: 'g1',
   gameName: 'Two by Two',
+  closingInDays: null,
   contactBlocked: false,
   blockedByMe: false,
   sentToday: 0,
@@ -63,6 +64,8 @@ export default function LabPair() {
         <Case label="Spent for today" partner={{ ...base, sentToday: 3 }} />
         <Case label="Blocked by me" partner={{ ...base, contactBlocked: true, blockedByMe: true }} />
         <Case label="Blocked by them" partner={{ ...base, contactBlocked: true, blockedByMe: false }} />
+        <Case label="Sprint over — closing" partner={{ ...base, closingInDays: 4 }} />
+        <Case label="Closing tomorrow" partner={{ ...base, closingInDays: 1, sentToday: 1 }} />
       </div>
     </div>
   )

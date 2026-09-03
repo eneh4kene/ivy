@@ -226,6 +226,15 @@ export default function PartnerNote({ partner, onChange }: {
       </div>
 
       {error && <p className="mt-1.5 text-xs" style={{ color: AMBER }}>{error}</p>}
+
+      {/* The sprint is over and the channel is winding down. Said out loud,
+          because a send button that silently disappears reads as a bug. */}
+      {partner.closingInDays != null && (
+        <p className="mt-2 text-xs text-ink-400 leading-relaxed">
+          Your sprint together is done — notes close in{' '}
+          <span className="text-ink-200">{partner.closingInDays} day{partner.closingInDays === 1 ? '' : 's'}</span>.
+        </p>
+      )}
     </div>
   )
 }

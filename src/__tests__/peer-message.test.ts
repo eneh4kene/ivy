@@ -23,10 +23,12 @@ jest.mock('../services/chat.service', () => ({
 }))
 
 const mockGetActiveGame = jest.fn()
+const mockRecentlyEnded = jest.fn()
 jest.mock('../services/circle-game.service', () => ({
   __esModule: true,
   default: {
     getActiveGameForUser: (...args: any[]) => mockGetActiveGame(...args),
+    recentlyEndedPairsGame: (...args: any[]) => mockRecentlyEnded(...args),
     pairOf: jest.requireActual('../services/circle-game.service').default.pairOf.bind(
       jest.requireActual('../services/circle-game.service').default,
     ),
@@ -56,6 +58,7 @@ function pairsGameActive() {
 beforeEach(() => {
   jest.clearAllMocks()
   pairsGameActive()
+  mockRecentlyEnded.mockResolvedValue(null)
   mockPrisma.memberBlock.findMany.mockResolvedValue([])
   mockPrisma.peerMessage.count.mockResolvedValue(0)
   mockPrisma.peerMessage.create.mockResolvedValue({ id: 'pm-1' })
@@ -77,6 +80,52 @@ describe('who you may write to', () => {
   it('gives no channel when the running game is not a pairs game', async () => {
     mockGetActiveGame.mockResolvedValue({ game: { id: 'g', name: 'The Baton', templateType: 'relay', rules: {} } })
     expect(await peerMessageService.getPartner(AMARA)).toBeNull()
+  })
+})
+
+describe('the window closes slowly', () => {
+  it('keeps the channel open after the sprint, and says how long is left', async () => {
+    // Cutting it the instant the game ends severs a fortnight-old
+    // conversation on a sprint roll — and past notes stay readable, so it
+    // left people able to read what someone said and unable to answer.
+    mockGetActiveGame.mockResolvedValue({ game: { id: 'g', name: 'The Baton', templateType: 'relay', rules: {} } })
+    mockRecentlyEnded.mockResolvedValue({
+      game: { id: 'game-pairs-001', name: 'Two by Two', templateType: 'pairs', rules: { pairs: [[AMARA, SAM]], solo: [RUTH] } },
+      daysLeft: 4,
+    })
+
+    const partner = await peerMessageService.getPartner(AMARA)
+    expect(partner).toMatchObject({ partnerId: SAM, closingInDays: 4 })
+  })
+
+  it('still sends during the grace window', async () => {
+    mockGetActiveGame.mockResolvedValue(null)
+    mockRecentlyEnded.mockResolvedValue({
+      game: { id: 'game-pairs-001', name: 'Two by Two', templateType: 'pairs', rules: { pairs: [[AMARA, SAM]], solo: [RUTH] } },
+      daysLeft: 1,
+    })
+
+    expect((await peerMessageService.sendToPartner(AMARA, 'good sprint — see you in the next one')).ok).toBe(true)
+  })
+
+  it('a live pairing always wins, so nobody holds two channels', async () => {
+    // A new sprint's partner REPLACES the last one rather than stacking.
+    mockRecentlyEnded.mockResolvedValue({
+      game: { id: 'old', name: 'Two by Two', templateType: 'pairs', rules: { pairs: [[AMARA, RUTH]] } },
+      daysLeft: 3,
+    })
+
+    const partner = await peerMessageService.getPartner(AMARA)
+    expect(partner).toMatchObject({ partnerId: SAM, closingInDays: null })
+    expect(mockRecentlyEnded).not.toHaveBeenCalled()
+  })
+
+  it('closes for good once the window has passed', async () => {
+    mockGetActiveGame.mockResolvedValue(null)
+    mockRecentlyEnded.mockResolvedValue(null)
+
+    expect(await peerMessageService.getPartner(AMARA)).toBeNull()
+    expect(await peerMessageService.sendToPartner(AMARA, 'hello')).toEqual({ ok: false, reason: 'no_partner' })
   })
 })
 

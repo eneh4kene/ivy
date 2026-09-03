@@ -199,7 +199,7 @@ function GameCard({ game, stateSummary, nameOf, myUserId, partner, onPartnerChan
       <h2 className="font-display text-lg text-ink-50">{game.name}</h2>
       {game.description && <p className="text-sm text-ink-400 mt-1">{game.description}</p>}
       {body}
-      {game.templateType === 'pairs' && partner && onPartnerChange && (
+      {game.templateType === 'pairs' && partner && partner.closingInDays == null && onPartnerChange && (
         <PartnerNote partner={partner} onChange={onPartnerChange} />
       )}
       {stateSummary && (
@@ -596,6 +596,22 @@ export function CirclesScreen() {
             </div>
           )}
         </div>
+        )}
+
+        {/* ── Notes winding down — the pairing that granted them has ended, so
+             this lives OUTSIDE the game card (which is now showing a different
+             game entirely, or none). Without it the grace window would exist
+             on the server and be unreachable in the app. ── */}
+        {partner && partner.closingInDays != null && (
+          <div className="surface rounded-2xl p-4 mb-5 page-enter" style={{ animationDelay: '140ms' }}>
+            <div className="flex items-center gap-1.5 mb-3">
+              <Sparkles className="w-3 h-3 text-ink-400" />
+              <span className="text-2xs font-semibold uppercase tracking-widest text-ink-400">
+                Still open with {partner.firstName}
+              </span>
+            </div>
+            <PartnerNote partner={partner} onChange={setPartner} />
+          </div>
         )}
 
         {/* ── The session — upcoming promise / locked room / the room / missed ── */}
