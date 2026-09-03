@@ -112,6 +112,11 @@ class ChatService {
       // right to set the room's next pledge — and Ivy promised "tell me here
       // and I'll hold everyone to it". Make that promise true.
       appliedNote = await this.applyWinnerPledge(userId, text)
+      // The crown's other spoil: the winner writes the room's next game and
+      // Ivy runs it. Gated on holding the right, so an ordinary member's chat
+      // can never reach the compiler.
+      const gameNote = await this.applyCrownGame(userId, text)
+      if (gameNote) appliedNote = [appliedNote, gameNote].filter(Boolean).join('\n')
     }
 
     // "Just landed in Denver" said in chat has to move their calls exactly like
@@ -136,6 +141,81 @@ class ChatService {
     })
 
     return ivyMsg
+  }
+
+  /**
+   * Compile and start the game a crowned winner just described.
+   *
+   * The GameSpec compiler has been built, fenced and tested since June and has
+   * never been reachable from anywhere in the product. This is its ignition.
+   *
+   * Gating, cheapest check first, so cost tracks the right and not the traffic:
+   *   1. do they hold an unspent game right (one DB read, no model)
+   *   2. does the message plausibly describe a game at all (regex)
+   *   3. is it actually a game proposal, and what is it (one Haiku call)
+   *   4. compile it (the compiler's own validate + repair loop)
+   *
+   * Only a reigning winner ever reaches step 3, and only once — which is the
+   * whole rate limit, and why no cooldown machinery is needed.
+   */
+  private async applyCrownGame(userId: string, text: string): Promise<string | undefined> {
+    try {
+      const circleGameService = (await import('./circle-game.service')).default
+      const rights = await circleGameService.getCrownRights(userId)
+      if (!rights?.canAuthorGame) return undefined
+
+      // A game takes describing. One-word replies never are one.
+      if (text.trim().length < 25) return undefined
+      if (!this.client) return undefined
+
+      const res = await this.client.messages.create({
+        model: MODEL,
+        max_tokens: 300,
+        system: `A member won their accountability circle's game. Their prize: they invent the group's NEXT game, in their own words, and it gets built and run for real.
+
+Read their message. If it describes or proposes a game the room could play — any rules, however specific or silly — return it as a clean brief for a game compiler: keep their intent and their flavour, state the win condition and anything that counts toward it, and drop the chit-chat around it.
+
+If the message is anything else — a question, a reaction, small talk, or them naming the room's PLEDGE (a single commitment everyone follows, which is a different prize) — it is NOT a game.
+
+Return ONLY raw JSON: {"game": "..."} or {"game": null}`,
+        messages: [{ role: 'user', content: text }],
+      })
+      logUsage('anthropic', 'haiku_tokens', (res.usage?.input_tokens ?? 0) + (res.usage?.output_tokens ?? 0), userId, { op: 'crown_game' }).catch(() => {})
+      const raw = res.content[0]?.type === 'text' ? res.content[0].text.trim() : null
+      if (!raw) return undefined
+      const { parseModelJson } = await import('../utils/model-json')
+      const brief = parseModelJson<{ game?: unknown }>(raw).game
+      if (typeof brief !== 'string' || !brief.trim()) return undefined
+
+      try {
+        const built = await circleGameService.authorCrownGame(userId, brief.trim())
+        if (!built) return undefined
+        return (
+          `Their game is BUILT and running: "${built.name}"${built.description ? ` — ${built.description}` : ''}. ` +
+          `${built.replaced ? `It replaced ${built.replaced}. ` : ''}The room has been told. ` +
+          `Confirm it back in one or two lines, in their words rather than yours, and say what the first thing that will move it is. ` +
+          `Do not re-explain the rules they just wrote.`
+        )
+      } catch (err) {
+        // A game that cannot be compiled is a conversation, not an error. The
+        // right is unspent, so the honest reply is "not that one — try again".
+        const { SpecValidationError } = await import('./games/compiler')
+        // createSpecGame also refuses a spec needing the unwired LLM referee —
+        // same conversation from the member's side: describe it differently.
+        if (err instanceof SpecValidationError || err instanceof Error) {
+          logger.warn(`Crown game compile failed for ${userId}:`, err)
+          return (
+            `You could NOT build the game they just described — most likely it needs a judgement call to settle rather than something countable. ` +
+            `Say so plainly and without apology, in one line, and ask for it a different way: what would make someone win it, counted in kept days, streaks, timing or a deadline? ` +
+            `Make clear they still hold the right — nothing was spent.`
+          )
+        }
+        return undefined
+      }
+    } catch (err) {
+      logger.warn(`Crown game failed for ${userId}:`, err)
+      return undefined
+    }
   }
 
   /**

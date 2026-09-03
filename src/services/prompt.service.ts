@@ -791,7 +791,7 @@ class PromptService {
     if (ctx.circle_crown_game && !isCoachCall) {
       tails.push({
         priority: 100,
-        text: `BEFORE ANYTHING ELSE: they hold the unclaimed "${ctx.circle_crown_game}" crown — the right to name the room's next pledge (see UNCLAIMED CROWN above). Unless the visible conversation shows you already raised it, raise it first thing in your reply and offer the grounded candidate pledges. For this one message, this outranks every brevity and topic rule.`,
+        text: `BEFORE ANYTHING ELSE: they hold the unclaimed "${ctx.circle_crown_game}" crown and its spoils (see UNCLAIMED CROWN above for exactly which are still theirs to spend). Unless the visible conversation shows you already raised it, raise it first thing in your reply. For this one message, this outranks every brevity and topic rule.`,
       });
     }
 
@@ -826,17 +826,34 @@ class PromptService {
     // blank page. Candidates must come from the room facts, never invented.
     if (ctx.circle_crown_game) {
       const days = ctx.circle_crown_days_left;
+      // Absent means "not tracked" — treat as open, which is how the pledge
+      // behaved before the game right existed.
+      const pledgeOpen = ctx.circle_crown_can_claim_pledge !== false;
+      const gameOpen = ctx.circle_crown_can_author_game === true;
       blocks.push([
-        `UNCLAIMED CROWN — they won "${ctx.circle_crown_game}" and still hold the winner's right: naming the room's pledge for the next sprint.${days ? ` ${days} day${days === 1 ? '' : 's'} left before it lapses.` : ''} They may have forgotten.`,
+        // Two independent spoils, each spent once. Only ever raise the ones
+        // still standing — pushing a pledge they already named reads as Ivy
+        // not having listened.
+        `UNCLAIMED CROWN — they won "${ctx.circle_crown_game}" and still hold the winner's ${pledgeOpen && gameOpen ? 'rights' : 'right'}:${pledgeOpen ? ' naming the room\'s pledge for the next sprint.' : ''}${gameOpen ? ` writing the room's NEXT GAME — any rules they like, in their own words, and I run it.` : ''}${days ? ` ${days} day${days === 1 ? '' : 's'} left before it lapses.` : ''} They may have forgotten.`,
         `PRIORITY: if the visible conversation doesn't show you already raising the crown, your next reply MUST lead with it — even if they just said hi. This one message outranks small talk and any keep-it-short rule; a few short lines are fine.`,
-        `Invite them to name the pledge, and offer 2–3 candidate pledges (one imperative line each) drawn ONLY from the room facts below. Candidates are sparks; the final wording is theirs.`,
+        pledgeOpen
+          ? `Invite them to name the pledge, and offer 2–3 candidate pledges (one imperative line each) drawn ONLY from the room facts below. Candidates are sparks; the final wording is theirs.`
+          : '',
+        // The compiler can author genuinely arbitrary rules, so the invitation
+        // should sound like one. What it CANNOT do is referee a judgement call
+        // — say the constraint as a nudge toward countable rules, never as a
+        // list of restrictions, or they will write the safest game they can
+        // think of and the whole point is lost.
+        gameOpen
+          ? `Invite them to invent the next game — genuinely theirs, as odd or specific to this room as they like. Describe it to you in a sentence or two and it starts, replacing the current one. The only real constraint: it has to be settled by things I can count — kept days, streaks, who's first, a deadline — not by anyone's opinion of how it went. Put that as encouragement, not as rules. If what they describe can't be built, say so plainly and ask for it a different way; nothing is lost and they keep the right.`
+          : '',
         ctx.circle_crown_material
           ? `Room facts (last 14 days): ${ctx.circle_crown_material}`
           : `Room facts: none logged yet — draw out their own idea; do not invent data.`,
         callType === 'CHAT'
-          ? `The moment they state their pledge here, it is set automatically and the room is told — don't ask them to confirm elsewhere.`
-          : `The pledge becomes official when they send it to you in the app chat — land on the idea together, then ask them to text it to you right after the call.`,
-      ].join('\n'));
+          ? `The moment they state ${pledgeOpen && gameOpen ? 'a pledge or a game' : pledgeOpen ? 'their pledge' : 'their game'} here, it is set automatically and the room is told — don't ask them to confirm elsewhere.`
+          : `It becomes official when they send it to you in the app chat — land on the idea together, then ask them to text it to you right after the call.`,
+      ].filter(Boolean).join('\n'));
     }
     return blocks.join('\n\n');
   }

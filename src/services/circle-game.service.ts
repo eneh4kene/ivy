@@ -1168,6 +1168,9 @@ class CircleGameService {
     circleId: string;
     gameName: string;
     daysLeft: number;
+    wonGameId: string;
+    canClaimPledge: boolean;
+    canAuthorGame: boolean;
   } | null> {
     const membership = await prisma.ivyCircleMember.findFirst({
       where: { userId, isActive: true },
@@ -1180,16 +1183,105 @@ class CircleGameService {
       where: { eventType: 'game_won', createdAt: { gte: since }, game: { circleId: membership.circleId } },
       orderBy: { createdAt: 'desc' },
       take: 3,
-      select: { userId: true, createdAt: true, payload: true, game: { select: { name: true, state: true } } },
+      select: { userId: true, createdAt: true, payload: true, game: { select: { id: true, name: true, state: true } } },
     });
     const win = wins.find((w) => {
       const p = w.payload as { winner_id?: string; winner?: string } | null;
       return (p?.winner_id ?? p?.winner ?? w.userId) === userId;
     });
-    if (!win || (win.game.state as Record<string, unknown> | null)?.pledge_claimed === true) return null;
+    if (!win) return null;
+
+    const wonState = (win.game.state as Record<string, unknown> | null) ?? {};
+    // The two spoils are independent: naming the pledge and inventing the next
+    // game are each spent once, and spending one leaves the other standing.
+    const pledgeSpent = wonState.pledge_claimed === true;
+    const gameSpent = wonState.game_authored === true;
+    if (pledgeSpent && gameSpent) return null;
 
     const daysLeft = Math.max(1, Math.ceil((win.createdAt.getTime() + 14 * 86_400_000 - Date.now()) / 86_400_000));
-    return { circleId: membership.circleId, gameName: win.game.name, daysLeft };
+    return {
+      circleId: membership.circleId,
+      gameName: win.game.name,
+      daysLeft,
+      wonGameId: win.game.id,
+      canClaimPledge: !pledgeSpent,
+      canAuthorGame: !gameSpent,
+    };
+  }
+
+  /**
+   * Which of the crown's spoils this user still holds, if any. Public so the
+   * chat path can gate on it with one cheap read before spending a model call.
+   */
+  async getCrownRights(userId: string): Promise<{ canClaimPledge: boolean; canAuthorGame: boolean } | null> {
+    const crown = await this.getUnclaimedCrownForUser(userId);
+    return crown ? { canClaimPledge: crown.canClaimPledge, canAuthorGame: crown.canAuthorGame } : null;
+  }
+
+  /**
+   * The crown's second spoil: the winner invents the room's next game, in
+   * their own words, and Ivy runs it.
+   *
+   * The GameSpec compiler has existed and been fenced since June and nothing
+   * has ever called it in the product — no screen, no command, no voice path.
+   * It is the one piece here capable of producing a game specific enough to be
+   * worth telling someone about, because the rules come from the room's own
+   * in-jokes rather than from a template.
+   *
+   * The winner's game REPLACES the running one. That is the point of a spoil:
+   * the crown reshapes the room rather than adding a second scoreboard nobody
+   * is watching (and getActiveGameForUser assumes one active game per circle).
+   *
+   * Throws SpecValidationError when no valid game can be compiled — the right
+   * is NOT spent in that case, so they can describe it differently and retry.
+   */
+  async authorCrownGame(userId: string, prompt: string): Promise<{
+    name: string;
+    description: string | null;
+    replaced: string | null;
+  } | null> {
+    const crown = await this.getUnclaimedCrownForUser(userId);
+    if (!crown || !crown.canAuthorGame) return null;
+
+    // Compile FIRST — a failed compile must leave the right unspent.
+    const memberIds = await this.activeMemberIds(crown.circleId);
+    const { spec, attempts } = await compileGame(prompt);
+
+    const running = await prisma.circleGame.findFirst({
+      where: { circleId: crown.circleId, status: 'active' },
+      select: { id: true, name: true },
+    });
+
+    const game = await persistSpecGame({ circleId: crown.circleId, spec, memberIds });
+
+    // Spend the right and retire the outgoing game only once the new one exists.
+    await prisma.$transaction([
+      ...(running ? [prisma.circleGame.update({
+        where: { id: running.id },
+        data: { status: 'completed', completedAt: new Date() },
+      })] : []),
+      prisma.circleGame.update({
+        where: { id: crown.wonGameId },
+        data: { state: { ...(await this.wonGameState(crown.wonGameId)), game_authored: true } },
+      }),
+    ]);
+
+    const names = await this.memberNames(crown.circleId);
+    const who = names.get(userId) ?? 'The champion';
+    await this.announceBeat(
+      crown.circleId,
+      `${who} used the crown to write the room's next game: ${game.name}.${game.description ? ` ${game.description}` : ''} It starts now — I'm keeping score.`,
+      { gameId: game.id },
+    );
+
+    logger.info(`authorCrownGame: ${userId} authored "${game.name}" in ${attempts} attempt(s) for circle ${crown.circleId}${running ? ` (replacing ${running.name})` : ''}`);
+    return { name: game.name, description: game.description, replaced: running?.name ?? null };
+  }
+
+  /** Current state of the won game, so spending one spoil never clobbers the other. */
+  private async wonGameState(gameId: string): Promise<Record<string, unknown>> {
+    const g = await prisma.circleGame.findUnique({ where: { id: gameId }, select: { state: true } });
+    return ((g?.state as Record<string, unknown> | null) ?? {});
   }
 
   /**
@@ -1242,6 +1334,8 @@ class CircleGameService {
     circle_crown_game?: string;
     circle_crown_days_left?: number;
     circle_crown_material?: string;
+    circle_crown_can_claim_pledge?: boolean;
+    circle_crown_can_author_game?: boolean;
   } | null> {
     // The crown check runs regardless of an active game: the next sprint's
     // pact auto-seeds at session close, so a fresh game and an unclaimed
@@ -1261,6 +1355,8 @@ class CircleGameService {
         circle_crown_game: crown.gameName,
         circle_crown_days_left: crown.daysLeft,
         circle_crown_material: await this.pledgeMaterial(crown.circleId).catch(() => ''),
+        circle_crown_can_claim_pledge: crown.canClaimPledge,
+        circle_crown_can_author_game: crown.canAuthorGame,
       } : {}),
     };
   }
