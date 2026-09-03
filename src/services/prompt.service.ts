@@ -778,8 +778,9 @@ class PromptService {
       tails.push({
         priority: 90,
         text: [
-          `YOUR FIRST TURN IS SHORT — this outranks the FLOW above.`,
+          `YOUR FIRST TURN IS SHORT, AND EVERY TURN IS ONE QUESTION — this outranks the FLOW above.`,
           `Say hello and ask ONE thing. That is the entire turn. Then stop talking and wait, however long it takes.`,
+          `The same rule holds for the rest of the call, not just the opening. Observed live: "what's the plan — home or gym, and what time are you actually starting?" is TWO questions in one breath; he answered the first and the second was simply lost. Ask the second one afterwards, in its own turn, once you have the answer to the first.`,
           `Do not stack a second question behind it. Do not explain why you're asking. Do not preview what the call will cover. Do not pass judgment on their day before they have said a word — you have not heard from them yet, and the record in front of you may simply be a day nobody has written down.`,
           `The FLOW is the shape of the WHOLE call, not a script for the opening. Getting through it in two turns is a failed call even if every word was right.`,
         ].join('\n'),

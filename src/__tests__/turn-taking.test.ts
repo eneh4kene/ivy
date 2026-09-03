@@ -73,6 +73,7 @@ describe('the first turn', () => {
   it('is one greeting and one question, then silence', () => {
     const p = build();
     expect(p).toMatch(/YOUR FIRST TURN IS SHORT/);
+    expect(p).toMatch(/EVERY TURN IS ONE QUESTION/);
     expect(p).toMatch(/Say hello and ask ONE thing/);
     expect(p).toMatch(/stop talking and wait, however long it takes/);
   });
@@ -86,6 +87,14 @@ describe('the first turn', () => {
 
   it('forbids opening with a verdict on a day they have not described', () => {
     expect(build()).toMatch(/Do not pass judgment on their day before they have said a word/);
+  });
+
+  // The opening held on 2 Sep; she stacked mid-call instead, so the rule has
+  // to survive past the first turn.
+  it('keeps one-question-per-turn alive for the rest of the call', () => {
+    const p = build();
+    expect(p).toMatch(/The same rule holds for the rest of the call/);
+    expect(p).toMatch(/is TWO questions in one breath/);
   });
 
   it('does not fire on chat, which has no turns to take', () => {
