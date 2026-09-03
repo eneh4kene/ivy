@@ -25,6 +25,10 @@ model User {
   firstName    String
   lastName     String
   timezone     String  @default("Europe/London")
+  // Where they normally are, remembered ONLY while they are away from it.
+  // `timezone` is where they are now; this is what "I'm back home" restores.
+  // NULL is the normal state and means they are home. See timezone.service.
+  homeTimezone String? @map("home_timezone")
   region       String  @default("GB") // "GB" or "US"
   currency     String  @default("GBP") // "GBP" or "USD"
   profileImage String?

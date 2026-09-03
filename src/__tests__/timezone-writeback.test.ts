@@ -47,7 +47,7 @@ describe('timezone write-back', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     create.mockResolvedValue({});
-    db.user.findUnique.mockResolvedValue({ timezone: 'America/New_York', firstName: 'Joseph' });
+    db.user.findUnique.mockResolvedValue({ timezone: 'America/New_York', firstName: 'Joseph', homeTimezone: null });
     db.user.update.mockResolvedValue({});
   });
 
@@ -55,7 +55,7 @@ describe('timezone write-back', () => {
     answer('America/Chicago');
     await run();
     expect(db.user.update).toHaveBeenCalledWith(
-      expect.objectContaining({ data: { timezone: 'America/Chicago' } }),
+      expect.objectContaining({ data: { timezone: 'America/Chicago', homeTimezone: 'America/New_York' } }),
     );
   });
 
@@ -96,7 +96,7 @@ describe('timezone write-back', () => {
     answer('"America/Chicago".');
     await run();
     expect(db.user.update).toHaveBeenCalledWith(
-      expect.objectContaining({ data: { timezone: 'America/Chicago' } }),
+      expect.objectContaining({ data: { timezone: 'America/Chicago', homeTimezone: 'America/New_York' } }),
     );
   });
 
@@ -167,7 +167,7 @@ describe('the chat path itself', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     create.mockResolvedValue({});
-    db.user.findUnique.mockResolvedValue({ timezone: 'America/New_York', firstName: 'Joseph' });
+    db.user.findUnique.mockResolvedValue({ timezone: 'America/New_York', firstName: 'Joseph', homeTimezone: null });
     db.user.update.mockResolvedValue({});
   });
 
@@ -182,5 +182,64 @@ describe('the chat path itself', () => {
     await expect(
       timezoneService.captureFromTranscript('u1', 'flying out at some point', 'chat'),
     ).resolves.toBeNull();
+  });
+});
+
+/**
+ * The return leg. Travel used to be a one-way door: "landed in Denver" moved
+ * them, and "I'm back home" had nothing to resolve to — home is a fact only we
+ * hold, not something a model can infer — so they stayed on Denver time
+ * indefinitely. That is a worse state than never having moved at all.
+ */
+describe('coming home again', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    create.mockResolvedValue({});
+    db.user.update.mockResolvedValue({});
+  });
+
+  it('remembers where they left from on the way out', async () => {
+    db.user.findUnique.mockResolvedValue({ timezone: 'America/New_York', firstName: 'J', homeTimezone: null });
+    answer('America/Denver');
+    await run('landed in Denver');
+    expect(db.user.update).toHaveBeenCalledWith(
+      expect.objectContaining({ data: { timezone: 'America/Denver', homeTimezone: 'America/New_York' } }),
+    );
+  });
+
+  it('restores home and forgets the trip when they get back', async () => {
+    db.user.findUnique.mockResolvedValue({ timezone: 'America/Denver', firstName: 'J', homeTimezone: 'America/New_York' });
+    answer('America/New_York');
+    await run("I'm back home");
+    expect(db.user.update).toHaveBeenCalledWith(
+      expect.objectContaining({ data: { timezone: 'America/New_York', homeTimezone: null } }),
+    );
+  });
+
+  it('tells the model what home is, so "back home" can resolve at all', async () => {
+    db.user.findUnique.mockResolvedValue({ timezone: 'America/Denver', firstName: 'J', homeTimezone: 'America/New_York' });
+    answer('America/New_York');
+    await run("I'm back home");
+    const sent = ((timezoneService as unknown as { client: { messages: { create: jest.Mock } } })
+      .client.messages.create.mock.calls[0][0].messages[0].content) as string;
+    expect(sent).toMatch(/currently AWAY from home/);
+    expect(sent).toContain('America/New_York');
+  });
+
+  // Otherwise the second trip records a hotel as home and they never get back.
+  it('keeps the original home when they move on to a THIRD place', async () => {
+    db.user.findUnique.mockResolvedValue({ timezone: 'America/Denver', firstName: 'J', homeTimezone: 'America/New_York' });
+    answer('America/Chicago');
+    await run('now in Chicago for two days');
+    expect(db.user.update).toHaveBeenCalledWith(
+      expect.objectContaining({ data: { timezone: 'America/Chicago', homeTimezone: 'America/New_York' } }),
+    );
+  });
+
+  it('says they are back, not that they have gone somewhere new', async () => {
+    db.user.findUnique.mockResolvedValue({ timezone: 'America/Denver', firstName: 'J', homeTimezone: 'America/New_York' });
+    answer('America/New_York');
+    await run("I'm back home");
+    expect(create.mock.calls[0][0].data.content).toMatch(/Back home in New York/);
   });
 });

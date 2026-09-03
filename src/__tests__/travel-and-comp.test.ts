@@ -49,6 +49,14 @@ describe('travel — the full block, when a recent call surfaced a trip', () => 
     expect(build()).toMatch(/still ahead of them nothing moves yet/);
   });
 
+  // The return leg is the half that used to be missing entirely.
+  it('knows their calls come home again on their own', () => {
+    const p = build();
+    expect(p).toMatch(/It works both ways/);
+    expect(p).toMatch(/you're back on your usual time/);
+    expect(p).toMatch(/Never leave someone believing they have to fix a schedule you have already fixed/);
+  });
+
   it('asks one question about the days, not three', () => {
     expect(build()).toMatch(/Ask ONE question about the days themselves/);
   });
@@ -111,7 +119,9 @@ describe('travel — gated off for someone going nowhere', () => {
   it('still knows what to say if it comes up cold', () => {
     expect(p()).toMatch(/IF TRAVEL COMES UP/);
     expect(p()).toMatch(/MOVE WITH THEM automatically/);
-    expect(p()).toMatch(/ask plainly where they'll be/);
+    expect(p()).toMatch(/ask plainly where they'll be/i);
+    // Both directions, even in the one-line version.
+    expect(p()).toMatch(/move back on their own when they say they are home/);
   });
 
   it('is dramatically shorter than carrying the whole block', () => {

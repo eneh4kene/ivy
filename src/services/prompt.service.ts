@@ -1132,7 +1132,7 @@ class PromptService {
     // travel can always come up cold and "she had no idea" is not an acceptable
     // saving. 1,200 characters down to ~200 for the common case.
     if (!ctx.travel_signal) {
-      return `IF TRAVEL COMES UP: your calls run at their usual local time and MOVE WITH THEM automatically once they tell you where they are — so ask plainly where they'll be, say you'll keep the same time in the new place, and only discuss a different hour if the trip itself makes their usual slot impossible.`;
+      return `IF TRAVEL COMES UP: your calls run at their usual local time and MOVE WITH THEM automatically once they tell you they have arrived somewhere — and move back on their own when they say they are home. Ask plainly where they'll be, say you'll keep the same time in the new place, and only discuss a different hour if the trip itself makes their usual slot impossible.`;
     }
 
     const at = ctx.local_time ? ` It is ${ctx.local_time} where they are.` : '';
@@ -1140,6 +1140,7 @@ class PromptService {
       `IF THEY MENTION TRAVELLING (a trip, a flight, an interview in another city, "I'm away next week"):`,
       `- Their calls are on ${tz} time.${at} When they tell you they have ARRIVED somewhere else, that moves automatically — they keep their usual hour, in the new place. Say so plainly and without ceremony: "I'll ring you at your usual time out there." Never send them to Settings for this, and never promise a specific clock time in the new zone; you keep the hour, not the timezone maths.`,
       `- While the trip is still ahead of them nothing moves yet, so do not tell them it has. Ask ONE question about the days themselves: what will actually be possible out there?`,
+      `- It works both ways: when they tell you they are HOME again, their calls go back to their normal time by themselves. Say so once — "you're back on your usual time" — and move on. Never leave someone believing they have to fix a schedule you have already fixed.`,
       `- A trip is NOT automatically a write-off. Ask what the day actually looks like there — a hotel room, a gym, twenty minutes before a flight — and find the version of their commitment that survives it. The minimum exists precisely for this.`,
       `- If they name a fixed event (an interview, a meeting, a flight), remember it and LEAD with it next time — "how did the interview go?" before anything about training. A day with a real event in it is that event's day; the training is the second question, not the first.`,
       `- Only when the trip genuinely makes it impossible — travelling all day, no access, an emergency — treat it as a real reason out, the same as illness. Do not negotiate a minimum against a red-eye.`,

@@ -27,6 +27,13 @@
  *   - Records the move as a memory, so Ivy tells them what she did on the next
  *     call instead of it happening invisibly behind them.
  *   - Never throws into its caller.
+ *
+ * AND IT IS A ROUND TRIP. Travel used to be a one-way door: "landed in Denver"
+ * moved them, "I'm back home" had nothing to resolve to — home is not a place
+ * a model can infer — so they stayed on Denver time indefinitely, which is a
+ * worse state than never having moved. The zone they left is remembered in
+ * homeTimezone while they are away, handed to the extractor so "back home"
+ * resolves, and cleared when they return.
  */
 import Anthropic from '@anthropic-ai/sdk';
 import prisma from '../utils/prisma';
@@ -47,6 +54,9 @@ function isRealZone(zone: string): boolean {
 }
 
 export type TimezoneSource = 'call' | 'chat';
+
+/** "America/New_York" -> "New York", for anything a human will read. */
+const place = (zone: string) => zone.split('/').pop()?.replace(/_/g, ' ') ?? zone;
 
 /**
  * Cheap gate for the chat path. A call transcript is already a rare, expensive
@@ -88,12 +98,13 @@ class TimezoneService {
     try {
       const user = await prisma.user.findUnique({
         where: { id: userId },
-        select: { timezone: true, firstName: true },
+        select: { timezone: true, firstName: true, homeTimezone: true },
       });
       if (!user) return null;
       const current = user.timezone || 'Europe/London';
+      const home = user.homeTimezone;
 
-      const detected = await this.extractZone(transcript, current, userId, source);
+      const detected = await this.extractZone(transcript, current, userId, source, home);
       if (!detected) return null;
 
       if (!isRealZone(detected)) {
@@ -102,16 +113,26 @@ class TimezoneService {
       }
       if (detected === current) return null;
 
-      await prisma.user.update({ where: { id: userId }, data: { timezone: detected } });
+      // Going away: remember where they came from, once. Coming back: forget,
+      // so the next trip records a real home rather than a previous hotel.
+      const goingHome = home != null && detected === home;
+      await prisma.user.update({
+        where: { id: userId },
+        data: {
+          timezone: detected,
+          homeTimezone: goingHome ? null : (home ?? current),
+        },
+      });
 
       // So the next call opens knowing it happened. A move the member never
       // hears about is a system changing their day behind their back.
       await prisma.callMemory.create({
         data: {
           userId,
-          content:
-            `Now in ${detected.split('/').pop()?.replace(/_/g, ' ')} — their calls were moved from ` +
-            `${current.split('/').pop()?.replace(/_/g, ' ')} so they still land at their usual local time.`,
+          content: goingHome
+            ? `Back home in ${place(detected)} — their calls moved back from ${place(current)}.`
+            : `Now in ${place(detected)} — their calls were moved from ${place(current)} ` +
+              `so they still land at their usual local time.`,
           category: 'life_event',
           source: 'call',
         },
@@ -144,7 +165,14 @@ class TimezoneService {
     current: string,
     userId: string,
     source: TimezoneSource,
+    home: string | null,
   ): Promise<string | null> {
+    // "Home" is not something a model can infer from a transcript — it is a
+    // fact only we hold. Handing it over is what makes the return leg possible.
+    const homeLine = home
+      ? `They are currently AWAY from home. Their home timezone is "${home}". ` +
+        `If they say they are back, or home, or that the trip is over, answer with "${home}".\n`
+      : '';
     const response = await this.client!.messages.create({
       model: 'claude-haiku-4-5',
       max_tokens: 24,
@@ -156,6 +184,7 @@ class TimezoneService {
               ? `A coaching client just sent this message. Their account timezone is "${current}":\n\n`
               : `A coaching client is on a call. Their account timezone is "${current}". Transcript:\n\n`) +
             `"${transcript.slice(0, 6000)}"\n\n` +
+            homeLine +
             `Did they say they are RIGHT NOW, or for the next few days, physically in a place ` +
             `in a DIFFERENT timezone from "${current}"?\n\n` +
             `Answer YES only if they have already arrived or are there now — ` +
