@@ -46,6 +46,22 @@ function isRealZone(zone: string): boolean {
   }
 }
 
+export type TimezoneSource = 'call' | 'chat';
+
+/**
+ * Cheap gate for the chat path. A call transcript is already a rare, expensive
+ * event worth one Haiku call; a chat message is not — most are "yeah" and
+ * "ok". Same shape as the coach-programme extractor, which only runs when a
+ * message plausibly names a client. Deliberately loose: this decides whether
+ * to ASK, and Haiku still does the deciding.
+ */
+const MENTIONS_A_PLACE =
+  /\b(land(ed|ing)?|touch(ed)?\s*down|arriv\w*|flew|flight|fly(ing)?|abroad|overseas|jet ?lag(ged)?|time ?zone|out here|over here|back home|hotel|airbnb|i'?m in|i am in|we'?re in|out in|off to|heading to|trip|travel\w*|visiting)\b/i;
+
+export function chatMayMentionTravel(text: string): boolean {
+  return MENTIONS_A_PLACE.test(text);
+}
+
 class TimezoneService {
   private client: Anthropic | null = null;
 
@@ -62,25 +78,29 @@ class TimezoneService {
    * in a different timezone, move their account so their calls land at the same
    * local hour where they actually are. Best-effort: never throws.
    */
-  async captureFromTranscript(userId: string, transcript: string): Promise<void> {
-    if (!this.client || !transcript?.trim()) return;
+  async captureFromTranscript(
+    userId: string,
+    transcript: string,
+    source: TimezoneSource = 'call',
+  ): Promise<{ from: string; to: string } | null> {
+    if (!this.client || !transcript?.trim()) return null;
 
     try {
       const user = await prisma.user.findUnique({
         where: { id: userId },
         select: { timezone: true, firstName: true },
       });
-      if (!user) return;
+      if (!user) return null;
       const current = user.timezone || 'Europe/London';
 
-      const detected = await this.extractZone(transcript, current, userId);
-      if (!detected) return;
+      const detected = await this.extractZone(transcript, current, userId, source);
+      if (!detected) return null;
 
       if (!isRealZone(detected)) {
         logger.warn(`Timezone write-back: "${detected}" is not a real IANA zone — discarded (user ${userId})`);
-        return;
+        return null;
       }
-      if (detected === current) return;
+      if (detected === current) return null;
 
       await prisma.user.update({ where: { id: userId }, data: { timezone: detected } });
 
@@ -98,7 +118,8 @@ class TimezoneService {
       });
 
       serverAnalytics.timezoneAutoUpdated(userId, current, detected);
-      logger.info(`Timezone write-back: ${userId} ${current} → ${detected}`);
+      logger.info(`Timezone write-back (${source}): ${userId} ${current} → ${detected}`);
+      return { from: current, to: detected };
     } catch (err) {
       // A miss means their calls keep firing on the old zone — recoverable, but
       // it is the thing this service exists to prevent, so make it visible.
@@ -110,6 +131,7 @@ class TimezoneService {
         error: err,
       });
     }
+    return null;
   }
 
   /**
@@ -117,7 +139,12 @@ class TimezoneService {
    * timezone. Returns an IANA zone or null. Deliberately narrow: the cost of a
    * false positive is every future call at the wrong hour.
    */
-  private async extractZone(transcript: string, current: string, userId: string): Promise<string | null> {
+  private async extractZone(
+    transcript: string,
+    current: string,
+    userId: string,
+    source: TimezoneSource,
+  ): Promise<string | null> {
     const response = await this.client!.messages.create({
       model: 'claude-haiku-4-5',
       max_tokens: 24,
@@ -125,7 +152,9 @@ class TimezoneService {
         {
           role: 'user',
           content:
-            `A coaching client is on a call. Their account timezone is "${current}". Transcript:\n\n` +
+            (source === 'chat'
+              ? `A coaching client just sent this message. Their account timezone is "${current}":\n\n`
+              : `A coaching client is on a call. Their account timezone is "${current}". Transcript:\n\n`) +
             `"${transcript.slice(0, 6000)}"\n\n` +
             `Did they say they are RIGHT NOW, or for the next few days, physically in a place ` +
             `in a DIFFERENT timezone from "${current}"?\n\n` +

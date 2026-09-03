@@ -114,6 +114,15 @@ class ChatService {
       appliedNote = await this.applyWinnerPledge(userId, text)
     }
 
+    // "Just landed in Denver" said in chat has to move their calls exactly like
+    // it does on a call — chat memory is a once-daily batch, far too late for
+    // tonight's call. Awaited rather than fire-and-forget, and only behind the
+    // prefilter, because if it DID move we want Ivy's very next sentence to say
+    // so; a system that silently relocates someone's day is worse than one that
+    // never moves at all.
+    const travelNote = await this.applyTimezoneMove(userId, text)
+    if (travelNote) appliedNote = [appliedNote, travelNote].filter(Boolean).join('\n')
+
     const reply = await this.generateReply(userId, appliedNote)
 
     const ivyMsg = await prisma.message.create({
@@ -121,6 +130,28 @@ class ChatService {
     })
 
     return ivyMsg
+  }
+
+  /**
+   * Move their calls when a chat message says they have arrived somewhere else.
+   * Returns a note for the reply prompt so Ivy states the change in her own
+   * words, or undefined when nothing moved.
+   */
+  private async applyTimezoneMove(userId: string, text: string): Promise<string | undefined> {
+    try {
+      const { chatMayMentionTravel, default: timezoneService } = await import('./timezone.service')
+      if (!chatMayMentionTravel(text)) return undefined
+      const moved = await timezoneService.captureFromTranscript(userId, text, 'chat')
+      if (!moved) return undefined
+      const place = moved.to.split('/').pop()?.replace(/_/g, ' ')
+      return (
+        `You have just moved their calls to ${place} time, so they keep their usual hour where they now are. ` +
+        `Tell them plainly and briefly, in your own words — do not quote a clock time in the new zone.`
+      )
+    } catch (err) {
+      logger.warn(`Chat timezone capture failed for ${userId}:`, err)
+      return undefined
+    }
   }
 
   /**

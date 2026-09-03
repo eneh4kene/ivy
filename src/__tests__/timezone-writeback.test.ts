@@ -8,7 +8,7 @@
  *
  * So these tests are mostly about refusing to write.
  */
-import timezoneService from '../services/timezone.service';
+import timezoneService, { chatMayMentionTravel } from '../services/timezone.service';
 import prisma from '../utils/prisma';
 
 const create = jest.fn();
@@ -111,14 +111,14 @@ describe('timezone write-back', () => {
   it('never throws when the database fails', async () => {
     answer('America/Chicago');
     db.user.update.mockRejectedValue(new Error('db down'));
-    await expect(run()).resolves.toBeUndefined();
+    await expect(run()).resolves.toBeNull();
   });
 
   it('never throws when the model fails', async () => {
     (timezoneService as unknown as { client: unknown }).client = {
       messages: { create: jest.fn().mockRejectedValue(new Error('haiku down')) },
     };
-    await expect(run()).resolves.toBeUndefined();
+    await expect(run()).resolves.toBeNull();
   });
 
   it('does nothing for a user who no longer exists', async () => {
@@ -126,5 +126,61 @@ describe('timezone write-back', () => {
     db.user.findUnique.mockResolvedValue(null);
     await run();
     expect(db.user.update).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * The chat prefilter. A call transcript is a rare event worth one Haiku call;
+ * a chat message is not — most are "yeah" and "ok". This decides only whether
+ * to ASK, so it errs generous: a false positive costs one cheap model call, a
+ * false negative means someone's calls stay in the wrong country.
+ */
+describe('the chat prefilter', () => {
+  const travels = [
+    "just landed in Denver",
+    "I'm in Chicago all week",
+    "flying out tomorrow morning",
+    "we're in Lisbon until Sunday",
+    "off to Boston for an interview",
+    "still jetlagged tbh",
+    "back home now, normal service resumes",
+    "at the hotel, gym looks decent",
+  ];
+  for (const t of travels) {
+    it(`asks about: "${t}"`, () => expect(chatMayMentionTravel(t)).toBe(true));
+  }
+
+  const ordinary = [
+    "yeah did it",
+    "ok",
+    "missed today, work ran late",
+    "can we move tomorrow to 7",
+    "shoulder still sore",
+    "smashed the deadlifts",
+  ];
+  for (const t of ordinary) {
+    it(`stays quiet on: "${t}"`, () => expect(chatMayMentionTravel(t)).toBe(false));
+  }
+});
+
+describe('the chat path itself', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    create.mockResolvedValue({});
+    db.user.findUnique.mockResolvedValue({ timezone: 'America/New_York', firstName: 'Joseph' });
+    db.user.update.mockResolvedValue({});
+  });
+
+  it('moves them and reports the move, so the reply can say so', async () => {
+    answer('America/Denver');
+    const moved = await timezoneService.captureFromTranscript('u1', 'just landed in Denver', 'chat');
+    expect(moved).toEqual({ from: 'America/New_York', to: 'America/Denver' });
+  });
+
+  it('reports nothing when nothing moved', async () => {
+    answer('NONE');
+    await expect(
+      timezoneService.captureFromTranscript('u1', 'flying out at some point', 'chat'),
+    ).resolves.toBeNull();
   });
 });
