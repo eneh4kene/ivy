@@ -25,18 +25,32 @@ const build = (ctx: Record<string, unknown> = {}, type = 'EVENING_REVIEW') =>
   promptService.buildSystemPrompt(type, { ...member, ...ctx }, false);
 
 describe('travel — the full block, when a recent call surfaced a trip', () => {
-  it('names the timezone her calls are actually pinned to', () => {
+  it('names the timezone their calls currently run on', () => {
     const p = build();
     expect(p).toContain('America/New_York');
-    expect(p).toMatch(/does NOT move when they do/);
   });
 
-  it('tells them where to change it, since she cannot', () => {
-    expect(build()).toMatch(/set it in the app under Settings/);
+  // She can move it herself now (timezone.service), so sending someone to
+  // Settings is both wrong and a worse experience than just doing it.
+  it('never sends them to Settings for something she does herself', () => {
+    const p = build();
+    expect(p).toMatch(/Never send them to Settings for this/);
+    expect(p).toMatch(/that moves automatically/);
+    expect(p).not.toMatch(/set it in the app under Settings/);
   });
 
-  it('asks one question about it, not three', () => {
-    expect(build()).toMatch(/ask ONE question: roughly what time would work/);
+  it('promises the hour, never the timezone arithmetic', () => {
+    const p = build();
+    expect(p).toMatch(/I'll ring you at your usual time out there/);
+    expect(p).toMatch(/never promise a specific clock time in the new zone/);
+  });
+
+  it('does not claim the move has happened while the trip is still ahead', () => {
+    expect(build()).toMatch(/still ahead of them nothing moves yet/);
+  });
+
+  it('asks one question about the days, not three', () => {
+    expect(build()).toMatch(/Ask ONE question about the days themselves/);
   });
 
   it('adapts the day instead of writing it off', () => {
@@ -96,9 +110,8 @@ describe('travel — gated off for someone going nowhere', () => {
 
   it('still knows what to say if it comes up cold', () => {
     expect(p()).toMatch(/IF TRAVEL COMES UP/);
-    expect(p()).toContain('America/New_York');
-    expect(p()).toMatch(/do NOT move when they do/);
-    expect(p()).toMatch(/Settings/);
+    expect(p()).toMatch(/MOVE WITH THEM automatically/);
+    expect(p()).toMatch(/ask plainly where they'll be/);
   });
 
   it('is dramatically shorter than carrying the whole block', () => {

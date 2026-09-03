@@ -123,6 +123,10 @@ export const serverAnalytics = {
   plannedTimeCaptured: (userId: string, source: string) =>
     capture(userId, 'planned_time_captured', { source }),
 
+  // They said they were somewhere else and their calls followed them there
+  timezoneAutoUpdated: (userId: string, from: string, to: string) =>
+    capture(userId, 'timezone_auto_updated', { from, to }),
+
   // A card-less (promo) subscriber saved a card — the stake opt-in moment
   cardAdded: (userId: string, purpose: string) =>
     capture(userId, 'card_added', { purpose }),

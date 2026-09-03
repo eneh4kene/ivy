@@ -248,6 +248,14 @@ class WebhookController {
                 .then(({ default: futureCommitmentService }) =>
                   futureCommitmentService.captureFromTranscript(dbUserId, call.transcript))
                 .catch(() => {});
+
+              // "I'm in Chicago this week" — move their calls with them. Call
+              // times are stored as LOCAL wall clock, so shifting the zone is
+              // the entire fix: 20:00 stays 20:00 where they actually are.
+              import('../../services/timezone.service')
+                .then(({ default: timezoneService }) =>
+                  timezoneService.captureFromTranscript(dbUserId, call.transcript))
+                .catch(() => {});
             }
 
             // Keep Ivy's word: if the user asked to be called back, schedule it.
