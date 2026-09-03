@@ -163,8 +163,20 @@ const monthlyDonationDispatch = cronFunction(
 
 // Every day at midnight UTC — schedule today's EVENING calls for all active users.
 // (Morning live call replaced by VN arming loop for everyone — §1c.)
+// Runs HOURLY, not at midnight UTC.
+//
+// A single 00:00 UTC run can only ever reach timezones whose evening is still
+// ahead at that instant. scheduleDailyCalls skips a slot already in the past,
+// so at 00:00 UTC — 20:00 in New York, 19:00 in Chicago — an East or Central US
+// member's evening call was ALWAYS in the past and ALWAYS skipped. Not delayed:
+// never scheduled, on any day. Denver and Los Angeles happened to fall inside
+// the window and worked, which is why this looked fine.
+//
+// Hourly, every member gets a run shortly after their own local midnight, when
+// their evening is still ahead. The local-day dedup in scheduleDailyCalls makes
+// the other 23 runs no-ops.
 const dailyEveningCalls = cronFunction(
-  { id: 'daily-evening-calls', name: 'Schedule daily evening calls', triggers: { cron: '0 0 * * *' } },
+  { id: 'daily-evening-calls', name: 'Schedule daily evening calls', triggers: { cron: '0 * * * *' } },
   async ({ step }) => {
     const userIds = await step.run('find-active-users', async () => {
       const users = await prisma.user.findMany({

@@ -124,10 +124,16 @@ class CallService {
       throw new NotFoundError('User not found');
     }
 
-    // Deduplication guard — skip if calls are already scheduled for today.
-    // Prevents double-scheduling if the server restarts or redeploys at midnight.
-    const todayStart = startOfDay(date);
-    const todayEnd = endOfDay(date);
+    const tz = user.timezone || 'Europe/London';
+
+    // Deduplication guard — skip if calls already exist for the member's OWN
+    // day. This used to use the server's UTC day, which is a different 24 hours
+    // from the member's for everyone west of Greenwich: a US evening call lands
+    // near midnight UTC, so it fell into the NEXT server day and blocked the
+    // following day's scheduling.
+    const localDay = date.toLocaleDateString('en-CA', { timeZone: tz });
+    const todayStart = fromZonedTime(`${localDay}T00:00:00`, tz);
+    const todayEnd = fromZonedTime(`${localDay}T23:59:59.999`, tz);
     const alreadyScheduled = await prisma.call.count({
       where: {
         userId,
@@ -136,11 +142,9 @@ class CallService {
       },
     });
     if (alreadyScheduled > 0) {
-      logger.info(`Skipping scheduleDailyCalls for ${userId} — ${alreadyScheduled} call(s) already exist for today`);
+      logger.info(`Skipping scheduleDailyCalls for ${userId} — ${alreadyScheduled} call(s) already exist for their local day ${localDay}`);
       return [];
     }
-
-    const tz = user.timezone || 'Europe/London';
 
     // Respect preferred call days — evaluated in the user's timezone
     if (user.preferredDays) {
