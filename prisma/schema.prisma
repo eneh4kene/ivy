@@ -7,7 +7,15 @@ generator client {
 
 datasource db {
   provider = "postgresql"
+  // Runtime traffic goes through Neon's pooler (pgbouncer=true) — right for an
+  // app that opens many short-lived connections.
   url      = env("DATABASE_URL")
+  // Migrations must NOT. PgBouncer in transaction mode cannot hold the session
+  // state DDL needs, and `prisma migrate deploy` against the pooler fails with
+  // P1002 (reached, then timed out). Neon's direct endpoint is the same host
+  // without the `-pooler` suffix. Falls back to DATABASE_URL when unset so
+  // local and CI setups that never had a pooler keep working.
+  directUrl = env("DIRECT_DATABASE_URL")
 }
 
 // ============================================
@@ -145,6 +153,9 @@ model User {
 
   @@index([email])
   @@index([companyId])
+  // Client rosters and the coach console query users by coach constantly, and
+  // Postgres does not index a foreign key on its own.
+  @@index([coachId])
   @@map("users")
 }
 
@@ -338,6 +349,9 @@ model Workout {
 
   // Relationships
   voiceNote  VoiceNote?  @relation("WorkoutArmedVoiceNote", fields: [voiceNoteId], references: [id])
+  // Every VN recorded against this day. Distinct from `voiceNote` above, which
+  // is the single canonical VN that ARMED the day.
+  voiceNotes VoiceNote[] @relation("VoiceNoteDay")
   stakeCycle StakeCycle? @relation(fields: [stakeCycleId], references: [id])
 
   @@index([userId, plannedDate])
@@ -581,6 +595,11 @@ model VoiceNote {
   // Relationships
   // Virtual back-relation for Workout.voiceNote (1:1; FK lives on Workout.voiceNoteId)
   armedWorkout Workout? @relation("WorkoutArmedVoiceNote")
+  // The day this VN belongs to. The database has enforced this FK since it was
+  // created (ON DELETE SET NULL, which is why an orphaned VN survives its
+  // workout); the schema simply never declared it, so every drift check wanted
+  // to DROP a constraint that was doing its job.
+  workout Workout? @relation("VoiceNoteDay", fields: [workoutId], references: [id])
 
   @@index([userId, recordedAt])
   @@index([workoutId])
@@ -797,6 +816,7 @@ model CircleSprintGoal {
 
   @@unique([circleId, sprintNumber])
   @@index([circleId])
+  @@index([collectiveCharityGoalId])
   @@map("circle_sprint_goals")
 }
 

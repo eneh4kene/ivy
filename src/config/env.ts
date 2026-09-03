@@ -104,6 +104,11 @@ const envSchema = z.object({
   // INNGEST_ENABLED=true is the exclusive cutover switch: when set, the legacy
   // node-cron jobs in worker.ts stand down and Inngest Cloud drives the schedule.
   // Keys come from the Inngest Cloud dashboard (set as Fly secrets in production).
+  // Direct (non-pooled) Neon endpoint, used ONLY by prisma migrate. Optional:
+  // absent means migrations fall back to DATABASE_URL, which is correct
+  // anywhere there is no pooler in front of Postgres.
+  DIRECT_DATABASE_URL: z.string().url().optional(),
+
   INNGEST_ENABLED: z.string().transform((val) => val === 'true').default('false'),
 
   // Beta: a coach's clients get the full product without ever being asked for a
