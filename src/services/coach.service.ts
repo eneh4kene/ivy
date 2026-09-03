@@ -44,6 +44,27 @@ export interface CoachProfileInput {
   weeklyDigestEnabled?: boolean;
 }
 
+/**
+ * What a coach's client is put on when they join, during beta.
+ *
+ * A client landing on FREE is not a cheaper client — it is a silent one: the
+ * evening scheduler filters `subscriptionTier: { notIn: ['FREE','COACH'] }`, so
+ * they onboard, wait for a call, and nothing ever rings. The only route to PRO
+ * in the consumer UI runs through the stake-setup checkout, which a client who
+ * skips staking never reaches.
+ *
+ * While BETA_COMP_COACH_CLIENTS is on they get the full product with no card,
+ * ever. These are comped, not paying, and the two are told apart by
+ * `stripeSubscriptionId IS NULL` — every real subscription sets it (see
+ * payment.service.updateSubscriptionTier), and nothing else writes a tier
+ * without one.
+ */
+const BETA_CLIENT_TIER = 'PRO' as const;
+
+function compedClientFields(): { subscriptionTier: typeof BETA_CLIENT_TIER } | Record<string, never> {
+  return config.beta.compCoachClients ? { subscriptionTier: BETA_CLIENT_TIER } : {};
+}
+
 class CoachService {
   private anthropic: Anthropic | null = process.env.ANTHROPIC_API_KEY
     ? new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
@@ -348,6 +369,7 @@ class CoachService {
         coachLinkedAt: new Date(),
         isActive: true,
         isOnboarded: false,
+        ...compedClientFields(),
       },
     });
     const magicUrl = await authService.createMagicLinkUrl(email);
@@ -416,6 +438,7 @@ class CoachService {
         coachLinkedAt: new Date(),
         isActive: true,
         isOnboarded: false,
+        ...compedClientFields(),
       },
     });
 
@@ -434,9 +457,14 @@ class CoachService {
   async acceptCoachInvite(userId: string): Promise<void> {
     const user = await prisma.user.findUnique({
       where: { id: userId },
-      select: { id: true, pendingCoachId: true },
+      select: { id: true, pendingCoachId: true, subscriptionTier: true },
     });
     if (!user?.pendingCoachId) throw new BadRequestError('No pending coach invite');
+
+    // Comp only a FREE account. Someone already on a paid tier is either paying
+    // or comped already, and either way an unconditional write here would be a
+    // downgrade dressed up as a gift.
+    const comp = user.subscriptionTier === 'FREE' ? compedClientFields() : {};
 
     await prisma.user.update({
       where: { id: userId },
@@ -444,8 +472,12 @@ class CoachService {
         coachId: user.pendingCoachId,
         coachLinkedAt: new Date(),
         pendingCoachId: null,
+        ...comp,
       },
     });
+    if ('subscriptionTier' in comp) {
+      logger.info(`Beta: comped client ${userId} to ${BETA_CLIENT_TIER} on linking to coach ${user.pendingCoachId}`);
+    }
 
     serverAnalytics.coachClientLinked(userId, user.pendingCoachId, 'invite_accept');
 

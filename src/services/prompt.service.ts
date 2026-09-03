@@ -560,7 +560,7 @@ const FLOWS: Record<string, FlowFn> = {
       coachLine,
       '',
       `2. UNDERSTAND THEM (4 min):`,
-      `   - "What's the real goal behind the goal? What changes if you get there?"`,
+      `   - "What's the real goal behind the goal?" Then, ONLY once they have answered, "and what changes if you get there?" — two turns, never one line.`,
       `   - "What's got in the way before?"`,
       `   - "Who are you doing this for?" — this becomes the gift frame.`,
       '',
@@ -737,6 +737,7 @@ class PromptService {
       this.gameStanding(ctx, callType),
       this.coachEscalation(callType, ctx),
       isCoachCall ? '' : this.pauseProtocol(),
+      isCoachCall ? '' : this.travelProtocol(ctx),
       isCoachCall ? coachDeliveryRules() : this.standingRules(ctx),
       this.safetyRules(),
     ].filter(Boolean);
@@ -1113,6 +1114,29 @@ class PromptService {
 
   // Injury, illness, bereavement, unavoidable travel — a real reason is not a
   // motivation problem, and the nudge ladder must never be used against it.
+  /**
+   * Travel. Currently the ONLY travel handling was "unavoidable travel" listed
+   * beside injury as a reason to pause — which treats a trip as a write-off
+   * rather than a change of circumstances, and says nothing about the thing
+   * that actually breaks: the call time follows the timezone on their account,
+   * and nothing updates it when they move.
+   *
+   * So she must find out, say plainly what will happen, and adapt the day
+   * rather than cancel it.
+   */
+  private travelProtocol(ctx: Record<string, any>): string {
+    const tz = ctx.timezone ?? 'Europe/London';
+    const at = ctx.local_time ? ` It is ${ctx.local_time} where they are.` : '';
+    return [
+      `IF THEY MENTION TRAVELLING (a trip, a flight, an interview in another city, "I'm away next week"):`,
+      `- Their calls are scheduled for ${tz}.${at} That does NOT move when they do — so if they cross into another timezone, I will be ringing them on ${tz} time until someone changes it.`,
+      `- Say that plainly and ask ONE question: roughly what time would work while they're away? Then tell them to set it in the app under Settings, because you cannot change it from the call.`,
+      `- A trip is NOT automatically a write-off. Ask what the day actually looks like there — a hotel room, a gym, twenty minutes before a flight — and find the version of their commitment that survives it. The minimum exists precisely for this.`,
+      `- If they name a fixed event (an interview, a meeting, a flight), remember it and LEAD with it next time — "how did the interview go?" before anything about training. A day with a real event in it is that event's day; the training is the second question, not the first.`,
+      `- Only when the trip genuinely makes it impossible — travelling all day, no access, an emergency — treat it as a real reason out, the same as illness. Do not negotiate a minimum against a red-eye.`,
+    ].join('\n');
+  }
+
   private pauseProtocol(): string {
     return [
       `IF THEY'RE INJURED, ILL, OR GENUINELY OUT (emergency, unavoidable travel):`,

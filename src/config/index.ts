@@ -91,6 +91,10 @@ export const config = {
     alertsMuted: env.OPS_ALERTS_MUTED,
     healthToken: env.OPS_HEALTH_TOKEN,
   },
+  beta: {
+    compCoachClients: env.BETA_COMP_COACH_CLIENTS,
+  },
+
   inngest: {
     enabled: env.INNGEST_ENABLED,
     appId: env.INNGEST_APP_ID,

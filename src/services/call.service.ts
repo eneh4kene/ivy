@@ -531,9 +531,10 @@ class CallService {
     const foundation_stake = canActuallyStake
       ? STAKE_CONFIG.foundationFlatAmount[foundationCurrency]
       : null;
+    // The member's own timezone, used for every wall-clock fact Ivy states.
+    const userTz = user?.timezone || 'Europe/London';
     const callLocalHour = (() => {
-      const tz = user?.timezone || 'Europe/London';
-      const h = Number(now.toLocaleString('en-GB', { hour: '2-digit', hour12: false, timeZone: tz }));
+      const h = Number(now.toLocaleString('en-GB', { hour: '2-digit', hour12: false, timeZone: userTz }));
       return Number.isFinite(h) ? h % 24 : 12;
     })();
     const is_evening_first_call = completedCallCount === 0 && callLocalHour >= 17;
@@ -678,7 +679,15 @@ class CallService {
       next_session: upcomingSession
         ? `${upcomingSession.activity}${upcomingSession.plannedTime ? ` at ${upcomingSession.plannedTime}` : ''} on ${upcomingSession.plannedDate.toLocaleDateString('en-GB', { weekday: 'long', timeZone: user?.timezone || 'Europe/London' })}`
         : null,
-      day_of_week: now.toLocaleDateString('en-US', { weekday: 'long' }),
+      // In THEIR timezone, not the server's. Untimezoned, this read the UTC day:
+      // at 20:00 in New York it is already tomorrow in UTC, so Ivy would state
+      // the wrong weekday with total confidence — to a member whose prompt tells
+      // her to use it when attributing a miss to a particular day.
+      day_of_week: now.toLocaleDateString('en-US', { weekday: 'long', timeZone: userTz }),
+      // Their wall clock and where it is. Lets her notice she is calling someone
+      // at a strange hour, which is the first sign they have travelled.
+      local_time: now.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: userTz }),
+      timezone: userTz,
       days_since_workout,
       previous_streak: streak?.longestStreak ?? 0,
 

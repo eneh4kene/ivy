@@ -18,7 +18,10 @@ import logger from '../utils/logger';
 import { opsAlert } from '../lib/ops-alert';
 
 const MIN_DELAY_MIN = 5;        // ignore "call me right now" — that's what rescue is for
-const MAX_DELAY_MIN = 12 * 60;  // cap at 12h so a misparse can't book days out
+// 26h, not 12h: "ring me after my interview tomorrow morning" is a normal ask
+// and used to fall outside the window. Still tight enough that a misparse
+// cannot book days out.
+const MAX_DELAY_MIN = 26 * 60;
 const DEDUPE_WINDOW_MIN = 20;   // don't add a callback within ±20m of an existing call
 
 class CallbackService {
@@ -42,7 +45,22 @@ class CallbackService {
     const minutes = await this.extractCallbackDelay(transcript);
     if (minutes == null) return;
 
-    const clamped = Math.min(Math.max(minutes, MIN_DELAY_MIN), MAX_DELAY_MIN);
+    // Never CLAMP a request that overshoots. Clamping keeps the promise's shape
+    // and destroys its content: "I'll call after your 11am interview" becomes a
+    // call at 9am, which is worse than no call — she rang, and she was wrong.
+    // Out of range is a promise we cannot keep, so page it instead of guessing.
+    if (minutes > MAX_DELAY_MIN) {
+      await opsAlert({
+        severity: 'warn',
+        source: 'callback',
+        title: 'callback_out_of_range',
+        detail: `user asked to be called back in ~${Math.round(minutes / 60)}h, beyond the ${MAX_DELAY_MIN / 60}h window — not scheduled`,
+        userId,
+      }).catch(() => {});
+      logger.warn(`Callback for ${userId} out of range (${minutes}m) — not scheduled`);
+      return;
+    }
+    const clamped = Math.max(minutes, MIN_DELAY_MIN);
     const scheduledAt = new Date(Date.now() + clamped * 60 * 1000);
 
     // Don't double-book: skip if a non-terminal call already sits near this slot.

@@ -105,6 +105,11 @@ const envSchema = z.object({
   // node-cron jobs in worker.ts stand down and Inngest Cloud drives the schedule.
   // Keys come from the Inngest Cloud dashboard (set as Fly secrets in production).
   INNGEST_ENABLED: z.string().transform((val) => val === 'true').default('false'),
+
+  // Beta: a coach's clients get the full product without ever being asked for a
+  // card. Defaults ON because that is the current commercial position; set it to
+  // 'false' the day coach clients are expected to pay, and nothing else changes.
+  BETA_COMP_COACH_CLIENTS: z.string().transform((val) => val !== 'false').default('true'),
   INNGEST_APP_ID: z.string().default('ivy'),
   INNGEST_EVENT_KEY: z.string().optional(),
   INNGEST_SIGNING_KEY: z.string().optional(),
