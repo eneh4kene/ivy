@@ -95,19 +95,29 @@ async function checkRetell() {
   const key = process.env.RETELL_API_KEY;
   if (!key) { add('Retell', 'FAIL', 'RETELL_API_KEY not set — no voice agent, no calls'); return; }
 
-  // 1) Auth — agent endpoints live at the API root, not /v2 (see retell.service.ts).
+  // 1) Auth. POST /v2/list-agents — GET /list-agents was deprecated 31 Jul 2026
+  // and is already past its stated removal date, so it can stop answering at
+  // any time. The v2 shape returns { items, pagination_key, has_more } rather
+  // than a bare array.
   let agentCount = '?';
   try {
-    const res = await fetchWithTimeout('https://api.retellai.com/list-agents', {
-      headers: { Authorization: `Bearer ${key}` },
+    const res = await fetchWithTimeout('https://api.retellai.com/v2/list-agents', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ filter_criteria: { channel: 'voice' } }),
     });
     if (res.status === 401 || res.status === 403) {
       add('Retell', 'FAIL', `${res.status} — key invalid`);
       return;
     }
     if (res.status === 200) {
-      const agents = (await res.json()) as unknown[];
-      agentCount = Array.isArray(agents) ? String(agents.length) : '?';
+      const body = (await res.json()) as { items?: unknown[] } | unknown[];
+      const items = Array.isArray(body) ? body : body?.items;
+      agentCount = Array.isArray(items) ? String(items.length) : '?';
+    } else {
+      // Not fatal on its own — the billing probe below is the check that
+      // actually observes whether a call can be placed.
+      agentCount = `? (list ${res.status})`;
     }
   } catch (err: any) {
     add('Retell', 'FAIL', `auth probe failed: ${err?.message ?? err}`);
@@ -134,6 +144,13 @@ async function checkRetell() {
     if (res.status === 402) {
       const body = await res.text();
       add('Retell', 'FAIL', `402 PAYMENT OVERDUE — calls will not connect: ${body.slice(0, 120)}`);
+    } else if (res.status === 401 || res.status === 403) {
+      // Reachable if the list probe ever stops being authoritative — e.g. when
+      // the deprecated endpoint is finally removed and starts 404ing instead of
+      // 401ing on a bad key. Without this branch an invalid key falls into the
+      // else below and gets reported as "billing active", which is the exact
+      // shape of failure this script exists to prevent.
+      add('Retell', 'FAIL', `${res.status} — key invalid (billing probe)`);
     } else {
       // Any non-402 means the billing gate let us through to agent validation.
       add('Retell', 'OK', `key valid · ${agentCount} agents · billing active`);
