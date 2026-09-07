@@ -12,6 +12,7 @@
  * So this follows the preflight.ts pattern: a script run inside the prod
  * machine, where SSH access IS the authorisation.
  *
+ *   fly ssh console -a ivykeeps-api -C "node dist/scripts/phone-owner.js --suffix 63"
  *   fly ssh console -a ivykeeps-api -C "node dist/scripts/phone-owner.js +447700900063"
  *   fly ssh console -a ivykeeps-api -C "node dist/scripts/phone-owner.js +447700900063 --release"
  *
@@ -34,12 +35,53 @@ function normalisePhone(phone: string): string {
 
 const mask = (s: string | null) => (s ? `…${s.slice(-4)}` : 'none');
 
+/**
+ * Find held numbers by their last digits.
+ *
+ * Support arrives as "his number ending in 63 is taken" — nobody reads out a
+ * full number to report a bug. Searching by suffix answers that directly,
+ * where the alternative is dumping every phone in the users table into a
+ * terminal to eyeball the match.
+ */
+async function findBySuffix(suffix: string): Promise<void> {
+  const holders = await prisma.user.findMany({
+    where: { phone: { endsWith: suffix } },
+    select: { id: true, firstName: true, role: true, subscriptionTier: true,
+              onboardedAt: true, isActive: true, createdAt: true, phone: true },
+    orderBy: { createdAt: 'asc' },
+  });
+
+  if (holders.length === 0) {
+    console.log(`\nNo account holds a number ending ${suffix}.\n`);
+    return;
+  }
+
+  console.log(`\n${holders.length} account(s) hold a number ending ${suffix}:\n`);
+  for (const h of holders) {
+    console.log(`  ${h.firstName ?? '(no name)'} · ${h.role ?? 'user'} · ${h.subscriptionTier} · created ${h.createdAt.toISOString().slice(0, 10)} · onboarded ${h.onboardedAt ? 'yes' : 'NEVER'} · active ${h.isActive}`);
+    console.log(`    id ${h.id}`);
+    console.log(`    inspect: node dist/scripts/phone-owner.js ${h.phone}`);
+  }
+  console.log('');
+}
+
 async function main() {
   const [rawPhone, ...flags] = process.argv.slice(2);
   const release = flags.includes('--release');
 
+  if (rawPhone === '--suffix') {
+    const suffix = flags[0];
+    if (!suffix) {
+      console.error('Usage: node dist/scripts/phone-owner.js --suffix <last digits>');
+      process.exit(1);
+    }
+    await findBySuffix(suffix);
+    return;
+  }
+
   if (!rawPhone) {
     console.error('Usage: node dist/scripts/phone-owner.js <phone> [--release]');
+    console.error('       node dist/scripts/phone-owner.js --suffix <last digits>');
     process.exit(1);
   }
 
