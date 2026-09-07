@@ -104,7 +104,13 @@ async function checkRetell() {
     const res = await fetchWithTimeout('https://api.retellai.com/v2/list-agents', {
       method: 'POST',
       headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ filter_criteria: { channel: 'voice' } }),
+      // channel is a StringFilter object, not a bare string — a plain
+      // { channel: 'voice' } is rejected with a 400. Filtering to voice
+      // reproduces exactly what the old GET /list-agents returned (chat agents
+      // lived behind a separate /list-chat-agents).
+      body: JSON.stringify({
+        filter_criteria: { channel: { type: 'string', op: 'eq', value: 'voice' } },
+      }),
     });
     if (res.status === 401 || res.status === 403) {
       add('Retell', 'FAIL', `${res.status} — key invalid`);
