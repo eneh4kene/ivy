@@ -112,9 +112,16 @@ async function main() {
   console.log(`  The number is now free for someone else to verify.\n`);
 }
 
+// Exit explicitly, as preflight does. Letting the event loop drain leaves the
+// Prisma pool holding it open, which hangs the ssh session that invoked this
+// and makes a script that already finished look like one that is stuck.
 main()
-  .catch((err) => {
-    console.error('phone-owner failed:', err);
-    process.exit(1);
+  .then(async () => {
+    await prisma.$disconnect();
+    process.exit(0);
   })
-  .finally(() => prisma.$disconnect());
+  .catch(async (err) => {
+    console.error('phone-owner failed:', err);
+    await prisma.$disconnect();
+    process.exit(1);
+  });
