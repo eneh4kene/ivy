@@ -1,0 +1,51 @@
+<title>Ivy header</title>
+<style>
+  html,body{margin:0;padding:0;}
+  .hdr{
+    width:1500px;height:500px;position:relative;overflow:hidden;
+    background:
+      radial-gradient(60% 120% at 22% -16%, rgba(70,240,200,.13) 0%, rgba(70,240,200,.035) 38%, transparent 72%),
+      linear-gradient(180deg,#041219 0%,#02090d 55%,#010507 100%);
+  }
+  svg{position:absolute;inset:0;display:block;}
+</style>
+
+<div class="hdr">
+  <svg viewBox="0 0 1500 500" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <filter id="g" x="-60%" y="-60%" width="220%" height="220%">
+        <feGaussianBlur stdDeviation="2.6" result="b"/>
+        <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+      </filter>
+      <filter id="soft" x="-90%" y="-90%" width="280%" height="280%">
+        <feGaussianBlur stdDeviation="18"/>
+      </filter>
+      <path id="lf" d="M0,0 C11,-12 26,-14 37,0 C26,14 11,12 0,0 Z"/>
+    </defs>
+
+    <!-- deep horizon bloom -->
+    <ellipse cx="300" cy="-105" rx="470" ry="215" fill="#46f0c8" opacity=".085" filter="url(#soft)"/>
+
+    <!-- drifting motes: safe under any crop -->
+    <g fill="#9ffbe4">
+      <circle cx="180" cy="150" r="2.1" opacity=".38"/>
+      <circle cx="412" cy="96"  r="1.5" opacity=".26"/>
+      <circle cx="640" cy="210" r="2.4" opacity=".30"/>
+      <circle cx="905" cy="128" r="1.7" opacity=".22"/>
+      <circle cx="1128" cy="248" r="2.0" opacity=".26"/>
+      <circle cx="1310" cy="150" r="1.4" opacity=".18"/>
+      <circle cx="760" cy="352"  r="1.8" opacity=".20"/>
+      <circle cx="1042" cy="392" r="1.5" opacity=".16"/>
+      <circle cx="268" cy="330"  r="1.6" opacity=".18"/>
+    </g>
+
+    <!-- a drift of leaves rising left→right, brightening -->
+    <g filter="url(#g)">
+      <use href="#lf" fill="#46f0c8" opacity=".20" transform="translate(150,392) rotate(-16) scale(.86)"/>
+      <use href="#lf" fill="#46f0c8" opacity=".28" transform="translate(392,344) rotate(-22) scale(.94)"/>
+      <use href="#lf" fill="#46f0c8" opacity=".40" transform="translate(636,300) rotate(-14) scale(1.0)"/>
+      <use href="#lf" fill="#46f0c8" opacity=".55" transform="translate(878,262) rotate(-24) scale(1.06)"/>
+      <use href="#lf" fill="#9ffbe4" opacity=".82" transform="translate(1118,214) rotate(-18) scale(1.12)"/>
+    </g>
+  </svg>
+</div>

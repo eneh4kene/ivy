@@ -57,7 +57,11 @@ model User {
   // Schedule Preferences
   morningCallTime String? // HH:MM format (e.g., "07:00")
   eveningCallTime String? // HH:MM format (e.g., "20:00")
-  callFrequency   Int     @default(2) // calls per week
+  // Calls per week. Honoured by call.service.voiceCallDays; preferredDays
+  // overrides it. Default 3 (Tue/Thu/Sun) rather than 7: the daily voice call
+  // is the single largest COGS line, and the off-days get the evening chat
+  // check-in instead, so the ritual is daily even when the calls are not.
+  callFrequency   Int     @default(3) // calls per week
   preferredDays   String? // JSON array of days ["monday", "tuesday"]
 
   // Workout Preferences

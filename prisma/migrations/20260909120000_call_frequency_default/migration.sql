@@ -1,0 +1,11 @@
+-- callFrequency default 2 -> 3, now that the scheduler actually honours it.
+--
+-- The field has existed since the beginning and was never read by the
+-- scheduler, so its old default of 2 was never a decision anybody made or
+-- experienced — it was an unset value. Honouring it as-is would silently put
+-- every new member on two calls a week.
+--
+-- Existing rows are deliberately left alone: no user in production has ever
+-- completed onboarding, so there is no live experience to migrate, and a blanket
+-- UPDATE would be a change with no one to change it for.
+ALTER TABLE "users" ALTER COLUMN "callFrequency" SET DEFAULT 3;

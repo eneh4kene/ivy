@@ -1,0 +1,59 @@
+<title>Ivy avatar</title>
+<style>
+  html,body{margin:0;padding:0;background:#111;}
+  .mark{
+    width:512px;height:512px;position:absolute;top:0;left:0;
+    background:
+      radial-gradient(78% 62% at 50% 16%, rgba(70,240,200,.16) 0%, rgba(70,240,200,.045) 38%, transparent 70%),
+      linear-gradient(180deg,#041219 0%,#02090d 52%,#010507 100%);
+    overflow:hidden;
+  }
+  svg{display:block;width:512px;height:512px;}
+</style>
+
+<div class="mark">
+  <svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <filter id="glow" x="-60%" y="-60%" width="220%" height="220%">
+        <feGaussianBlur stdDeviation="3.4" result="b"/>
+        <feMerge>
+          <feMergeNode in="b"/>
+          <feMergeNode in="SourceGraphic"/>
+        </feMerge>
+      </filter>
+      <filter id="softglow" x="-80%" y="-80%" width="260%" height="260%">
+        <feGaussianBlur stdDeviation="7"/>
+      </filter>
+      <!-- leaf: a lens/almond, origin at stem attachment, tip at +34 -->
+      <path id="leaf" d="M0,0 C10,-11 24,-13 34,0 C24,13 10,11 0,0 Z"/>
+      <linearGradient id="stemgrad" x1="0" y1="1" x2="0" y2="0">
+        <stop offset="0%"  stop-color="#2ba088"/>
+        <stop offset="55%" stop-color="#46f0c8"/>
+        <stop offset="100%" stop-color="#9ffbe4"/>
+      </linearGradient>
+    </defs>
+
+    <!-- ambient halo behind the plant -->
+    <ellipse cx="100" cy="96" rx="46" ry="58" fill="#46f0c8" opacity=".10" filter="url(#softglow)"/>
+
+    <g filter="url(#glow)">
+      <!-- stem: rises from the base, curls at the crown -->
+      <path
+        d="M100,180 C100,152 76,140 76,112 C76,86 100,74 113,58 C124,45 121,29 107,25 C96,22 87,31 92,41"
+        fill="none" stroke="url(#stemgrad)" stroke-width="6.2" stroke-linecap="round"/>
+
+      <!-- leaves, oldest (dimmest) at the base, newest brightest at the crown -->
+      <use href="#leaf" fill="#46f0c8" opacity=".42"
+           transform="translate(78,141) rotate(150) scale(.92)"/>
+      <use href="#leaf" fill="#46f0c8" opacity=".62"
+           transform="translate(76,112) rotate(-14) scale(1.02)"/>
+      <use href="#leaf" fill="#46f0c8" opacity=".82"
+           transform="translate(86,86) rotate(191) scale(1.0)"/>
+      <use href="#leaf" fill="#9ffbe4" opacity="1"
+           transform="translate(112,60) rotate(-32) scale(1.06)"/>
+    </g>
+
+    <!-- the bud: today, unkept -->
+    <circle cx="92" cy="41" r="5.6" fill="#9ffbe4" opacity=".92" filter="url(#glow)"/>
+  </svg>
+</div>

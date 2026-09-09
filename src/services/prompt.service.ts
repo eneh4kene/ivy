@@ -735,6 +735,7 @@ class PromptService {
       this.behaviouralAdapter(ctx),
       brief ?? this.resolveFlow(callType, ctx),
       this.gameStanding(ctx, callType),
+      isCoachCall ? '' : this.cadence(ctx),
       this.coachEscalation(callType, ctx),
       isCoachCall ? '' : this.pauseProtocol(ctx),
       isCoachCall ? '' : this.travelProtocol(ctx),   // gated inside — see the method
@@ -805,6 +806,19 @@ class PromptService {
   // Lives outside the flow/brief slot so it survives when a Haiku brief replaces
   // the flow. On outbound it complements the brief (which handles tone) by giving
   // the model the exact standing so it can't invent scores.
+  /**
+   * Her own cadence. Cheap, deterministic, and injected everywhere the game
+   * standing is — because closing a call with "speak tomorrow" on a day she
+   * has no call scheduled is a promise the scheduler will not keep.
+   */
+  private cadence(ctx: Record<string, any>): string {
+    if (!ctx.call_days || ctx.call_days === 'every day') return '';
+    return [
+      `YOUR CALL DAYS: ${ctx.call_days}.`,
+      ctx.off_day_channel,
+    ].filter(Boolean).join(' ');
+  }
+
   private gameStanding(ctx: Record<string, any>, callType?: string): string {
     const blocks: string[] = [];
     if (ctx.circle_game_name) {

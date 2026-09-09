@@ -12,6 +12,29 @@ import circleCatchupService from './circle-catchup.service';
 import coachService from './coach.service';
 import { STAKE_CONFIG, type Currency } from '../config/pricing';
 
+/**
+ * Which local weekdays a reduced cadence puts the VOICE call on.
+ *
+ * Sunday appears in every row and is not negotiable: the stake cycle is 7 days
+ * from Monday, so Sunday is the call where money actually moves. A cadence that
+ * skipped it would settle someone's week in silence.
+ *
+ * The rest spread across the days follow-through actually fails on rather than
+ * bunching at the start of the week — Monday motivation is free, and it is
+ * Tuesday and Thursday where people quietly stop.
+ *
+ * Off-days are NOT silent: they get the evening chat check-in instead, so
+ * reducing cadence lowers voice cost without ever dropping the daily ritual.
+ */
+const CADENCE_DAYS: Record<number, string[]> = {
+  1: ['sunday'],
+  2: ['wednesday', 'sunday'],
+  3: ['tuesday', 'thursday', 'sunday'],
+  4: ['monday', 'wednesday', 'friday', 'sunday'],
+  5: ['monday', 'tuesday', 'wednesday', 'friday', 'sunday'],
+  6: ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'sunday'],
+};
+
 export type CallType = 'MORNING_PLANNING' | 'EVENING_REVIEW' | 'RESCUE' | 'WEEKLY_PLANNING' | 'MONTHLY_CHECKIN' | 'ONBOARDING' | 'SEASON_CLOSE' | 'COACH_PONDER' | 'ARMING_CHASE';
 
 class CallService {
@@ -100,6 +123,65 @@ class CallService {
   /**
    * Schedule daily calls for a user (morning and evening)
    */
+  /**
+   * What Ivy needs to say her own cadence out loud without lying about it:
+   * which days she calls, and that the other days are a check-in here instead.
+   */
+  private cadenceContext(user: { id: string; preferredDays: string | null; callFrequency: number } | null): {
+    call_days: string | null;
+    off_day_channel: string | null;
+  } {
+    if (!user) return { call_days: null, off_day_channel: null };
+    const days = this.voiceCallDays(user);
+    if (days === null) return { call_days: 'every day', off_day_channel: null };
+
+    const order = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
+    const named = order
+      .filter((d) => days.has(d))
+      .map((d) => d.charAt(0).toUpperCase() + d.slice(1));
+    return {
+      call_days: named.join(', '),
+      off_day_channel:
+        'On every other day you check in by message here instead — so never promise a CALL on a day that is not a call day. ' +
+        'Say plainly which it will be ("I\'ll message you tomorrow, and we\'ll talk properly on Thursday"). ' +
+        'Their morning voice note still arms every single day either way, so no day goes unrecorded and you never need to ask them to keep track of the gaps — you already have them.',
+    };
+  }
+
+  /**
+   * The local weekdays this member gets a voice call on, or null for every day.
+   *
+   * `preferredDays` is an explicit choice and always wins. `callFrequency` is
+   * the fallback — it has existed in the schema since the beginning, been
+   * validated 1-7, and been read into Ivy's own prompt context ("calls_per_week"),
+   * while NOTHING in the scheduler ever honoured it. So Ivy has been telling
+   * people a cadence the system did not keep, and plan-adjustment.service has
+   * been agreeing on calls to move sessions to different days and writing a
+   * field the scheduler read for days but never for frequency.
+   */
+  private voiceCallDays(user: { id: string; preferredDays: string | null; callFrequency: number }): Set<string> | null {
+    if (user.preferredDays) {
+      try {
+        const parsed = JSON.parse(user.preferredDays) as unknown;
+        if (Array.isArray(parsed)) {
+          const days = parsed
+            .filter((d): d is string => typeof d === 'string')
+            .map((d) => d.toLowerCase());
+          if (days.length > 0) return new Set(days);
+        }
+      } catch {
+        // A malformed row must never silence a member. Previously this parse
+        // was unguarded inside the per-user loop, so one bad value meant that
+        // person got no calls at all — recorded as a warn nobody would read.
+        logger.warn(`Unparseable preferredDays for ${user.id} — falling back to callFrequency`);
+      }
+    }
+
+    const freq = Number(user.callFrequency);
+    if (!Number.isFinite(freq) || freq >= 7) return null;
+    return new Set(CADENCE_DAYS[Math.max(1, Math.min(6, Math.round(freq)))]);
+  }
+
   async scheduleDailyCalls(userId: string, date: Date) {
     const user = (await prisma.user.findUnique({
       where: { id: userId },
@@ -146,16 +228,17 @@ class CallService {
       return [];
     }
 
-    // Respect preferred call days — evaluated in the user's timezone
-    if (user.preferredDays) {
-      const preferredDays: string[] = JSON.parse(user.preferredDays);
-      if (preferredDays.length > 0) {
-        const dayName = date.toLocaleDateString('en-US', { weekday: 'long', timeZone: tz }).toLowerCase();
-        if (!preferredDays.includes(dayName)) {
-          return [];
-        }
-      }
-    }
+    // Which days get a VOICE call — evaluated in the user's timezone.
+    //
+    // This used to return [] on a non-preferred day, which skipped the evening
+    // chat check-in too: a member on three days a week simply heard nothing on
+    // the other four. A reduced cadence should move the ritual to a cheaper
+    // channel, not delete it — otherwise Ivy has to ask people to remember
+    // their own unchecked days, and the whole point is that she is the one
+    // keeping count.
+    const dayName = date.toLocaleDateString('en-US', { weekday: 'long', timeZone: tz }).toLowerCase();
+    const callDays = this.voiceCallDays(user);
+    const isVoiceDay = callDays === null || callDays.has(dayName);
 
     const now = new Date();
     const calls = [];
@@ -169,7 +252,7 @@ class CallService {
 
     // Live morning call is OPT-IN only (§1c). Default daily loop = async morning VN (arming.service),
     // so a live MORNING_PLANNING call is scheduled only when the user explicitly opted in.
-    if (user.morningCallTime && user.morningCallOptIn) {
+    if (user.morningCallTime && user.morningCallOptIn && isVoiceDay) {
       const morningUTC = toUTC(user.morningCallTime);
       if (isBefore(now, morningUTC)) {
         const morningCall = await this.scheduleCall(userId, 'MORNING_PLANNING', morningUTC, await this.getUserContext(userId));
@@ -192,10 +275,11 @@ class CallService {
     if (user.eveningCallTime) {
       const eveningUTC = toUTC(user.eveningCallTime);
       if (isBefore(now, eveningUTC)) {
-        if (user.commStyle === 'TEXTS') {
-          // Text-preferred members get the evening ritual as a proactive chat
-          // check-in rather than a call. Same cadence (gated by eveningCallTime,
-          // same dedup guard), same EVENING_REVIEW context — different channel.
+        if (user.commStyle === 'TEXTS' || !isVoiceDay) {
+          // Two routes here, same destination. Text-preferred members always
+          // get the evening ritual as a chat check-in; everyone else gets it on
+          // the days their cadence has no call. Same eveningCallTime gate, same
+          // EVENING_REVIEW context — different channel.
           // Fire-and-forget: a chat hiccup must not abort morning scheduling.
           this.scheduleEveningCheckIn(userId).catch((err) =>
             logger.warn(`Evening chat check-in failed for ${userId}:`, err),
@@ -650,7 +734,12 @@ class CallService {
       calendar_connected: user?.googleCalendarConnected || user?.outlookCalendarConnected || false,
       // Phase 5: missed_call_recovery is available to all paid users (one tier).
       missed_call_recovery: ['PRO', 'ELITE', 'CONCIERGE', 'B2B', 'COACH'].includes(user?.subscriptionTier ?? ''),
-      calls_per_week: user?.callFrequency ?? 2,
+      calls_per_week: user?.callFrequency ?? 3,
+      // The days she actually rings, and what happens on the others. Without
+      // this she closes a Tuesday call with "speak to you tomorrow" on a day
+      // she has no call scheduled — the same class of broken promise as
+      // telling someone their calls follow them and then not moving them.
+      ...this.cadenceContext(user),
 
       // Stats
       current_streak: streak?.currentStreak ?? 0,
