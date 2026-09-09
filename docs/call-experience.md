@@ -68,15 +68,18 @@ set of shapes, chosen per call, with a governor that forbids repetition:
 a row; weight selection by state (a missed day cannot be `settle_fast`); keep a
 rarity budget so the uncommon shapes stay uncommon.
 
-### 2. Duration variance
+### 2. ~~Duration variance~~ — withdrawn
 
-`Target: 30-60 seconds` on every completed day makes every call the same
-appointment. Real contact varies wildly — and **the variance itself is the
-signal**: a call that might be fifteen seconds or might be six minutes is an
-encounter. A call that is always forty seconds is a slot in your calendar.
+Originally listed as the cheapest win. It is not a lever at all.
 
-Cheapest possible change, prompt-only, and probably the highest ratio of effect
-to effort in this document.
+**She cannot measure seconds.** Varying `Target: 30-60 seconds` varies an
+instruction she has no way to perceive, so it changes what she is told and not
+what happens. Duration is an *output* of how much is on the agenda — a shape
+with one beat is short and a shape with four is long — which makes it downstream
+of shape (§1), not a thing of its own.
+
+Kept here rather than deleted because the reasoning is the useful part: an
+instruction the model cannot observe itself following is not a design.
 
 ### 3. Interiority — the honest kind
 
@@ -136,14 +139,18 @@ being talked about.)
 
 ## Sequencing, cheapest first
 
-1. **Duration variance** + permission to skip the open-loop close. Prompt-only.
-2. **Relationship stage** in context (call count, first-call date, a register
-   ladder). One query, prompt-only.
-3. **Call shapes + the governor.** A real build: needs a shape recorded per call
-   so the governor can see what it used last.
-4. **Her own observations** — a theory she forms, states, and returns to. Needs
-   somewhere to keep them; the insight pipeline already produces the raw
-   material (`memorable_moments`, `call_summary`).
+Revised 9 Sep after the founder's read — interiority is the sharpest thing
+here, duration variance is not a thing, and the rest holds.
+
+1. ~~Duration variance~~ — withdrawn, see §2.
+2. **Interiority** — SHIPPED. `IvyTheory` model, extracted on the pass that
+   already reads every transcript (no extra model call), one open theory at a
+   time, and a `held`/`dropped` verdict so she can be wrong on the record.
+   Surfaced with an explicit instruction NOT to raise it every call.
+3. **Relationship stage** — SHIPPED. Days known + completed-call count, mapped
+   to a three-rung register ladder (explain it / name it / leave it unsaid).
+4. **Call shapes + the governor.** Next, and the first real build: needs a shape
+   recorded per call so the governor can see what it used last.
 5. **Rarity budget.** Last, because it is only meaningful once there is a range
    of things for it to make rare.
 

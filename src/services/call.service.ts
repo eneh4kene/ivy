@@ -130,6 +130,65 @@ class CallService {
    * Schedule daily calls for a user (morning and evening)
    */
   /**
+   * The two things that make a call feel like a relationship rather than a form:
+   * something SHE thinks, and how long the two of them have been at this.
+   *
+   * Everything else she is given is a fact about them. A standing theory is the
+   * only thing that is hers — she worked it out, she might be wrong, and she
+   * can come back to it. And relationship age is what lets week 1 and month 6
+   * sound different: streak milestones look like a proxy for that but they
+   * measure PERFORMANCE, not acquaintance. Someone who broke at day 40 and
+   * rebuilt to day 3 has known her six weeks and she should sound like it.
+   */
+  private async interiorityContext(userId: string): Promise<{
+    ivy_theory: string | null;
+    ivy_theory_age_days: number | null;
+    relationship_stage: string | null;
+  }> {
+    const [theory, first, completed] = await Promise.all([
+      prisma.ivyTheory.findFirst({
+        where: { userId, status: 'open' },
+        orderBy: { createdAt: 'desc' },
+        select: { content: true, basis: true, createdAt: true, raisedCount: true },
+      }).catch(() => null),
+      prisma.call.findFirst({
+        where: { userId, status: 'COMPLETED' },
+        orderBy: { scheduledAt: 'asc' },
+        select: { scheduledAt: true },
+      }).catch(() => null),
+      prisma.call.count({ where: { userId, status: 'COMPLETED' } }).catch(() => 0),
+    ]);
+
+    const daysKnown = first
+      ? Math.max(0, Math.floor((Date.now() - first.scheduledAt.getTime()) / 86_400_000))
+      : 0;
+
+    // A ladder, not a number. What changes with age is how much needs saying:
+    // early on the mechanic has to be explained, later it can just be named,
+    // and eventually most of it goes unsaid because they both already know it.
+    const stage = (() => {
+      if (completed <= 1) return null; // the onboarding call has its own register
+      if (completed <= 4 || daysKnown <= 7) {
+        return `You have spoken ${completed} times, over ${daysKnown} day${daysKnown === 1 ? '' : 's'}. Still early: explain a mechanic the first time it comes up, use their name a little more than you will later, and do not assume shared shorthand you have not built yet.`;
+      }
+      if (daysKnown <= 35) {
+        return `You have spoken ${completed} times over ${daysKnown} days. You know each other now: stop explaining the mechanics, name them. Refer back to specific things they have told you rather than asking again. Shorter openings — you do not need to reintroduce yourself to the conversation.`;
+      }
+      return `You have spoken ${completed} times over ${daysKnown} days — months, now. Talk like someone who has been here the whole time: heavy shorthand, inside references to their own past calls, most of the mechanic unsaid because you both know it. Warmth by familiarity rather than by effort. Never perform closeness you have not earned, but do not act like a stranger either.`;
+    })();
+
+    return {
+      ivy_theory: theory
+        ? `${theory.content}${theory.basis ? ` (formed from: ${theory.basis})` : ''}`
+        : null,
+      ivy_theory_age_days: theory
+        ? Math.max(0, Math.floor((Date.now() - theory.createdAt.getTime()) / 86_400_000))
+        : null,
+      relationship_stage: stage,
+    };
+  }
+
+  /**
    * What Ivy needs to say her own cadence out loud without lying about it:
    * which days she calls, and that the other days are a check-in here instead.
    */
@@ -741,6 +800,7 @@ class CallService {
       // Phase 5: missed_call_recovery is available to all paid users (one tier).
       missed_call_recovery: ['PRO', 'ELITE', 'CONCIERGE', 'B2B', 'COACH'].includes(user?.subscriptionTier ?? ''),
       calls_per_week: user?.callFrequency ?? 3,
+      ...(await this.interiorityContext(userId)),
       // The days she actually rings, and what happens on the others. Without
       // this she closes a Tuesday call with "speak to you tomorrow" on a day
       // she has no call scheduled — the same class of broken promise as

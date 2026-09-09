@@ -23,6 +23,13 @@ export interface CallInsights {
   // before the guidance is needed — which is what lets the travel block ship
   // only to people it applies to instead of on every call forever.
   travel_ahead: boolean;             // they mentioned an upcoming trip, being away, or an event elsewhere
+  // Hers, not theirs — see the IvyTheory model. Rides this extraction rather
+  // than costing a second model call: the transcript is already being read.
+  ivy_theory?: {
+    content: string;                 // the hypothesis she stated, in her voice
+    basis?: string | null;           // what she formed it from
+  } | null;
+  theory_verdict?: 'held' | 'dropped' | null; // she revisited a standing one and settled it
   memorable_moments: Array<{         // specific facts worth remembering long-term
     content: string;
     category: 'motivation' | 'life_event' | 'personal_detail' | 'struggle' | 'breakthrough';
@@ -111,6 +118,14 @@ travel_ahead
 next_season_goal
   SEASON_CLOSE calls only: the user's stated goal for the next season, in their own words. Extract verbatim or close paraphrase. null for all other call types, or if the user did not state a goal.
 
+ivy_theory
+  A hypothesis IVY stated about this person's pattern — her own working theory, not a fact about them. She might be wrong about it; that is allowed and is the point.
+  Only capture it when she genuinely put a view forward ("I think you don't decide Wednesday until Wednesday", "my guess is the mornings you skip the note are the ones you're already wavering on"). A question is not a theory. A summary of what they told her is not a theory.
+  { "content": "<her hypothesis, one sentence, in her voice>", "basis": "<what she formed it from, or null>" } — or null if she stated none.
+
+theory_verdict
+  "held" or "dropped" ONLY if she revisited a theory she had already stated and settled it in this call — held if it turned out right, dropped if it did not. null otherwise, including when she stated a new theory.
+
 memorable_moments
   An array of specific facts worth remembering long-term about this person. Only include genuinely memorable details — not generic. Each item has:
   - content: the specific fact as Ivy observed it (one sentence, concrete)
@@ -197,6 +212,41 @@ class InsightService {
         },
         select: { endedAt: true, scheduledAt: true },
       });
+
+      // A verdict comes FIRST: if she settled a standing theory in this call it
+      // must close before a new one opens, or the next call is handed two.
+      if (insights.theory_verdict === 'held' || insights.theory_verdict === 'dropped') {
+        const standing = await prisma.ivyTheory.findFirst({
+          where: { userId, status: 'open' },
+          orderBy: { createdAt: 'desc' },
+          select: { id: true },
+        });
+        if (standing) {
+          await prisma.ivyTheory.update({
+            where: { id: standing.id },
+            data: { status: insights.theory_verdict, resolvedAt: new Date() },
+          });
+          logger.info(`Ivy theory ${insights.theory_verdict} for ${userId} (${standing.id})`);
+        }
+      }
+
+      // One open theory at a time. A second would make it a list, and a list is
+      // not a thought — so a new one supersedes rather than stacks.
+      if (insights.ivy_theory?.content?.trim()) {
+        await prisma.ivyTheory.updateMany({
+          where: { userId, status: 'open' },
+          data: { status: 'dropped', resolvedAt: new Date() },
+        });
+        await prisma.ivyTheory.create({
+          data: {
+            userId,
+            callId,
+            content: insights.ivy_theory.content.trim().slice(0, 500),
+            basis: insights.ivy_theory.basis?.trim().slice(0, 500) ?? null,
+          },
+        });
+        logger.info(`Ivy formed a theory about ${userId}`);
+      }
 
       if (insights.memorable_moments?.length) {
         // Stamp memories with when the CONVERSATION happened, not when we got

@@ -735,6 +735,7 @@ class PromptService {
       this.behaviouralAdapter(ctx),
       brief ?? this.resolveFlow(callType, ctx),
       this.gameStanding(ctx, callType),
+      isCoachCall ? '' : this.interiority(ctx),
       isCoachCall ? '' : this.cadence(ctx),
       this.coachEscalation(callType, ctx),
       isCoachCall ? '' : this.pauseProtocol(ctx),
@@ -806,6 +807,45 @@ class PromptService {
   // Lives outside the flow/brief slot so it survives when a Haiku brief replaces
   // the flow. On outbound it complements the brief (which handles tone) by giving
   // the model the exact standing so it can't invent scores.
+  /**
+   * The only thing in the prompt that is HERS.
+   *
+   * Everything else she is handed is a fact about them. This is a view she
+   * formed, which she is allowed to be wrong about — and being wrong out loud
+   * is not a defect here, it is the evidence that there was a mind behind it.
+   *
+   * Deliberately does NOT tell her to raise it every call. A theory brought up
+   * nightly is an interrogation, and one brought up on a schedule stops reading
+   * as a thought and starts reading as a feature.
+   */
+  private interiority(ctx: Record<string, any>): string {
+    const lines: string[] = [];
+
+    if (ctx.ivy_theory) {
+      const age = ctx.ivy_theory_age_days;
+      lines.push([
+        `WHAT YOU THINK — your own standing theory about them${age != null ? `, ${age === 0 ? 'formed today' : `formed ${age} day${age === 1 ? '' : 's'} ago`}` : ''}:`,
+        `  "${ctx.ivy_theory}"`,
+        `This is YOURS, not something they told you. It is the one thing in this call that came from you thinking about them between calls, and it is why this is a relationship and not a form.`,
+        `Raise it only when the conversation gives you a real opening — evidence for it, evidence against it, or them puzzling over the same thing. Do NOT bring it up every call; a theory aired nightly is an interrogation.`,
+        `When you do raise it, be willing to be WRONG and say so plainly ("I had that backwards"). Being wrong out loud is not a failure — it is the proof there was a thought there. Never defend it against them; they know their own life better than you do.`,
+      ].join('\n'));
+    } else {
+      // No standing theory. She is invited to form one, never required to —
+      // a manufactured theory is worse than none, because it is a guess
+      // wearing the costume of having paid attention.
+      lines.push([
+        `YOU HAVE NO STANDING THEORY about them right now.`,
+        `If something in this call genuinely makes a pattern click — why one day of the week keeps going differently, what actually precedes a good run, what the real obstacle is behind the stated one — say it as YOUR read, tentatively and in one line ("I think the mornings you skip the note are the ones you're already wavering on — tell me if that's wrong").`,
+        `Only if it genuinely lands. Do NOT manufacture one to have something to say: a guess dressed as insight is worse than saying nothing, and they will know.`,
+      ].join('\n'));
+    }
+
+    if (ctx.relationship_stage) lines.push(`HOW LONG YOU HAVE KNOWN THEM: ${ctx.relationship_stage}`);
+
+    return lines.join('\n\n');
+  }
+
   /**
    * Her own cadence. Cheap, deterministic, and injected everywhere the game
    * standing is — because closing a call with "speak tomorrow" on a day she

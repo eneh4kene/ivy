@@ -145,6 +145,7 @@ model User {
   charities            UserCharity[]
   callMemories         CallMemory[]
   circleGameEvents     CircleGameEvent[]
+  ivyTheories          IvyTheory[]
   peerMessagesSent     PeerMessage[]         @relation("PeerMessageFrom")
   peerMessagesReceived PeerMessage[]         @relation("PeerMessageTo")
   blocksMade           MemberBlock[]         @relation("BlockBy")
@@ -1269,6 +1270,50 @@ model CallMemory {
 
   @@index([userId, createdAt])
   @@map("call_memories")
+}
+
+/// A hypothesis Ivy holds about someone, in her own voice.
+///
+/// Everything else she remembers is a fact about THEM — CallMemory is
+/// "training around a knee issue", "mother's anniversary in March". This is the
+/// only thing in the system that is hers: something she worked out, might be
+/// wrong about, and comes back to.
+///
+/// That distinction is the whole point. A relationship where one side has no
+/// inner life flattens however good their recall is, which is why a
+/// well-informed call can still feel like a form. She cannot have a fake
+/// personal history — the product is honest that she is AI, and inventing a
+/// weekend would break the thing everything else rests on. But she is fully
+/// entitled to have noticed something, formed a view, and changed her mind.
+///
+/// One open theory at a time by convention (queried, not constrained): two is a
+/// dashboard, and a dashboard is not a thought.
+model IvyTheory {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  /// The call where she said it out loud. Null if she formed it off-call.
+  callId String?
+
+  /// Her hypothesis, as she would say it. One sentence.
+  content String @db.Text
+  /// What she formed it from — so a revisit can reference the evidence, not just the claim.
+  basis   String? @db.Text
+
+  /// open — stated, unresolved, hers to raise again
+  /// held — she checked and it turned out to be right
+  /// dropped — she checked and it did not hold; being wrong out loud is the point
+  status     String    @default("open")
+  raisedCount Int      @default(0)
+  lastRaisedAt DateTime?
+  resolvedAt DateTime?
+
+  @@index([userId, status, createdAt])
+  @@map("ivy_theories")
 }
 
 // ============================================
