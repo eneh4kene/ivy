@@ -84,8 +84,9 @@ describe('callFrequency is finally honoured', () => {
   })
 
   it('always calls on Sunday, whatever the frequency', async () => {
-    // Sunday is where the stake settles. A cadence that skipped it would
-    // settle someone's week in silence.
+    // Sunday is the last day of the week — the cycle opens Monday — so it is
+    // where a week gets closed out. True with or without a stake; stakes are
+    // optional, so settlement is the extra reason, never the reason.
     for (const freq of [1, 2, 3, 4, 5, 6]) {
       jest.clearAllMocks()
       mockPrisma.call.count.mockResolvedValue(0)

@@ -15,9 +15,15 @@ import { STAKE_CONFIG, type Currency } from '../config/pricing';
 /**
  * Which local weekdays a reduced cadence puts the VOICE call on.
  *
- * Sunday appears in every row and is not negotiable: the stake cycle is 7 days
- * from Monday, so Sunday is the call where money actually moves. A cadence that
- * skipped it would settle someone's week in silence.
+ * Sunday appears in every row and is not negotiable, because it is the last day
+ * of the week: the weekly cycle opens Monday 00:05 UTC, so Sunday is where a
+ * week gets closed out and the next one gets named. That holds whether or not
+ * there is money involved.
+ *
+ * When a member DOES have a stake, Sunday is additionally the night their
+ * weekly cycle settles — but stakes are optional (the teeth ladder), so that is
+ * the extra reason, never the reason. A stake-less member still needs the week
+ * closed; they just do not have a slice riding on it.
  *
  * The rest spread across the days follow-through actually fails on rather than
  * bunching at the start of the week — Monday motivation is free, and it is
