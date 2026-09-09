@@ -1451,6 +1451,59 @@ class CircleGameService {
   }
 
   /**
+   * A live obligation the member is under RIGHT NOW — not a standing, an
+   * obligation: something with a clock on it, or another person waiting.
+   *
+   * This is the difference between "the room is at 41 of 56" and "the baton is
+   * in your hands and the window shuts at midnight". The first is weather. The
+   * second is the reason to have a conversation, and squeezing it into "one
+   * aside, not a lecture" was miscalibrated — that cap is right for a progress
+   * bar and wrong for a deadline.
+   *
+   * Returns null unless something is genuinely live. Nothing here is urgent by
+   * default; if it were, urgency would stop meaning anything.
+   */
+  private liveObligation(game: any, userId: string): string | null {
+    if (!game) return null;
+    const state = (game.state ?? {}) as Record<string, any>;
+    const rules = (game.rules ?? {}) as Record<string, any>;
+
+    if (game.templateType === 'relay') {
+      if (state.current_holder_id !== userId) return null;
+      const heldMs = state.baton_held_since ? Date.parse(state.baton_held_since) : NaN;
+      const windowH = Number(rules.window_hours ?? 24);
+      const lives = Number(state.lives_remaining ?? 0);
+      const hoursLeft = Number.isFinite(heldMs)
+        ? Math.max(0, Math.round((heldMs + windowH * 3_600_000 - Date.now()) / 3_600_000))
+        : null;
+
+      const clock = hoursLeft == null
+        ? 'their window is open'
+        : hoursLeft <= 0
+          ? 'their window has effectively run out'
+          : `about ${hoursLeft} hour${hoursLeft === 1 ? '' : 's'} left in their window`;
+      const stakes = lives <= 1
+        ? ` The room is on its LAST life — a drop ends the run.`
+        : ` A drop costs the room one of its ${lives} lives.`;
+      return `They are holding the baton — ${clock}.${stakes}`;
+    }
+
+    if (game.templateType === 'pairs') {
+      const pair = this.pairOf(rules, userId);
+      if (!pair?.partnerId) return null;
+      const day = state.day_kept ?? {};
+      // Their partner has kept a day this member has not yet matched.
+      const waiting = Object.values(day as Record<string, string[]>).some(
+        (ids) => Array.isArray(ids) && ids.includes(pair.partnerId!) && !ids.includes(userId),
+      );
+      if (!waiting) return null;
+      return `Their pair partner has kept a day they have not matched yet — theirs is the one that banks it for the room.`;
+    }
+
+    return null;
+  }
+
+  /**
    * What the game DID since Ivy last spoke to this person — not where it stands.
    *
    * A standing ("41 of 56") is weather: it can be mentioned but not discussed.
@@ -1803,6 +1856,7 @@ class CircleGameService {
     circle_game_state_summary: string | null;
     circle_game_ivy_instruction: string | null;
     circle_game_recent_beats: string | null;
+    circle_game_live_obligation: string | null;
     circle_crown_run: string | null;
     circle_room_record: string | null;
     circle_crown_game?: string;
@@ -1838,6 +1892,7 @@ class CircleGameService {
       circle_game_state_summary: result?.stateSummary ?? null,
       circle_game_ivy_instruction: result?.game.ivyInstruction ?? null,
       circle_game_recent_beats: beats,
+      circle_game_live_obligation: result ? this.liveObligation(result.game, userId) : null,
       // The only cross-sprint memory in the system, and it is a story about one
       // person that anyone can end — never a table anyone is ranked in.
       circle_crown_run: champName && lineage && lineage.defences > 1

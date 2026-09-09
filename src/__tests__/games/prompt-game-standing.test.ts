@@ -68,6 +68,61 @@ describe('buildSystemPrompt — circle game standing on the no-brief path', () =
     expect(prompt).not.toContain('ROOM RECORD')
   })
 
+  // A live obligation earns room in the call. It must NEVER earn the opening —
+  // being met with "the baton's with you, three hours left" the second you pick
+  // up is a system notification wearing a voice.
+  it('gives a live obligation real room but never the opening', () => {
+    const prompt = promptService.buildSystemPrompt('EVENING_REVIEW', {
+      ...gameCtx,
+      circle_game_live_obligation: 'They are holding the baton — about 3 hours left in their window. The room is on its LAST life — a drop ends the run.',
+    }, false)
+    expect(prompt).toContain('LIVE RIGHT NOW')
+    expect(prompt).toContain('LAST life')
+    expect(prompt).toContain('not an aside')
+    expect(prompt).toContain('do NOT open with it')
+    expect(prompt).toContain('Open the way you always open')
+  })
+
+  it('keeps the rest of the game an aside even when something is live', () => {
+    const prompt = promptService.buildSystemPrompt('EVENING_REVIEW', {
+      ...gameCtx,
+      circle_game_live_obligation: 'They are holding the baton.',
+    }, false)
+    expect(prompt).toContain('Everything else about the game stays an aside')
+  })
+
+  it('holds the one-aside cap when nothing is live', () => {
+    const prompt = promptService.buildSystemPrompt('EVENING_REVIEW', gameCtx, false)
+    expect(prompt).toContain('one aside, not a lecture')
+    expect(prompt).not.toContain('LIVE RIGHT NOW')
+  })
+
+  // The crown tail was written for chat ("your reply", "this one message") and
+  // applied to voice with no callType check, at a priority that OUTRANKED the
+  // rule telling her to say hello and ask one thing.
+  it('never lets the crown hijack the opening of a CALL', () => {
+    const prompt = promptService.buildSystemPrompt('EVENING_REVIEW', {
+      ...gameCtx,
+      circle_crown_game: 'The Baton',
+      circle_crown_days_left: 6,
+      circle_crown_can_claim_pledge: true,
+    }, false)
+    expect(prompt).not.toContain('BEFORE ANYTHING ELSE')
+    expect(prompt).toContain('do NOT open with it')
+    // The opening rule must still be the thing that wins.
+    expect(prompt).toContain('Say hello and ask ONE thing')
+  })
+
+  it('still leads with the crown in CHAT, where leading is fine', () => {
+    const prompt = promptService.buildSystemPrompt('CHAT', {
+      ...gameCtx,
+      circle_crown_game: 'The Baton',
+      circle_crown_days_left: 6,
+      circle_crown_can_claim_pledge: true,
+    }, false)
+    expect(prompt).toContain('BEFORE ANYTHING ELSE')
+  })
+
   it('omits the section entirely when there is no active game', () => {
     const prompt = promptService.buildSystemPrompt('CHAT', baseCtx, false);
     expect(prompt).not.toContain('CIRCLE GAME');

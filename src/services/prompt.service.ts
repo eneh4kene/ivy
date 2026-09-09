@@ -790,7 +790,16 @@ class PromptService {
       });
     }
 
-    if (ctx.circle_crown_game && !isCoachCall) {
+    // CHAT ONLY — and the phrasing gives away why. "Your reply", "this one
+    // message": written for a thread, then applied to voice with no callType
+    // check, at a priority that OUTRANKS the opening rule above. On a call that
+    // meant picking up the phone and being met with an administrative prompt
+    // about naming a pledge, before hello.
+    //
+    // Nothing should outrank the opening on a call. A crown is a fortnightly
+    // right with a 14-day window; it does not need to beat someone's greeting.
+    // On calls it stays in the body via gameStanding, where it belongs.
+    if (ctx.circle_crown_game && !isCoachCall && callType === 'CHAT') {
       tails.push({
         priority: 100,
         text: `BEFORE ANYTHING ELSE: they hold the unclaimed "${ctx.circle_crown_game}" crown and its spoils (see UNCLAIMED CROWN above for exactly which are still theirs to spend). Unless the visible conversation shows you already raised it, raise it first thing in your reply. For this one message, this outranks every brevity and topic rule.`,
@@ -871,6 +880,16 @@ class PromptService {
         ctx.circle_game_recent_beats
           ? `SINCE YOU LAST SPOKE: ${ctx.circle_game_recent_beats}\nThis is the interesting half. If you spend one aside on the game, spend it here — on what MOVED — and let the standing be the backdrop rather than the point. They have already read these in their thread, so react to it as shared news, never announce it as if it were new. If none of it is theirs, a passing nod to the room is plenty.`
           : '',
+        // A live obligation is the substance of the call, not garnish on it —
+        // and the distinction that matters is SUBSTANCE vs POSITION. Escalating
+        // it does NOT mean leading with it: being met with "Amara dropped the
+        // baton, three hours left" the second you pick up is a system
+        // notification wearing a voice. She opens like a person, hears how the
+        // day went, and then this is what the middle of the call is actually
+        // about.
+        ctx.circle_game_live_obligation
+          ? `LIVE RIGHT NOW: ${ctx.circle_game_live_obligation}\nThis one is not an aside — it has a clock on it, or someone waiting on them, so it earns real room in this call. Cover it properly and make sure it lands before you hang up.\nBut do NOT open with it, and do not let it be the first thing they hear. Open the way you always open, ask how the day went, listen. Bring it in once they have actually spoken — and bring it in as something between the two of you, not as a status report read off a screen.\nIf they raise it themselves, follow them into it.`
+          : '',
         ctx.circle_game_ivy_instruction ? `How to weave it in: ${ctx.circle_game_ivy_instruction}` : '',
         // The two cross-sprint facts. Both are deliberately about the ROOM or
         // about one person's run — never a ranking, because a ranking would
@@ -878,7 +897,9 @@ class PromptService {
         // are the reason the circle exists.
         ctx.circle_crown_run ? `CROWN RUN: ${ctx.circle_crown_run}` : '',
         ctx.circle_room_record ? `ROOM RECORD: ${ctx.circle_room_record}` : '',
-        `Reference it naturally only if it fits — one aside, not a lecture. The game is never the reason for the call. Never rank members against each other or read anyone a standing; the room's own past is the only thing worth measuring against. Never invent scores, standings or events; use only what is above.`,
+        ctx.circle_game_live_obligation
+          ? `Everything else about the game stays an aside — the standing, the room's total, other people's days. Only the live obligation above gets room. Never rank members against each other or read anyone a standing; the room's own past is the only thing worth measuring against. Never invent scores, standings or events; use only what is above.`
+          : `Reference it naturally only if it fits — one aside, not a lecture. The game is never the reason for the call. Never rank members against each other or read anyone a standing; the room's own past is the only thing worth measuring against. Never invent scores, standings or events; use only what is above.`,
       ].filter(Boolean).join('\n'));
     }
     // The winner's unclaimed pledge right. They likely saw one push and forgot;
@@ -895,7 +916,9 @@ class PromptService {
         // still standing — pushing a pledge they already named reads as Ivy
         // not having listened.
         `UNCLAIMED CROWN — they won "${ctx.circle_crown_game}" and still hold the winner's ${pledgeOpen && gameOpen ? 'rights' : 'right'}:${pledgeOpen ? ' naming the room\'s pledge for the next sprint.' : ''}${gameOpen ? ` writing the room's NEXT GAME — any rules they like, in their own words, and I run it.` : ''}${days ? ` ${days} day${days === 1 ? '' : 's'} left before it lapses.` : ''} They may have forgotten.`,
-        `PRIORITY: if the visible conversation doesn't show you already raising the crown, your next reply MUST lead with it — even if they just said hi. This one message outranks small talk and any keep-it-short rule; a few short lines are fine.`,
+        callType === 'CHAT'
+          ? `PRIORITY: if the visible conversation doesn't show you already raising the crown, your next reply MUST lead with it — even if they just said hi. This one message outranks small talk and any keep-it-short rule; a few short lines are fine.`
+          : `PRIORITY on this call: raise it before the call ends — it lapses, and a prize lost to a missed push notification is a bad way to lose one. But do NOT open with it: open the way you always open, hear how their day went, and bring it in once they have spoken. It is the thing you make sure to cover, not the thing you greet them with.`,
         pledgeOpen
           ? `Invite them to name the pledge, and offer 2–3 candidate pledges (one imperative line each) drawn ONLY from the room facts below. Candidates are sparks; the final wording is theirs.`
           : '',
