@@ -96,6 +96,74 @@ const lex = (ctx: Record<string, any>): TrackLexicon =>
 // ctx.currency the checkout and stake engines use.
 const curSym = (ctx: Record<string, any>): string => (ctx.currency === 'USD' ? '$' : '£');
 
+/**
+ * CALL SHAPES — how the encounter goes, as distinct from what it is about.
+ *
+ * The flows vary CONTENT richly (streak ladder, stake framing, unarmed
+ * escalation) and structure not at all: evening_completed is always confirm →
+ * detail → tomorrow, night 4 and night 400 alike. That fixed skeleton is where
+ * numbness comes from — you can feel a script even when the wording differs,
+ * and especially then, because the scaffolding becomes the only constant.
+ *
+ * A shape is layered ON the flow, not instead of it. The flow still supplies
+ * what must be covered; the shape decides what kind of conversation covers it.
+ *
+ * Rendered as a TAIL, deliberately below the opening rule: nothing outranks
+ * "say hello and ask one thing", including this.
+ *
+ * GAME STATE IS NOT A SHAPE. It is material available to every shape — and the
+ * only material she has that is NOT a mirror of the person's own behaviour,
+ * which is exactly why it is what makes `she_leads` possible at all. Leading
+ * with nothing external to lead WITH becomes "let me tell you about yourself",
+ * which is worse than just asking. A live obligation therefore constrains which
+ * shapes are ELIGIBLE (see pickCallShape) rather than being one of them.
+ */
+export const SHAPES: Record<string, string> = {
+  settle_fast: [
+    `SHAPE — SHORT. Tonight does not need a conversation.`,
+    `They did what they said. Confirm it, one line, and let them go. You may ask ONE light thing if it arrives naturally, but you are not fishing for detail and you are not planning tomorrow in any depth.`,
+    `Ending early when there is nothing to say is not a failure — it is what makes the longer calls mean something. Most nights should not be this shape. Tonight is.`,
+  ].join('\n'),
+
+  settle_standard: [
+    `SHAPE — STANDARD. Work the flow as written: confirm, get the lived detail, seed tomorrow lightly.`,
+    `This is the workhorse and most calls are this. Just do it well.`,
+  ].join('\n'),
+
+  dig: [
+    `SHAPE — DIG. One thing, properly, instead of the whole checklist.`,
+    `Pick the single most interesting thing in front of you — the recurring blocker, something they said last time, a pattern that does not add up — and go into it. Three or four turns on that one thing.`,
+    `You may SKIP the rest of the flow entirely. Do not try to cover the day AND dig. Depth is the point and coverage is what you are trading for it.`,
+  ].join('\n'),
+
+  she_leads: [
+    `SHAPE — YOU LEAD. Open with something YOU bring, not a question about their day.`,
+    `Still say hello and still keep the first turn short — but make it an observation rather than an enquiry: something the room did, your standing theory about them, or a pattern across their last few days.`,
+    `Then hand it straight to them. The point is that this call started with something you had been thinking about, not a form to fill in.`,
+    `You must have something REAL to lead with. If you do not, do not manufacture one — fall back to asking about their day like normal.`,
+  ].join('\n'),
+
+  open_floor: [
+    `SHAPE — OPEN FLOOR. No agenda.`,
+    `Ask how they actually are — the person, not the streak — then follow them wherever they go. Do not steer back to the session, the stake or the plan unless they take it there.`,
+    `If the day comes up naturally, handle it in a line. If it does not, that is fine: a call that was just two people talking is not wasted, and it is the one they will remember.`,
+    `This is rare. Never two nights running.`,
+  ].join('\n'),
+
+  push: [
+    `SHAPE — PUSH. Say the harder thing, once.`,
+    `There is a pattern here you have been polite about. Name it plainly, without cushioning it into meaninglessness — then STOP, and let them answer. Their answer matters more than your point.`,
+    `Warm, not cold. You are on their side and it should be audible. But do not retreat the second it lands awkwardly: retreating is what makes people stop believing you.`,
+    `ONE push, then back to normal for the rest of the call whatever they say. Never twice in a call, never two nights in a row.`,
+  ].join('\n'),
+
+  mark: [
+    `SHAPE — MARK IT. Acknowledgement, and nothing else.`,
+    `Something here deserves saying out loud and then leaving alone. Say it properly — specific, earned, in your own words — and do NOT follow it with a question, a plan, or a next step.`,
+    `Resist closing the loop tonight. Let the last thing they hear be the thing they did, not what you want from them tomorrow.`,
+  ].join('\n'),
+};
+
 const FLOWS: Record<string, FlowFn> = {
 
   morning_planning: (ctx) => {
@@ -788,6 +856,14 @@ class PromptService {
           `The FLOW is the shape of the WHOLE call, not a script for the opening. Getting through it in two turns is a failed call even if every word was right.`,
         ].join('\n'),
       });
+    }
+
+    // The shape goes in a tail for the same reason the opening rule does: the
+    // FLOW reads as a numbered script and sits thousands of characters above,
+    // so a rule that must beat it has to be late. At 85 it beats the flow and
+    // loses to the opening — nothing outranks hello.
+    if (ctx.call_shape && SHAPES[ctx.call_shape] && !isCoachCall && callType !== 'CHAT') {
+      tails.push({ priority: 85, text: SHAPES[ctx.call_shape] });
     }
 
     // CHAT ONLY — and the phrasing gives away why. "Your reply", "this one

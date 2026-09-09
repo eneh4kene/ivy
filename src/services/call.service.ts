@@ -97,6 +97,10 @@ class CallService {
         callType,
         scheduledAt,
         status: 'SCHEDULED',
+        // Recorded so the variety governor has a memory. Variety only exists
+        // relative to history: without this the picker would repeat itself by
+        // chance and nobody could tell why.
+        shape: typeof contextData?.call_shape === 'string' ? contextData.call_shape : undefined,
         contextSnapshot: contextData ? JSON.stringify(contextData) : undefined,
       },
     });
@@ -129,6 +133,87 @@ class CallService {
   /**
    * Schedule daily calls for a user (morning and evening)
    */
+  /**
+   * Pick the SHAPE of this call.
+   *
+   * Two stages, and the order matters: ELIGIBILITY first, variety second.
+   * Randomising freely would read as inconsistency rather than personality —
+   * worse than sameness, because sameness at least reads as reliable. So state
+   * decides what is allowed, and only then does history break the tie.
+   *
+   * On game state, which is the subtle part: it is NOT a shape. It is material
+   * every shape can draw on, and the only material she has that is not a mirror
+   * of this person's own behaviour. That is precisely why it gates `she_leads`
+   * — leading with nothing external to lead WITH collapses into "let me tell
+   * you about yourself", which is worse than asking. And a LIVE obligation
+   * (baton in their hands, partner waiting) rules out the shapes that assume
+   * there is nothing to get to.
+   */
+  private async pickCallShape(userId: string, callType: string, ctx: Record<string, any>): Promise<string | null> {
+    // Calls with their own strong structure are left alone. Onboarding, season
+    // close and coach calls are set pieces; shaping them would fight a script
+    // that is deliberate.
+    if (!['EVENING_REVIEW', 'MORNING_PLANNING'].includes(callType)) return null;
+
+    const live = !!ctx.circle_game_live_obligation;
+    const kept = ctx.workout_status === 'COMPLETED' || ctx.workout_status === 'PARTIAL';
+    const missed = ctx.workout_status === 'MISSED' || ctx.workout_status === 'SKIPPED' || ctx.armed_today === false;
+    const fragile = !!ctx.high_risk_signals || ctx.season_type === 'memorial' || !!ctx.struggle_signal;
+    const hasExternal = !!ctx.circle_game_recent_beats || !!ctx.ivy_theory;
+    const streak = Number(ctx.current_streak ?? 0);
+
+    const eligible: string[] = ['settle_standard']; // always available; the floor
+
+    // Nothing needing saying is a precondition, not a preference.
+    if (kept && !live && !missed && streak >= 2) eligible.push('settle_fast');
+    // Something to dig INTO — a blocker, a theory, or a day that went wrong.
+    if (ctx.recurring_blocker || ctx.ivy_theory || missed) eligible.push('dig');
+    // She can only lead if she has something of her own to lead with.
+    if (hasExternal) eligible.push('she_leads');
+    // An agenda and "no agenda" cannot both be true.
+    if (!live && !missed) eligible.push('open_floor');
+    // Never at someone who is already struggling — the pause protocol and the
+    // risk signals exist precisely to stop this.
+    if (!fragile && (ctx.recurring_blocker || missed) && streak >= 0) eligible.push('push');
+    // Only when there is genuinely something worth marking.
+    if (kept && (streak === 7 || streak === 14 || streak === 21 || streak === 30 || streak >= 90 || ctx.circle_crown_run)) {
+      eligible.push('mark');
+    }
+
+    // History: what did the last few calls look like?
+    const recent = await prisma.call.findMany({
+      where: { userId, status: 'COMPLETED', shape: { not: null } },
+      orderBy: { scheduledAt: 'desc' },
+      take: 4,
+      select: { shape: true },
+    }).catch(() => [] as { shape: string | null }[]);
+    const history = recent.map((r) => r.shape).filter((v): v is string => !!v);
+
+    // Never the same shape twice running — the single rule doing most of the work.
+    let pool = eligible.filter((sh) => sh !== history[0]);
+
+    // Rarity: the uncommon shapes stay uncommon. A rare thing that fires on
+    // schedule is just a feature with a long interval, so these are held back
+    // for a few calls rather than merely weighted down.
+    const RARE = ['open_floor', 'push', 'mark'];
+    const rareRecently = history.slice(0, 3).some((sh) => RARE.includes(sh));
+    if (rareRecently) pool = pool.filter((sh) => !RARE.includes(sh));
+
+    if (pool.length === 0) pool = ['settle_standard'];
+
+    // Weighted so the workhorse stays the workhorse. Variety is the seasoning,
+    // not the meal — a call that is never ordinary has no ordinary to vary from.
+    const weight = (sh: string) =>
+      sh === 'settle_standard' ? 5 : sh === 'settle_fast' || sh === 'dig' || sh === 'she_leads' ? 3 : 1;
+    const total = pool.reduce((n, sh) => n + weight(sh), 0);
+    let roll = Math.random() * total;
+    for (const sh of pool) {
+      roll -= weight(sh);
+      if (roll <= 0) return sh;
+    }
+    return pool[pool.length - 1];
+  }
+
   /**
    * The two things that make a call feel like a relationship rather than a form:
    * something SHE thinks, and how long the two of them have been at this.
@@ -761,7 +846,7 @@ class CallService {
 
     const recent_life_markers = recentLifeMarkers.map((m) => m.marker).join(' | ') || null;
 
-    return {
+    const ctx: Record<string, any> = {
       // Identity
       user_name: user?.firstName,
       subscription_tier: user?.subscriptionTier,
@@ -939,6 +1024,14 @@ class CallService {
       contact_preference: (user?.inferredProfile as any)?.contact_preference ?? null,
       contact_pattern_note: (user?.inferredProfile as any)?.contact_pattern_note ?? null,
     };
+
+    // The shape is chosen LAST, because it is chosen from the context: what is
+    // eligible depends on whether the day was kept, whether something in the
+    // room is live, whether she has a theory to lead with, and whether this
+    // person is having a bad enough week that pushing would be cruel.
+    ctx.call_shape = await this.pickCallShape(userId, callType ?? '', ctx).catch(() => null);
+
+    return ctx;
   }
 
   /**

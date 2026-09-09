@@ -413,6 +413,11 @@ model Call {
   contextSnapshot Json? // JSON of user stats, streak, etc.
 
   // Behavioural intelligence
+  /// Which SHAPE this call was given (see prompt.service SHAPES). Recorded so
+  /// the governor can see what it used last — variety is only variety relative
+  /// to history, so without this the picker would have no memory and would
+  /// repeat itself by chance.
+  shape        String?
   callInsights Json? // Structured insights extracted from transcript — see insight.service.ts
   callSummary  String? @db.Text // Ivy's 2-3 sentence narrative summary — surfaced in next call's prompt
 

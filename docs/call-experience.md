@@ -149,10 +149,30 @@ here, duration variance is not a thing, and the rest holds.
    Surfaced with an explicit instruction NOT to raise it every call.
 3. **Relationship stage** — SHIPPED. Days known + completed-call count, mapped
    to a three-rung register ladder (explain it / name it / leave it unsaid).
-4. **Call shapes + the governor.** Next, and the first real build: needs a shape
-   recorded per call so the governor can see what it used last.
-5. **Rarity budget.** Last, because it is only meaningful once there is a range
-   of things for it to make rare.
+4. **Call shapes + the governor** — SHIPPED. Seven shapes as a priority-85
+   tail (beats the flow, loses to the opening — nothing outranks hello),
+   `Call.shape` recorded so the governor has a memory, eligibility computed
+   from state BEFORE variety breaks the tie.
+5. **Rarity budget** — SHIPPED with the governor: `open_floor`, `push` and
+   `mark` are held back entirely for a few calls after any rare shape fires,
+   rather than merely weighted down. A rare thing on a schedule is just a
+   feature with a long interval.
+
+### On game state and shapes
+
+Game state is **not** a shape. It is material every shape can draw on — and the
+only material she has that is not a mirror of the person's own behaviour, which
+is why it does two specific jobs in the governor:
+
+- It **gates `she_leads`**. Leading with nothing external to lead *with*
+  collapses into "let me tell you about yourself", which is worse than asking.
+  A game beat or a standing theory is what makes leading possible.
+- A **live obligation constrains eligibility**. `settle_fast` is a lie when the
+  baton is in their hands, and `open_floor` cannot be true when there is an
+  agenda.
+
+So shapes are per-person and game state is circle-wide, and they meet in
+eligibility rather than being two competing tracks.
 
 ## The test
 
