@@ -49,6 +49,11 @@ export interface User {
   ivyCallNumber?: string | null
   // Coach-set programme areas (Plan tab). updatedBy: 'coach' | 'ivy'.
   programmeAreas?: Array<{ id: string; area: string; instruction: string; updatedAt?: string; updatedBy?: string }> | null
+  /** The floor the COACH set — what still counts on a day the plan is not happening. */
+  coachMinimum?: string | null
+  coachMinimumSetAt?: string | null
+  /** JSON array of lowercase day names the coach sees this client. */
+  coachSessionDays?: string | null
   createdAt: string
   updatedAt: string
   preferredCharity?: Charity

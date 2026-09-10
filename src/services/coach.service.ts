@@ -200,6 +200,49 @@ class CoachService {
     return prisma.user.update({ where: { id: clientId }, data: { coachNotes } });
   }
 
+  /** After this long without confirmation, a floor is worth asking about again. */
+  static readonly FLOOR_STALE_DAYS = 75;
+
+  /**
+   * Clients whose floor Ivy should raise on the next ponder call — the ones
+   * missing one, and the ones whose floor has stood unconfirmed long enough to
+   * have quietly stopped describing the person.
+   *
+   * Never expires anything. A floor that vanished on a timer would be worse
+   * than a stale one: the client would lose their bad-day ladder without anyone
+   * deciding to take it away. This only ever produces a question.
+   */
+  async floorsWorthRaising(coachId: string): Promise<{ missing: string[]; stale: Array<{ name: string; floor: string; months: number }> }> {
+    const clients = await prisma.user.findMany({
+      where: { coachId, isOnboarded: true, isActive: true },
+      select: { firstName: true, lastName: true, coachMinimum: true, coachMinimumSetAt: true },
+    });
+
+    const missing: string[] = [];
+    const stale: Array<{ name: string; floor: string; months: number }> = [];
+    const cutoff = Date.now() - CoachService.FLOOR_STALE_DAYS * 86_400_000;
+
+    for (const c of clients) {
+      const name = `${c.firstName ?? ''} ${c.lastName ?? ''}`.trim() || 'A client';
+      if (!c.coachMinimum) {
+        missing.push(name);
+        continue;
+      }
+      // No timestamp means it predates the stamping — treat as worth confirming
+      // once rather than assuming it is current.
+      const setAt = c.coachMinimumSetAt?.getTime() ?? 0;
+      if (setAt < cutoff) {
+        stale.push({
+          name,
+          floor: c.coachMinimum,
+          months: Math.max(1, Math.round((Date.now() - setAt) / (30 * 86_400_000))),
+        });
+      }
+    }
+
+    return { missing, stale };
+  }
+
   /**
    * The two things only a coach can properly answer about a client: the floor
    * on a bad day, and when they actually see each other.
@@ -227,6 +270,10 @@ class CoachService {
     if (plan.coachMinimum !== undefined) {
       const min = plan.coachMinimum?.trim();
       data.coachMinimum = min ? min.slice(0, 200) : null;
+      // Stamped on every write, including a re-save of the same words: saving
+      // it again IS the coach confirming it still holds, which is the whole
+      // point of asking.
+      data.coachMinimumSetAt = min ? new Date() : null;
     }
 
     if (plan.coachSessionDays !== undefined) {
@@ -1124,7 +1171,10 @@ class CoachService {
         const clear = update.instruction === 'REMOVE';
         await prisma.user.update({
           where: { id: client.id },
-          data: { coachMinimum: clear ? null : update.instruction.trim().slice(0, 200) },
+          data: {
+            coachMinimum: clear ? null : update.instruction.trim().slice(0, 200),
+            coachMinimumSetAt: clear ? null : new Date(),
+          },
         });
         applied.push({ clientId: client.id, clientName, kind: 'floor', area: 'floor', instruction: update.instruction });
         touchedClients.add(client.id);

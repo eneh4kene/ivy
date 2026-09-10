@@ -102,6 +102,10 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
   const [tab, setTab] = useState<TabId>('calls')
   const [notes, setNotes] = useState('')
   const [areas, setAreas] = useState<{ id: string; area: string; instruction: string }[]>([])
+  // The floor on a bad day, and the days the coach actually sees them. Both were
+  // reachable only from a ponder call until now.
+  const [floor, setFloor] = useState('')
+  const [sessionDays, setSessionDays] = useState<string[]>([])
   const [saved, setSaved] = useState(false)
   const [saving, setSaving] = useState(false)
   const [confirmRemove, setConfirmRemove] = useState(false)
@@ -117,6 +121,11 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
       setClient(c)
       setNotes(c?.coachNotes ?? '')
       setAreas(c?.programmeAreas ?? [])
+      setFloor(c?.coachMinimum ?? '')
+      try {
+        const parsed = c?.coachSessionDays ? JSON.parse(c.coachSessionDays) : []
+        setSessionDays(Array.isArray(parsed) ? parsed : [])
+      } catch { setSessionDays([]) }
     }).catch((err) => {
       setLoadError(err.message ?? 'Failed to load client')
     })
@@ -129,6 +138,12 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
       await Promise.all([
         coachApi.updateClientNotes(id, notes),
         coachApi.updateProgrammeAreas(id, areas),
+        // Saving an unchanged floor is not a no-op — it re-stamps it, which is
+        // how a coach confirms it still holds when Ivy asks on a ponder call.
+        coachApi.updateClientPlan(id, {
+          coachMinimum: floor.trim() || null,
+          coachSessionDays: sessionDays.length ? sessionDays : null,
+        }),
       ])
       setSaved(true)
       setTimeout(() => setSaved(false), 2000)
@@ -395,6 +410,66 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
           {/* Programme areas */}
           {tab === 'programme' && (
             <div className="space-y-3 pb-4">
+              {/* THE FLOOR. Deliberately above the programme areas: it is the
+                  thing that decides what happens on a bad day, and bad days are
+                  where a programme is actually won or lost. */}
+              <div className="rounded-2xl surface p-4 space-y-2">
+                <p className="text-xs font-semibold text-ink-200">The floor on a bad day</p>
+                <p className="text-2xs text-ink-400 leading-relaxed">
+                  What still counts when {client.firstName} can&rsquo;t do the plan. Ivy offers it only
+                  after they&rsquo;ve said the day&rsquo;s gone wrong &mdash; never as an easy way out &mdash;
+                  and taking it counts as a kept day.
+                </p>
+                <input
+                  value={floor}
+                  onChange={(e) => setFloor(e.target.value)}
+                  placeholder="e.g. 10,000 steps"
+                  maxLength={200}
+                  className="
+                    w-full px-3 py-2 text-sm
+                    bg-ink-900/50 border border-ink-600 rounded-xl
+                    text-ink-200 placeholder:text-ink-600
+                    focus:outline-none focus:ring-1 focus:ring-gold-400/40 focus:border-gold-400/30
+                    transition-colors
+                  "
+                />
+                <p className="text-2xs text-ink-500 leading-relaxed">
+                  Coming from you it holds. A floor {client.firstName} sets alone is one they can
+                  talk themselves out of at 9pm.
+                </p>
+              </div>
+
+              {/* SESSION DAYS — a pattern, not a diary. Ivy builds toward these
+                  and picks up after them; she never asserts a specific session. */}
+              <div className="rounded-2xl surface p-4 space-y-2">
+                <p className="text-xs font-semibold text-ink-200">When you see {client.firstName}</p>
+                <p className="text-2xs text-ink-400 leading-relaxed">
+                  Your usual days, in person or online. Ivy builds toward them
+                  (&ldquo;what do you want to show him?&rdquo;) and picks up afterwards. She treats it
+                  as your rhythm, not a diary &mdash; she&rsquo;ll never claim a session happened.
+                </p>
+                <div className="flex flex-wrap gap-1.5 pt-0.5">
+                  {['monday','tuesday','wednesday','thursday','friday','saturday','sunday'].map((d) => {
+                    const on = sessionDays.includes(d)
+                    return (
+                      <button
+                        key={d}
+                        type="button"
+                        aria-pressed={on}
+                        onClick={() => setSessionDays(on ? sessionDays.filter((x) => x !== d) : [...sessionDays, d])}
+                        className={`px-2.5 py-1.5 rounded-lg font-mono text-[8.5px] uppercase tracking-[0.16em] border transition-colors ${
+                          on
+                            ? 'border-gold-400/40 bg-gold-400/10 text-gold-300'
+                            : 'border-ink-600 text-ink-500 hover:text-ink-300'
+                        }`}
+                      >
+                        {d.slice(0, 3)}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+
               <div className="rounded-2xl surface p-4 mb-1">
                 <p className="text-xs font-semibold text-ink-200 mb-1">Programme check-in areas</p>
                 <p className="text-2xs text-ink-400 leading-relaxed">

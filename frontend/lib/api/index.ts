@@ -818,6 +818,18 @@ export const coachApi = {
   removeClient: async (id: string): Promise<void> => {
     await client.delete(`/api/coach/clients/${id}`)
   },
+  /**
+   * The two things only a coach can answer: the floor on a bad day, and the
+   * days they actually see this client. Both were reachable only over a ponder
+   * call until now.
+   */
+  updateClientPlan: async (
+    id: string,
+    plan: { coachMinimum?: string | null; coachSessionDays?: string[] | null },
+  ): Promise<void> => {
+    await client.patch(`/api/coach/clients/${id}/plan`, plan)
+  },
+
   updateProgrammeAreas: async (id: string, areas: Array<{ id: string; area: string; instruction: string }>): Promise<void> => {
     await client.patch(`/api/coach/clients/${id}/programme-areas`, { areas })
   },

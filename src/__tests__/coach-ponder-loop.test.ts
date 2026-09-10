@@ -55,7 +55,10 @@ describe('a floor stated out loud gets applied', () => {
 
     const applied = await coachService.extractAndApplyProgrammeUpdates(COACH, 'Joe said give Sam 10k steps on days he cannot train.')
 
-    expect(writesFor(SAM)[0].data).toEqual({ coachMinimum: '10k steps' })
+    // Stamped, because a floor set once and never revisited quietly stops
+    // describing the person — the timestamp is what lets Ivy ask later.
+    expect(writesFor(SAM)[0].data).toMatchObject({ coachMinimum: '10k steps' })
+    expect(writesFor(SAM)[0].data.coachMinimumSetAt).toBeInstanceOf(Date)
     expect(applied).toEqual([
       expect.objectContaining({ clientId: SAM, kind: 'floor', instruction: '10k steps' }),
     ])
@@ -64,7 +67,7 @@ describe('a floor stated out loud gets applied', () => {
   it('clears it on REMOVE', async () => {
     modelReturns([{ clientId: SAM, kind: 'floor', instruction: 'REMOVE' }])
     await coachService.extractAndApplyProgrammeUpdates(COACH, 'drop the floor for Sam')
-    expect(writesFor(SAM)[0].data).toEqual({ coachMinimum: null })
+    expect(writesFor(SAM)[0].data).toEqual({ coachMinimum: null, coachMinimumSetAt: null })
   })
 })
 

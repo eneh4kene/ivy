@@ -1224,12 +1224,19 @@ class CallService {
       where: { id: coachId },
       select: { id: true, firstName: true, subscriptionTier: true },
     });
-    const ponderBrief = await coachService.generatePonderBrief(coachId);
+    const [ponderBrief, floors] = await Promise.all([
+      coachService.generatePonderBrief(coachId),
+      coachService.floorsWorthRaising(coachId).catch(() => ({ missing: [], stale: [] })),
+    ]);
     return {
       user_name: coach?.firstName,
       subscription_tier: coach?.subscriptionTier,
       is_coach_ponder: true,
       ponder_brief: ponderBrief,
+      floors_missing: floors.missing.length ? floors.missing.join(', ') : null,
+      floors_stale: floors.stale.length
+        ? floors.stale.map((f) => `${f.name} ("${f.floor}", set ${f.months} month${f.months === 1 ? '' : 's'} ago)`).join('; ')
+        : null,
       track: 'coach',
       call_type: 'coach_ponder',
     };

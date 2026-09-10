@@ -78,6 +78,11 @@ model User {
   /// be. And the right floor is programme-specific — 10k steps means something
   /// different to a strength client and a marathon client.
   coachMinimum String?
+  /// When the floor was last set or confirmed. A floor set once and never
+  /// revisited quietly stops describing the person: "10k steps" set for a
+  /// client with a knee injury is wrong six months later when the knee is
+  /// fine. Ivy uses this to ask whether it still holds, not to expire it.
+  coachMinimumSetAt DateTime?
   /// Days the coach actually sees this client, online or in person. JSON array
   /// of lowercase day names, same shape as preferredDays. Deliberately a
   /// PATTERN, not an appointment: there is no recurrence, cancellation or

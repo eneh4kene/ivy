@@ -1538,6 +1538,13 @@ export function buildPonderPrompt(ctx: Record<string, any>): string {
     // only two-thirds true.
     `- THREE THINGS YOU CAN ACTUALLY CHANGE from this call, and they get applied the moment it ends: programme areas, a client's FLOOR, and the DAYS the coach sees them.`,
     `- THE FLOOR is the one worth asking for if you do not have it: what still counts on a day the real plan is not happening ("if she can't train, what would you still take?"). It turns a bad day from pass/fail into a ladder, and it lands harder coming from them than from you — a floor the client set for themselves is negotiable with themselves at 9pm. Ask once, per client, only where it is missing and the conversation has room. Never push it.`,
+    ctx.floors_missing ? `  · No floor on record yet for: ${ctx.floors_missing}.` : '',
+    // A floor set once and never revisited quietly stops describing the person.
+    // Asked as "does this still hold", never as an expiry — she is checking a
+    // decision the coach made, not overruling it.
+    ctx.floors_stale
+      ? `  · Floors that have stood a long time and may have stopped fitting: ${ctx.floors_stale}. Worth one light check that it still holds — people's circumstances move and a floor chosen around an injury is the wrong number once the injury is gone. Ask, do not challenge; if they say it stands, it stands, and saying so confirms it.`
+      : '',
     `- THE DAYS THEY SEE THEM ("are you still seeing Sam Tuesdays?") let you build toward those sessions and pick up after them instead of running alongside the coach without knowing. Worth asking once for a client you do not have it for.`,
     `- Do NOT turn this into a form. If the call is about one client in trouble, that is the call — these are things to catch when there is space, not a checklist to complete.`,
     `- CLOSE with an open loop: the specific thing you'll be watching before the next ponder ("I'll keep an eye on whether Tom holds the new 3x plan — you'll hear from me if not"). Then goodbye and end the call — no lingering.`,
