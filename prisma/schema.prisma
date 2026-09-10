@@ -68,7 +68,22 @@ model User {
   track       String // standard track: "fitness" | "focus" | "sleep" | "balance"
   trackDetail String? // personal specificity: "morning runs", "daily meditation", etc.
   goal        String // User's primary goal
-  minimumMode String? // The minimum acceptable action
+  minimumMode String? // The minimum acceptable action, set by the MEMBER
+  /// The floor their COACH set — "10k steps on a day you can't do the plan".
+  /// Separate from minimumMode rather than overwriting it, so neither party
+  /// clobbers the other's: a coach floor takes precedence when both exist.
+  ///
+  /// Why the coach owns this at all: a floor you set for yourself is
+  /// negotiable with yourself at 9pm, which is exactly when it needs not to
+  /// be. And the right floor is programme-specific — 10k steps means something
+  /// different to a strength client and a marathon client.
+  coachMinimum String?
+  /// Days the coach actually sees this client, online or in person. JSON array
+  /// of lowercase day names, same shape as preferredDays. Deliberately a
+  /// PATTERN, not an appointment: there is no recurrence, cancellation or
+  /// timezone handling here, so Ivy must speak about it as what she believes
+  /// the rhythm to be and never assert that a specific session happened.
+  coachSessionDays String?
   giftFrame   String? // Who/what they're doing this for
 
   // Coach relationship (for COACH-managed clients)

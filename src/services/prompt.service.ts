@@ -803,6 +803,7 @@ class PromptService {
       this.behaviouralAdapter(ctx),
       brief ?? this.resolveFlow(callType, ctx),
       this.gameStanding(ctx, callType),
+      isCoachCall ? '' : this.coachPlan(ctx),
       isCoachCall ? '' : this.interiority(ctx),
       isCoachCall ? '' : this.cadence(ctx),
       this.coachEscalation(callType, ctx),
@@ -892,6 +893,57 @@ class PromptService {
   // Lives outside the flow/brief slot so it survives when a Haiku brief replaces
   // the flow. On outbound it complements the brief (which handles tone) by giving
   // the model the exact standing so it can't invent scores.
+  /**
+   * The two things a coach knows that the member cannot be trusted to hold on
+   * their own: the floor on a bad day, and when the two of them actually meet.
+   */
+  private coachPlan(ctx: Record<string, any>): string {
+    const blocks: string[] = [];
+
+    // THE FLOOR. The whole risk here is that a minimum becomes a ceiling: an
+    // Ivy who offers "10k steps?" readily is not holding a floor, she is
+    // negotiating people down, and the day that could have been kept in full
+    // gets spent at the minimum instead. So it is a LAST resort, offered late,
+    // never an opening bid.
+    const floor = ctx.coach_minimum ?? ctx.minimum_action;
+    if (floor) {
+      blocks.push([
+        `THE FLOOR — "${floor}"${ctx.coach_minimum ? ` (set by ${ctx.coach_name ?? 'their coach'}, not by them)` : ' (they set this themselves)'}.`,
+        `This is what still counts on a day the real plan is not happening. It turns a bad day from pass/fail into a ladder, which is the difference between a wobble and a broken streak.`,
+        `OFFER IT LAST, NEVER FIRST. Only after they have told you the day has gone wrong AND you have heard why. A floor offered early stops being a floor and becomes the plan — you would be negotiating them down from a day they could still have kept in full.`,
+        ctx.coach_minimum
+          ? `Say whose it is when you offer it: it carries more weight as ${ctx.coach_name ?? 'their coach'}'s line than as yours, and it is not yours to soften or raise.`
+          : `They set this themselves on a better day. That is worth saying — it is a promise from them to them, not a concession from you.`,
+        `Taking the floor is a KEPT day, not a lesser one. Never frame it as settling.`,
+      ].join('\n'));
+    }
+
+    // SESSION DAYS. A pattern, never an appointment — nothing here models
+    // cancellations, so asserting a specific session happened is the same class
+    // of broken promise as telling someone their calls follow them and then not
+    // moving them.
+    if (ctx.coach_session_days && ctx.coach_name) {
+      let days: string[] = [];
+      try {
+        const parsed = JSON.parse(ctx.coach_session_days);
+        if (Array.isArray(parsed)) days = parsed.filter((d: unknown): d is string => typeof d === 'string');
+      } catch { /* a malformed value simply means she says nothing about it */ }
+
+      if (days.length) {
+        const named = days.map((d) => d.charAt(0).toUpperCase() + d.slice(1)).join(', ');
+        blocks.push([
+          `THEY SEE ${(ctx.coach_name as string).toUpperCase()} ON: ${named} (as a rule — you do not know about any individual week).`,
+          `This is the one thing in their week that is not yours, and knowing it is what makes you a colleague rather than a parallel system running alongside him.`,
+          `BEFORE one: it is worth having something to show. "You're with ${ctx.coach_name} on ${days[0].charAt(0).toUpperCase() + days[0].slice(1)} — what do you want to be able to tell him?" That makes the days in between matter, which is the point.`,
+          `AFTER one: pick it up. "How did it go with ${ctx.coach_name}? Did he change anything?" Then coach what he decided, in his direction, never against it.`,
+          `NEVER assert a session happened or is definitely happening — you know the pattern, not their diary. "Aren't you with him Thursday?" is right; "good luck tomorrow" about a session that was cancelled is exactly the kind of confident wrongness that makes someone stop trusting you.`,
+        ].join('\n'));
+      }
+    }
+
+    return blocks.join('\n\n');
+  }
+
   /**
    * The only thing in the prompt that is HERS.
    *

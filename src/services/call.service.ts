@@ -984,7 +984,7 @@ class CallService {
 
       // Coach context (set when user has a PT/coach)
       ...await coachService.getCoachContextForClient(userId).catch(() => ({
-        coach_name: null, coach_programme: null, coach_notes: null, coach_style: null, brand_name: null, programme_areas: null,
+        coach_name: null, coach_programme: null, coach_notes: null, coach_minimum: null, coach_session_days: null, coach_style: null, brand_name: null, programme_areas: null,
       })),
 
       // Circle catch-up (set when user missed their last sprint session)

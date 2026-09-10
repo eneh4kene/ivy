@@ -65,6 +65,8 @@ function compedClientFields(): { subscriptionTier: typeof BETA_CLIENT_TIER } | R
   return config.beta.compCoachClients ? { subscriptionTier: BETA_CLIENT_TIER } : {};
 }
 
+const VALID_DAYS = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
+
 class CoachService {
   private anthropic: Anthropic | null = process.env.ANTHROPIC_API_KEY
     ? new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
@@ -196,6 +198,52 @@ class CoachService {
     const client = await prisma.user.findFirst({ where: { id: clientId, coachId } });
     if (!client) throw new NotFoundError('Client not found');
     return prisma.user.update({ where: { id: clientId }, data: { coachNotes } });
+  }
+
+  /**
+   * The two things only a coach can properly answer about a client: the floor
+   * on a bad day, and when they actually see each other.
+   *
+   * Both were missing entirely. minimumMode existed but only the MEMBER could
+   * set it, and a floor you set for yourself is negotiable with yourself at
+   * 9pm — which is exactly when it needs not to be. Session days were not
+   * modelled at all, so Ivy had no idea her daily loop was running alongside a
+   * weekly one.
+   *
+   * Passing null clears either. Days are normalised and validated here rather
+   * than trusted, because a bad value would have Ivy anticipating a session
+   * that is not coming.
+   */
+  async updateClientPlan(
+    coachId: string,
+    clientId: string,
+    plan: { coachMinimum?: string | null; coachSessionDays?: string[] | null },
+  ) {
+    const client = await prisma.user.findFirst({ where: { id: clientId, coachId } });
+    if (!client) throw new NotFoundError('Client not found');
+
+    const data: Record<string, unknown> = {};
+
+    if (plan.coachMinimum !== undefined) {
+      const min = plan.coachMinimum?.trim();
+      data.coachMinimum = min ? min.slice(0, 200) : null;
+    }
+
+    if (plan.coachSessionDays !== undefined) {
+      if (plan.coachSessionDays === null) {
+        data.coachSessionDays = null;
+      } else {
+        const valid = plan.coachSessionDays
+          .filter((d): d is string => typeof d === 'string')
+          .map((d) => d.toLowerCase().trim())
+          .filter((d) => VALID_DAYS.includes(d));
+        data.coachSessionDays = valid.length ? JSON.stringify([...new Set(valid)]) : null;
+      }
+    }
+
+    if (Object.keys(data).length === 0) return client;
+    logger.info(`Coach ${coachId} updated client plan for ${clientId}: ${Object.keys(data).join(', ')}`);
+    return prisma.user.update({ where: { id: clientId }, data });
   }
 
   /**
@@ -553,6 +601,8 @@ class CoachService {
     coach_name: string | null;
     coach_programme: string | null;
     coach_notes: string | null;
+    coach_minimum: string | null;
+    coach_session_days: string | null;
     coach_style: string | null;
     coach_discipline: string | null;
     brand_name: string | null;
@@ -563,6 +613,8 @@ class CoachService {
       select: {
         coachNotes: true,
         programmeAreas: true,
+        coachMinimum: true,
+        coachSessionDays: true,
         coach: {
           select: {
             firstName: true,
@@ -582,7 +634,7 @@ class CoachService {
     });
 
     if (!user?.coach) {
-      return { coach_name: null, coach_programme: null, coach_notes: null, coach_style: null, coach_discipline: null, brand_name: null, programme_areas: null };
+      return { coach_name: null, coach_programme: null, coach_notes: null, coach_minimum: null, coach_session_days: null, coach_style: null, coach_discipline: null, brand_name: null, programme_areas: null };
     }
 
     const profile = user.coach.coachProfile;
@@ -590,6 +642,9 @@ class CoachService {
       coach_name: user.coach.firstName,
       coach_programme: profile?.programmeName ?? null,
       coach_notes: user.coachNotes ?? profile?.programmeNotes ?? null,
+      // A coach floor outranks a self-set one — that is the point of it.
+      coach_minimum: user.coachMinimum ?? null,
+      coach_session_days: user.coachSessionDays ?? null,
       coach_style: profile?.coachingStyle ?? null,
       coach_discipline: profile?.discipline ?? null,
       brand_name: (profile?.whitelabelEnabled && profile?.brandName) ? profile.brandName : null,

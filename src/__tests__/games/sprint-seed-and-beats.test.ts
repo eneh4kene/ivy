@@ -158,7 +158,10 @@ describe('gameBeatsSince — what moved, not where things stand', () => {
     (circleGameService as any).gameBeatsSince(userId) as Promise<string | null>
 
   it('reads beats from the last call onward, oldest first', async () => {
-    const lastCall = new Date('2026-09-02T20:00:00Z')
+    // Relative, not absolute: an absolute date drifts past the 7-day clamp as
+    // the calendar moves, and the clamp correctly overriding it then looks like
+    // a bug in the window logic.
+    const lastCall = new Date(Date.now() - 2 * 86_400_000)
     mockPrisma.call.findFirst.mockResolvedValue({ createdAt: lastCall })
     mockPrisma.message.findMany.mockResolvedValue([
       { content: 'Sam dropped the baton — 2 lives left. Amara has it now.' },

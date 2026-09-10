@@ -30,10 +30,27 @@ import callService from '../services/call.service'
 const mockPrisma = prisma as any
 const USER = 'u-1'
 
-/** A Thursday and a Wednesday, both at 09:00 London (so 20:00 is still ahead). */
-const THURSDAY = new Date('2026-09-10T09:00:00Z')
-const WEDNESDAY = new Date('2026-09-09T09:00:00Z')
-const SUNDAY = new Date('2026-09-13T09:00:00Z')
+/**
+ * Weekdays computed RELATIVE to now, always 1-7 days ahead at 09:00.
+ *
+ * These were hard-coded absolute dates, which passed on the day they were
+ * written and started failing the next morning: scheduleDailyCalls skips an
+ * evening slot already in the past, so a fixture dated yesterday schedules
+ * nothing and the failure looks like a regression in the scheduler.
+ */
+const DAY_INDEX = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday']
+function nextWeekday(name: string): Date {
+  const target = DAY_INDEX.indexOf(name)
+  const d = new Date()
+  const delta = ((target - d.getUTCDay() + 7) % 7) || 7 // always strictly ahead
+  d.setUTCDate(d.getUTCDate() + delta)
+  d.setUTCHours(9, 0, 0, 0)
+  return d
+}
+
+const THURSDAY = nextWeekday('thursday')
+const WEDNESDAY = nextWeekday('wednesday')
+const SUNDAY = nextWeekday('sunday')
 
 function user(over: Record<string, any> = {}) {
   return {

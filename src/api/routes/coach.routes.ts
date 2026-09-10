@@ -207,6 +207,20 @@ router.patch('/clients/:id/notes', requireCoach, async (req: AuthRequest, res: R
   } catch (err) { next(err); }
 });
 
+// PATCH /api/coach/clients/:id/plan — the two things only the coach can answer:
+// the floor on a bad day, and when they actually see each other.
+router.patch('/clients/:id/plan', requireCoach, async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const { coachMinimum, coachSessionDays } = req.body ?? {};
+    if (coachMinimum === undefined && coachSessionDays === undefined) {
+      res.status(400).json({ success: false, error: 'coachMinimum or coachSessionDays required' });
+      return;
+    }
+    const updated = await coachService.updateClientPlan(req.user!.id, req.params.id, { coachMinimum, coachSessionDays });
+    res.json({ success: true, data: updated });
+  } catch (err) { next(err); }
+});
+
 // POST /api/coach/clients/:id/draft-notes — Ivy drafts starter notes from the
 // client's real record. Editable text only; the coach reviews and saves.
 router.post('/clients/:id/draft-notes', requireCoach, async (req: AuthRequest, res: Response, next: NextFunction) => {
