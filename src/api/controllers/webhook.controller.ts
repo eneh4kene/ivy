@@ -292,9 +292,22 @@ class WebhookController {
             if (summary) {
               coachService.extractAndApplyProgrammeUpdates(dbUserId, summary, 'ponder')
                 .then(async (applied) => {
+                  // Report each kind in its own words. A coach who set a floor
+                  // and was told "no programme changes were requested" would be
+                  // reading a lie about a thing that did happen — and the whole
+                  // promise made on their first call is "they say it, you apply
+                  // it", so the confirmation is what makes that checkable.
+                  const describe = (u: typeof applied[number]) => {
+                    if (u.instruction === 'REMOVE' && u.kind === 'floor') return `• ${u.clientName} — floor removed`;
+                    if (u.kind === 'floor') return `• ${u.clientName} — floor on a bad day: ${u.instruction}`;
+                    if (u.instruction === 'REMOVE' && u.kind === 'sessions') return `• ${u.clientName} — session days cleared`;
+                    if (u.kind === 'sessions') return `• ${u.clientName} — you see them: ${u.instruction}`;
+                    return `• ${u.clientName} — ${u.area}: ${u.instruction === 'REMOVE' ? 'removed' : u.instruction}`;
+                  };
+                  const touchesProgramme = applied.some((u) => u.kind === 'area');
                   const appliedBlock = applied.length > 0
-                    ? `\n\nApplied to programmes:\n${applied.map((u) => `• ${u.clientName} — ${u.area}: ${u.instruction === 'REMOVE' ? 'removed' : u.instruction}`).join('\n')}\nYour clients will see the changes in their Plan tab (and get a nudge within the hour).`
-                    : `\n\nNo programme changes were requested on this call.`;
+                    ? `\n\nApplied:\n${applied.map(describe).join('\n')}${touchesProgramme ? `\nYour clients will see the programme changes in their Plan tab (and get a nudge within the hour).` : ''}`
+                    : `\n\nNothing was changed on this call.`;
                   const content = `Ponder summary:\n\n${summary.slice(0, 600)}${appliedBlock}`;
 
                   const chatService = (await import('../../services/chat.service')).default;

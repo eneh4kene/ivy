@@ -1052,7 +1052,7 @@ class CoachService {
     coachId: string,
     callSummary: string,
     source: 'ponder' | 'chat' = 'ponder',
-  ): Promise<Array<{ clientId: string; clientName: string; area: string; instruction: string }>> {
+  ): Promise<Array<{ clientId: string; clientName: string; kind: 'area' | 'floor' | 'sessions'; area: string; instruction: string }>> {
     const clients = await prisma.user.findMany({
       where: { coachId },
       select: { id: true, firstName: true, lastName: true, programmeAreas: true },
@@ -1071,7 +1071,7 @@ class CoachService {
         max_tokens: 1024,
         messages: [{
           role: 'user',
-          content: `A coaching ponder session just ended. Extract any programme area updates the coach requested.\n\nClients:\n${clientList}\n\nCall summary:\n${callSummary}\n\nReturn JSON array: [{ "clientId": "<id>", "area": "<area name>", "instruction": "<new instruction>" }]\nIf the coach asked to remove an area, set instruction to "REMOVE".\nIf no updates, return [].\nOnly return the JSON.`,
+          content: `A coaching ponder session just ended. Extract any changes the coach asked for.\n\nClients:\n${clientList}\n\nCall summary:\n${callSummary}\n\nReturn a JSON array. Each item is ONE of:\n\n1. A programme area update:\n   { "clientId": "<id>", "kind": "area", "area": "<area name>", "instruction": "<new instruction>" }\n   Use instruction "REMOVE" if they asked to drop an area.\n\n2. A FLOOR — the minimum that still counts on a day the real plan is not happening ("give her 10k steps on days she can't train", "his floor is a twenty minute walk"):\n   { "clientId": "<id>", "kind": "floor", "instruction": "<the floor in the coach's words>" }\n   Use instruction "REMOVE" to clear it.\n\n3. SESSION DAYS — the days the coach actually sees that client, in person or online ("I see Sam Tuesdays and Thursdays"):\n   { "clientId": "<id>", "kind": "sessions", "instruction": "monday,thursday" }\n   Lowercase day names, comma separated. Use "REMOVE" to clear.\n\nRULES — a false positive silently changes how someone is coached:\n- Only extract what the coach clearly DECIDED, not what they wondered aloud or what Ivy suggested and they did not take up.\n- A floor is a fallback for bad days. "Do 10k steps" as the actual plan is a programme area, not a floor.\n- If nothing was decided, return [].\nOnly return the JSON.`,
         }],
       });
       text = msg.content[0].type === 'text' ? msg.content[0].text.trim() : '[]';
@@ -1090,7 +1090,7 @@ class CoachService {
     // Models sometimes wrap JSON in ``` fences despite instructions.
     const jsonText = text.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '');
 
-    let updates: Array<{ clientId: string; area: string; instruction: string }> = [];
+    let updates: Array<{ clientId: string; kind?: string; area?: string; instruction: string }> = [];
     try {
       updates = JSON.parse(jsonText);
     } catch {
@@ -1106,17 +1106,57 @@ class CoachService {
     if (!Array.isArray(updates) || updates.length === 0) return [];
 
     const now = new Date().toISOString();
-    const applied: Array<{ clientId: string; clientName: string; area: string; instruction: string }> = [];
+    const applied: Array<{ clientId: string; clientName: string; kind: 'area' | 'floor' | 'sessions'; area: string; instruction: string }> = [];
     const touchedClients = new Set<string>();
 
     for (const update of updates) {
       const client = clients.find((c) => c.id === update.clientId);
       if (!client) continue;
+      const clientName = `${client.firstName} ${client.lastName}`.trim();
+      const kind = update.kind ?? 'area'; // older shape had no kind and meant 'area'
+
+      // THE FLOOR — what still counts on a day the real plan is not happening.
+      // Said out loud on a ponder call ("give her 10k steps on the days she
+      // can't train") and, until now, landing nowhere: the extractor only knew
+      // about programme areas, so Ivy promised coaches "they say it, you apply
+      // it" and then quietly applied a subset.
+      if (kind === 'floor') {
+        const clear = update.instruction === 'REMOVE';
+        await prisma.user.update({
+          where: { id: client.id },
+          data: { coachMinimum: clear ? null : update.instruction.trim().slice(0, 200) },
+        });
+        applied.push({ clientId: client.id, clientName, kind: 'floor', area: 'floor', instruction: update.instruction });
+        touchedClients.add(client.id);
+        continue;
+      }
+
+      // SESSION DAYS — validated here rather than trusted, because a bad value
+      // has Ivy building anticipation toward a session that is not coming.
+      if (kind === 'sessions') {
+        const clear = update.instruction === 'REMOVE';
+        const days = clear ? [] : update.instruction
+          .split(',')
+          .map((d) => d.toLowerCase().trim())
+          .filter((d) => VALID_DAYS.includes(d));
+        await prisma.user.update({
+          where: { id: client.id },
+          data: { coachSessionDays: days.length ? JSON.stringify([...new Set(days)]) : null },
+        });
+        applied.push({
+          clientId: client.id, clientName, kind: 'sessions', area: 'session days',
+          instruction: days.length ? days.join(', ') : 'REMOVE',
+        });
+        touchedClients.add(client.id);
+        continue;
+      }
+
+      if (!update.area) continue; // an area update with no area is not one
 
       const areas: Array<{ id: string; area: string; instruction: string; updatedAt?: string; updatedBy?: string }> =
         Array.isArray(client.programmeAreas) ? (client.programmeAreas as any) : [];
 
-      const existing = areas.findIndex((a) => a.area.toLowerCase() === update.area.toLowerCase());
+      const existing = areas.findIndex((a) => a.area.toLowerCase() === update.area!.toLowerCase());
       if (update.instruction === 'REMOVE') {
         if (existing !== -1) areas.splice(existing, 1);
       } else if (existing !== -1) {
@@ -1128,7 +1168,7 @@ class CoachService {
       }
 
       await prisma.user.update({ where: { id: client.id }, data: { programmeAreas: areas as any } });
-      applied.push({ clientId: client.id, clientName: `${client.firstName} ${client.lastName}`.trim(), area: update.area, instruction: update.instruction });
+      applied.push({ clientId: client.id, clientName, kind: 'area', area: update.area, instruction: update.instruction });
       touchedClients.add(client.id);
     }
 
