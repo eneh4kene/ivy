@@ -237,28 +237,66 @@ export async function runInvariantSweep(): Promise<Record<string, number>> {
   // least one Call row scheduled today by daily-evening-calls (00:00 UTC).
   if (now.getUTCHours() >= 2) {
     const utcDayStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()))
+    // This check used to exclude `commStyle: 'TEXTS'` and `coachId: null`, and
+    // those two exclusions between them carved out precisely the people it
+    // needed to catch.
+    //
+    // A TEXTS member has no ring to miss, so silence is invisible to them AND
+    // was invisible here. A coached client is the primary GTM segment, and the
+    // exclusion was a leftover from "coach clients get morning only" — a rule
+    // call.service abandoned (its own comment says the evening call is the one
+    // worth keeping) while the monitor kept the old assumption. The scheduler
+    // was fixed and its watchdog was not.
+    //
+    // A real client sat uncontacted for seven days, excluded twice over by the
+    // one thing built to notice.
+    //
+    // The question is no longer "was a CALL scheduled" but "was this person
+    // contacted AT ALL, by whichever channel they are on".
     const eligible = await prisma.user.findMany({
       where: {
         isActive: true,
         isOnboarded: true,
         subscriptionTier: { notIn: ['FREE', 'COACH'] },
-        commStyle: { not: 'TEXTS' },
-        coachId: null,
       },
-      select: { id: true },
+      select: { id: true, commStyle: true, eveningCallTime: true },
     })
     let usersWithoutCalls = 0
     for (const u of eligible) {
-      const call = await prisma.call.findFirst({
-        where: { userId: u.id, scheduledAt: { gte: utcDayStart } },
-        select: { id: true },
-      })
-      if (!call) {
+      // A missing evening time is a different fault with a different fix: the
+      // scheduler is working perfectly and will never select this person,
+      // because it gates BOTH channels on this field. Re-running it does
+      // nothing. Called out separately so nobody wastes time on the wrong
+      // remedy.
+      if (!u.eveningCallTime) {
+        usersWithoutCalls++
+        violations.add({
+          severity: 'critical',
+          title: 'member_uncontactable',
+          detail: 'onboarded with no eveningCallTime — gates the call AND the text check-in, so they will never be contacted by anything. Set a time; re-running the scheduler will not help.',
+          userId: u.id,
+        })
+        continue
+      }
+
+      const contacted = u.commStyle === 'TEXTS'
+        ? await prisma.message.findFirst({
+            where: { userId: u.id, messageType: 'evening_checkin', createdAt: { gte: utcDayStart } },
+            select: { id: true },
+          })
+        : await prisma.call.findFirst({
+            where: { userId: u.id, scheduledAt: { gte: utcDayStart } },
+            select: { id: true },
+          })
+
+      if (!contacted) {
         usersWithoutCalls++
         violations.add({
           severity: 'critical',
           title: 'no_calls_scheduled_today',
-          detail: "daily-evening-calls skipped this paid user — run callService.scheduleDailyCalls manually",
+          detail: u.commStyle === 'TEXTS'
+            ? 'no evening check-in posted for this text-preferred member today — run callService.scheduleDailyCalls manually'
+            : 'daily-evening-calls skipped this paid user — run callService.scheduleDailyCalls manually',
           userId: u.id,
         })
       }
