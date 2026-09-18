@@ -20,6 +20,7 @@
  *
  *   fly ssh console -a ivykeeps-api -C "node dist/scripts/onboarding-doctor.js"
  *   fly ssh console -a ivykeeps-api -C "node dist/scripts/onboarding-doctor.js someone@example.com"
+ *   fly ssh console -a ivykeeps-api -C "node dist/scripts/onboarding-doctor.js --fix-schedule"
  */
 import prisma from '../utils/prisma';
 
@@ -81,12 +82,18 @@ async function report(userId: string) {
       u.coachId ? `bound to ${coachName ?? u.coachId}`
         : u.pendingCoachId ? `PENDING — invited by ${coachName ?? u.pendingCoachId} but has not opened the magic link yet`
         : `no coach — they did not arrive through an invite link`],
-    ['MAGIC LINK', links.some((l) => l.usedAt),
+    // NOT a gate — magic links are swept once expired (auth.service
+    // verifyMagicLink deletes every expired row on each successful verify) and
+    // they live 15 minutes. So an ABSENT row proves nothing at all: never sent,
+    // or sent and long since tidied away, are indistinguishable. Only a present
+    // row carries information, and there is no lastLoginAt anywhere to fall
+    // back on. Reported, never used to declare someone stuck.
+    ['MAGIC LINK', true,
       links.length === 0
-        ? `NONE EVER SENT — they never submitted the invite form, or the send failed`
+        ? `none on file — UNINFORMATIVE: expired links are swept, so this is equally "never sent" and "sent days ago"`
         : links.some((l) => l.usedAt)
-          ? `opened (${links.filter((l) => l.usedAt).length} of ${links.length} used, latest sent ${when(links[0].createdAt)})`
-          : `${links.length} sent, NONE opened — latest ${when(links[0].createdAt)}${new Date() > links[0].expiresAt ? ' (now expired)' : ''}. Check spam, or the address is wrong.`],
+          ? `opened (${links.filter((l) => l.usedAt).length} of ${links.length} live rows used, latest sent ${when(links[0].createdAt)})`
+          : `${links.length} live row(s), none opened — latest ${when(links[0].createdAt)}${new Date() > links[0].expiresAt ? ' (expired)' : ''}`],
     ['PROFILE',    !!(u.goal && u.timezone && u.eveningCallTime),
       `goal:${u.goal ? 'yes' : 'NO'} track:${u.track ?? '—'} tz:${u.timezone ?? 'NO'} evening:${u.eveningCallTime ?? 'NO'} comms:${u.commStyle ?? '—'}`],
     ['PHONE',      !!u.phone,
@@ -95,6 +102,14 @@ async function report(userId: string) {
           ? `NOT set — code sent to ${mask(pending.newPhone)} by ${pending.newPhone.startsWith('+1') ? 'VOICE CALL' : 'SMS'}, ${pending.attempts} attempt(s), ${new Date() > pending.expiresAt ? 'EXPIRED' : 'still valid'} (sent ${when(pending.createdAt)})`
           : `NOT set — and no verification was ever requested`],
     ['ONBOARDED',  !!u.onboardedAt, u.onboardedAt ? `at ${when(u.onboardedAt)}` : `NEVER — day zero has not fired`],
+    // eveningCallTime is the master switch for the ENTIRE daily loop, for both
+    // channels: scheduleDailyCalls wraps call AND chat check-in in
+    // `if (user.eveningCallTime)`. Null means this person will never hear from
+    // Ivy again, silently, however healthy everything else looks.
+    ['SCHEDULE',   !!u.eveningCallTime,
+      u.eveningCallTime
+        ? `evening ${u.eveningCallTime} ${u.timezone ?? ''}`.trim()
+        : `NO EVENING TIME — they will NEVER be contacted. This gates the call AND the text check-in.`],
     ['DAY ZERO',   circles > 0 || calls > 0, `${circles} circle(s) · ${calls} call(s) · ${cycles} stake cycle(s)`],
   ];
 
@@ -109,8 +124,49 @@ async function report(userId: string) {
   console.log(`\n  → ${blockedAt ? `STUCK AT: ${blockedAt}` : 'Fully onboarded.'}`);
 }
 
+/**
+ * Repair members who finished onboarding with no evening time — the state that
+ * makes someone permanently, silently uncontactable. Gives them the default
+ * hour so the loop can start; they can move it in Settings.
+ *
+ * Opt-in via --fix-schedule. The doctor is read-only by default: a diagnostic
+ * that quietly writes is one nobody can trust to just look.
+ */
+async function fixSchedules(): Promise<void> {
+  const { DEFAULT_EVENING_CALL_TIME } = await import('../services/user.service');
+  const stuck = await prisma.user.findMany({
+    where: {
+      isOnboarded: true,
+      isActive: true,
+      eveningCallTime: null,
+      subscriptionTier: { not: 'COACH' },
+    },
+    select: { id: true, email: true, timezone: true },
+  });
+
+  if (stuck.length === 0) {
+    console.log('\nNo onboarded member is missing an evening time.\n');
+    return;
+  }
+
+  console.log(`\n${stuck.length} onboarded member(s) had NO evening time and were therefore uncontactable:`);
+  for (const u of stuck) {
+    await prisma.user.update({
+      where: { id: u.id },
+      data: { eveningCallTime: DEFAULT_EVENING_CALL_TIME },
+    });
+    console.log(`  ✔ ${u.email} → ${DEFAULT_EVENING_CALL_TIME} ${u.timezone ?? 'Europe/London'}`);
+  }
+  console.log(`\nTheir loop starts at the next hourly scheduler run. They can move the time in Settings.\n`);
+}
+
 async function main() {
   const email = process.argv[2];
+
+  if (process.argv.includes('--fix-schedule')) {
+    await fixSchedules();
+    return;
+  }
 
   if (email) {
     const u = await prisma.user.findUnique({ where: { email: email.toLowerCase().trim() }, select: { id: true } });

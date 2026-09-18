@@ -9,6 +9,9 @@ import seasonService from './season.service';
 import circleService from './circle.service';
 import chatService from './chat.service';
 
+/** The evening settle is the product's spine; 20:00 local is its natural hour. */
+export const DEFAULT_EVENING_CALL_TIME = '20:00';
+
 class UserService {
   /**
    * Create a new user
@@ -240,9 +243,29 @@ class UserService {
       throw new BadRequestError('A phone number is required to complete onboarding.');
     }
 
+    // eveningCallTime is the master switch for the ENTIRE daily loop — for both
+    // channels. scheduleDailyCalls wraps the call AND the text check-in in
+    // `if (user.eveningCallTime)`, so a member who finishes onboarding without
+    // one is never contacted again, by anything, silently. It was selected here
+    // and never checked, and a real client sat in that state for a week looking
+    // perfectly healthy: PRO, phone verified, in a circle, zero calls.
+    //
+    // DEFAULTED rather than enforced, deliberately. Blocking would fail
+    // onboarding for someone already past the schedule step — and between a
+    // call at a slightly wrong hour and no call at all, the wrong hour wins
+    // every time: it is recoverable in one sentence ("can we move this?"),
+    // whereas silence is never reported, because nobody chases a call they did
+    // not know to expect.
+    const scheduleFix = fullUser?.subscriptionTier !== 'COACH' && !fullUser?.eveningCallTime
+      ? { eveningCallTime: DEFAULT_EVENING_CALL_TIME }
+      : {};
+    if (Object.keys(scheduleFix).length) {
+      logger.warn(`Onboarding ${userId} with no evening time — defaulting to ${DEFAULT_EVENING_CALL_TIME} so the daily loop can start`);
+    }
+
     const user = await prisma.user.update({
       where: { id: userId },
-      data: { isOnboarded: true, onboardedAt: new Date() },
+      data: { isOnboarded: true, onboardedAt: new Date(), ...scheduleFix },
       select: { id: true, isOnboarded: true, onboardedAt: true },
     });
 
