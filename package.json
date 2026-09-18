@@ -18,7 +18,8 @@
     "lint:fix": "eslint src --ext .ts --fix",
     "format": "prettier --write \"src/**/*.ts\"",
     "preflight": "ts-node src/scripts/preflight.ts",
-    "phone-owner": "ts-node src/scripts/phone-owner.ts"
+    "phone-owner": "ts-node src/scripts/phone-owner.ts",
+    "onboarding-doctor": "ts-node src/scripts/onboarding-doctor.ts"
   },
   "keywords": [
     "ivy",
