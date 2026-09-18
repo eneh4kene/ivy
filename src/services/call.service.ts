@@ -885,6 +885,8 @@ class CallService {
       // Phase 5: missed_call_recovery is available to all paid users (one tier).
       missed_call_recovery: ['PRO', 'ELITE', 'CONCIERGE', 'B2B', 'COACH'].includes(user?.subscriptionTier ?? ''),
       calls_per_week: user?.callFrequency ?? 3,
+      // Where the app actually is. Nothing told anyone, ever.
+      app_url: (process.env.FRONTEND_URL ?? '').replace(/^https?:\/\//, '') || null,
       ...(await this.interiorityContext(userId)),
       // The days she actually rings, and what happens on the others. Without
       // this she closes a Tuesday call with "speak to you tomorrow" on a day

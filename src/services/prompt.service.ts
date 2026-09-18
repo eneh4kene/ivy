@@ -651,6 +651,12 @@ const FLOWS: Record<string, FlowFn> = {
       ctx.comm_preference === 'TEXTS'
         ? `5b. THE CHANNEL, asked once and honestly (20s): they picked text over calls at signup, before they had ever spoken to you. Now they have. Ask plainly which they actually want — "you said text when you signed up; having spoken, do you want me to call in the evenings or keep it to messages?" Take the answer at face value and do NOT sell the call. If they keep text, say what changes: the check-in lands in the app each evening instead, same time, same questions. If they switch to calls, confirm the time out loud.`
         : '',
+      // Nothing in the product has ever told anyone where the app IS. There is
+      // no download link in any SMS, any email, or this script — the install
+      // banner only appears once you are already inside the web app. For a
+      // text-preferred member that is worse than a gap: their entire daily loop
+      // lives somewhere nobody told them to open.
+      `5c. WHERE THE APP LIVES (15s): "One more practical thing - ${ctx.app_url ?? 'the app'} on your phone. That's where your day lives: the morning voice note, your ivy, everything I've just described. Open it in your browser and add it to your home screen so it's one tap - it behaves like any other app once you do."${ctx.comm_preference === 'TEXTS' ? ` They are on text check-ins, so this matters MORE for them, not less — the evening check-in lands in that app, so if they never open it they never hear from you at all. Make sure it lands.` : ''}`,
       `6. SAVE MY NUMBER (15s): "One practical thing — save this number you're on right now. I'm the only one who'll ever call or text you from it. When it rings in the evening, that's your day calling to be closed. And if I ever catch you at a bad moment, just say 'call me back in an hour' — I actually will."`,
       '',
       ctx.buddy_name ? '' : `7. A HUMAN WITNESS (30s): "Last thing — some people give me a human to answer to. A partner, a mate, your sister — someone who hears about it when you go quiet. Being witnessed changes what you do; it's the strongest lever I have. You can add them in Settings — worth doing today." Invite once, no pressure.`,

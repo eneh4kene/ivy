@@ -20,7 +20,9 @@
     "preflight": "ts-node src/scripts/preflight.ts",
     "phone-owner": "ts-node src/scripts/phone-owner.ts",
     "onboarding-doctor": "ts-node src/scripts/onboarding-doctor.ts",
-    "welcome-rescue": "ts-node src/scripts/welcome-rescue.ts"
+    "welcome-rescue": "ts-node src/scripts/welcome-rescue.ts",
+    "reach-out": "ts-node src/scripts/reach-out.ts",
+    "call-watch": "ts-node src/scripts/call-watch.ts"
   },
   "keywords": [
     "ivy",
