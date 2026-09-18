@@ -60,18 +60,31 @@ async function main() {
     : null;
 
   // Named if we have a real name; the stub "Friend" is worse than no name.
-  const greeting = user.firstName && user.firstName !== 'Friend' ? `Hi ${user.firstName} — ` : 'Hi — ';
+  const greeting = user.firstName && user.firstName !== 'Friend' ? `Hi ${user.firstName} - ` : 'Hi - ';
+  // No "reply TEXT to skip it" here, deliberately. Onboarding is a phone call:
+  // it is the only flow that introduces her, takes her name and goal and
+  // explains the rhythm, and offering an opt-out in the same breath invites
+  // someone to decline the one thing that makes the rest work. Her channel
+  // preference gets settled ON the call, where she can actually be asked.
   const sms =
-    `${greeting}it's Ivy${coach?.firstName ? `, ${coach.firstName}'s accountability partner` : ''}. ` +
-    `Sorry for the quiet since you signed up — that was our end, not yours. ` +
-    `I'll give you a quick call tonight at ${at} to get you properly set up. ` +
-    `It takes a few minutes. If you'd rather do the whole thing by text instead, just reply TEXT and I'll sort it that way.`;
+    `${greeting}it's Ivy, ${coach?.firstName ?? 'your coach'}'s coaching and accountability assistant. ` +
+    `Sorry for the quiet since you signed up; that was our end, not yours. ` +
+    `I'll call you tonight at ${at} to get you properly set up - it only takes a few minutes.`;
+
+  // GSM-7 vs UCS-2. A single em dash or curly apostrophe drops the alphabet to
+  // UCS-2, which cuts a segment from 153 characters to 67 — so a message that
+  // reads as two parts silently bills and arrives as four or five.
+  const GSM7 = "@£$¥èéùìòÇØøÅåΔ_ΦΓΛΩΠΨΣΘΞÆæßÉ !\"#¤%&'()*+,-./0123456789:;<=>?¡ABCDEFGHIJKLMNOPQRSTUVWXYZÄÖÑÜ§¿abcdefghijklmnopqrstuvwxyzäöñüà\n\r^{}\\[~]|€";
+  const offenders = [...sms].filter((c) => !GSM7.includes(c));
+  const unicode = offenders.length > 0;
+  const perSegment = unicode ? 67 : 153;
 
   console.log(`\n${send ? 'RESCUING' : 'DRY RUN —'} ${email}`);
   console.log(`  current: name "${user.firstName}" · comms ${user.commStyle ?? '—'} · evening ${user.eveningCallTime ?? 'NONE'} · goal ${user.goal ? 'set' : 'none'} · onboarded ${user.isOnboarded}`);
   console.log(`  call:    ONBOARDING at ${at} ${tz} (${callAt.toISOString()})`);
   console.log(`  sms:     "${sms}"`);
-  console.log(`  length:  ${sms.length} chars (${Math.ceil(sms.length / 153)} SMS segments)`);
+  console.log(`  length:  ${sms.length} chars · ${Math.ceil(sms.length / perSegment)} segment(s) · ${unicode ? `UCS-2 (non-GSM chars: ${[...new Set(offenders)].join(' ')})` : 'GSM-7'}`);
+  if (unicode) console.log(`  ⚠ those characters force UCS-2 — 67 chars per segment instead of 153`);
 
   if (!send) {
     console.log(`\nNothing written, nothing sent. Re-run with --send to do it.\n`);

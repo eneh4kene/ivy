@@ -643,6 +643,14 @@ const FLOWS: Record<string, FlowFn> = {
       `   ${vnLine}`,
       successCharityLine ? `   ${successCharityLine}` : '',
       '',
+      // Someone who tapped "just text" during signup made that choice before
+      // they had any idea what a call with Ivy is actually like — usually it
+      // reads as "don't make me talk to a robot". Worth one honest ask now that
+      // they have just had one, and it is the founder's own question: does she
+      // really prefer text, or did she just not know yet?
+      ctx.comm_preference === 'TEXTS'
+        ? `5b. THE CHANNEL, asked once and honestly (20s): they picked text over calls at signup, before they had ever spoken to you. Now they have. Ask plainly which they actually want — "you said text when you signed up; having spoken, do you want me to call in the evenings or keep it to messages?" Take the answer at face value and do NOT sell the call. If they keep text, say what changes: the check-in lands in the app each evening instead, same time, same questions. If they switch to calls, confirm the time out loud.`
+        : '',
       `6. SAVE MY NUMBER (15s): "One practical thing — save this number you're on right now. I'm the only one who'll ever call or text you from it. When it rings in the evening, that's your day calling to be closed. And if I ever catch you at a bad moment, just say 'call me back in an hour' — I actually will."`,
       '',
       ctx.buddy_name ? '' : `7. A HUMAN WITNESS (30s): "Last thing — some people give me a human to answer to. A partner, a mate, your sister — someone who hears about it when you go quiet. Being witnessed changes what you do; it's the strongest lever I have. You can add them in Settings — worth doing today." Invite once, no pressure.`,
