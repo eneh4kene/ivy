@@ -83,7 +83,11 @@ async function resendInvite(email: string, send: boolean) {
   console.log(`\n${send ? 'SENDING' : 'DRY RUN —'} invite resend to ${email}`);
   console.log(`  coach:     ${coach?.firstName ?? coachId}${brand ? ` (brand: ${brand.name})` : ''}`);
   console.log(`  onboarded: ${user.isOnboarded}`);
-  console.log(`  sends:     branded client magic link, valid 15 minutes from now`);
+  // 48h, from createMagicLinkUrl's default — NOT the 15m MAGIC_LINK_EXPIRES_IN,
+  // which governs the separate plain-login path. Worth stating precisely: a
+  // link that expires before someone reads their email is a plausible reason a
+  // first invite goes nowhere, and it is the first thing you would suspect.
+  console.log(`  sends:     branded client magic link, valid 48 hours`);
   if (!send) { console.log(`\nNothing sent. --send to do it.\n`); return; }
 
   const authService = (await import('../services/auth.service')).default;
