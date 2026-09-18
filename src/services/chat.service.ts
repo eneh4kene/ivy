@@ -424,10 +424,32 @@ Return ONLY raw JSON: {"pledge": "..."} or {"pledge": null}`,
         return this.postIvyMessage(userId, `Locked in. I'll call you then.`, { notify: false })
       }
       case 'just_text': {
-        await prisma.user.update({ where: { id: userId }, data: { commStyle: 'TEXTS' } })
+        // The evening time MUST be set here, not just the channel.
+        //
+        // scheduleDailyCalls gates the text check-in on eveningCallTime exactly
+        // as it gates the call — so setting commStyle alone promised "I'll
+        // check in with you right here each day" and then delivered nothing,
+        // forever, in the one branch where nobody ever hears a ring to notice
+        // it is missing. A real client sat in that state for a week.
+        //
+        // call_now and schedule both create an ONBOARDING call, so they were
+        // never exposed to this. just_text was the only door out of onboarding
+        // that led nowhere.
+        const { DEFAULT_EVENING_CALL_TIME } = await import('./user.service')
+        const existing = await prisma.user.findUnique({
+          where: { id: userId },
+          select: { eveningCallTime: true },
+        })
+        await prisma.user.update({
+          where: { id: userId },
+          data: {
+            commStyle: 'TEXTS',
+            ...(existing?.eveningCallTime ? {} : { eveningCallTime: DEFAULT_EVENING_CALL_TIME }),
+          },
+        })
         return this.postIvyMessage(
           userId,
-          `Text it is. I'll check in with you right here each day instead of calling. So — what are you taking on?`,
+          `Text it is. I'll check in with you right here each evening instead of calling. So — what are you taking on?`,
           { notify: false },
         )
       }
