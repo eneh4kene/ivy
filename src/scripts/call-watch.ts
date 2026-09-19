@@ -21,11 +21,15 @@ import prisma from '../utils/prisma';
 const when = (d: Date | null | undefined) => (d ? d.toISOString().slice(0, 16).replace('T', ' ') : '—');
 
 async function main() {
-  const email = process.argv[2]?.toLowerCase().trim();
+  const raw = process.argv[2]?.trim();
+  const email = raw?.includes('@') ? raw.toLowerCase() : raw;
   if (!email) { console.error('Usage: node dist/scripts/call-watch.js <email> [--transcript] [--messages]'); process.exit(1); }
 
+  // Email or id — the doctor and phone-owner both print ids and neither prints
+  // an email, so requiring one meant fetching it from a third place first.
+  const isId = /^[0-9a-f]{8}-[0-9a-f]{4}-/i.test(email);
   const user = await prisma.user.findUnique({
-    where: { email },
+    where: isId ? { id: email } : { email },
     select: { id: true, firstName: true, goal: true, commStyle: true, eveningCallTime: true },
   });
   if (!user) { console.error(`No account for ${email}`); process.exit(1); }
