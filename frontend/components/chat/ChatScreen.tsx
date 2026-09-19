@@ -61,6 +61,9 @@ export function ChatScreen() {
   const [draft, setDraft] = useState('')
   const [loading, setLoading] = useState(true)
   const [sending, setSending] = useState(false)
+  // Only true when we genuinely could not reach the server — never when a
+  // reply was merely slow.
+  const [sendFailed, setSendFailed] = useState(false)
   const [actionBusy, setActionBusy] = useState(false)
 
   const bottomRef = useRef<HTMLDivElement>(null)
@@ -109,19 +112,29 @@ export function ChatScreen() {
     setDraft('')
     if (composerRef.current) composerRef.current.style.height = 'auto'
     setSending(true)
+    setSendFailed(false)
     try {
       const reply = await chatApi.send(text)
       setMessages((prev) => [...prev, reply])
     } catch {
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: `err-${Date.now()}`,
-          createdAt: new Date().toISOString(),
-          direction: 'OUTBOUND',
-          content: "I didn't catch that — mind sending it again?",
-        },
-      ])
+      // The request failing does NOT mean the message failed. Ivy's reply takes
+      // a model call, and a slow one on mobile can have the client give up
+      // while the server finishes fine — the reply is written, the thread has
+      // it, and only this screen thinks something went wrong.
+      //
+      // This used to inject a fake Ivy line ("I didn't catch that — mind
+      // sending it again?"). Two things wrong with that: it put words in her
+      // mouth she never said, and it told someone their message was lost when
+      // it had been received and answered. A coach saw exactly that: his reply
+      // was sitting in the thread while the screen apologised for missing it.
+      //
+      // So: go and look. If the reply landed, show the real one.
+      try {
+        const thread = await chatApi.getThread()
+        setMessages(thread)
+      } catch {
+        setSendFailed(true)
+      }
     } finally {
       setSending(false)
     }
@@ -170,6 +183,23 @@ export function ChatScreen() {
 
       {/* Composer — sits above the bottom nav */}
       <div className="fixed inset-x-0 bottom-0 z-20 border-t border-ink-700/50 bg-ink-900/90 backdrop-blur-xl">
+        {/* A real failure, stated as the app's problem — not as words from Ivy.
+            Only shown when the thread could not be reached either, so a slow
+            reply never surfaces as a failure. */}
+        {sendFailed && (
+          <div className="mx-auto max-w-lg px-4 pt-2">
+            <p className="text-xs text-ink-400">
+              Couldn&rsquo;t reach Ivy just then — your message may still have gone through.{' '}
+              <button
+                type="button"
+                onClick={() => { setSendFailed(false); chatApi.getThread().then(setMessages).catch(() => setSendFailed(true)) }}
+                className="text-gold-300 underline underline-offset-2"
+              >
+                Refresh
+              </button>
+            </p>
+          </div>
+        )}
         <div className="mx-auto flex max-w-lg items-end gap-2 px-4 pb-[calc(env(safe-area-inset-bottom)+72px)] pt-3">
           <textarea
             ref={composerRef}
