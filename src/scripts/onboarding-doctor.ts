@@ -47,7 +47,10 @@ async function report(userId: string) {
       select: { newPhone: true, attempts: true, expiresAt: true, createdAt: true },
     }),
     prisma.call.count({ where: { userId } }),
-    prisma.ivyCircleMember.count({ where: { userId, isActive: true } }),
+    prisma.ivyCircleMember.findMany({
+      where: { userId, isActive: true },
+      select: { circle: { select: { name: true, size: true, games: { where: { status: 'active' }, select: { name: true, templateType: true } } } } },
+    }),
     prisma.stakeCycle.count({ where: { userId } }),
     u.coachId || u.pendingCoachId
       ? prisma.user.findUnique({
@@ -110,7 +113,9 @@ async function report(userId: string) {
       u.eveningCallTime
         ? `evening ${u.eveningCallTime} ${u.timezone ?? ''}`.trim()
         : `NO EVENING TIME — they will NEVER be contacted. This gates the call AND the text check-in.`],
-    ['DAY ZERO',   circles > 0 || calls > 0, `${circles} circle(s) · ${calls} call(s) · ${cycles} stake cycle(s)`],
+    ['DAY ZERO',   circles.length > 0 || calls > 0,
+      `${circles.length} circle(s) · ${calls} call(s) · ${cycles} stake cycle(s)` +
+      circles.map((m: any) => `\n                 "${m.circle.name}" — ${m.circle.size} member(s), ${m.circle.games.length ? `game: ${m.circle.games[0].name} (${m.circle.games[0].templateType})` : 'NO GAME (needs 3 members)'}`).join('')],
   ];
 
   let blockedAt: string | null = null;
