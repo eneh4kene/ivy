@@ -57,6 +57,13 @@ async function main() {
     console.log(`  MEMORIES    ${memories} written`);
     if (insights?.next_intention) console.log(`  COMMITTED   "${String(insights.next_intention).slice(0, 90)}"`);
     if (c.sentiment) console.log(`  SENTIMENT   ${c.sentiment}`);
+
+    // A call can pass every stage and still have gone wrong in the room — too
+    // short, a question never asked, an early goodbye. --transcript is how you
+    // see that, and it is the only thing that answers "why".
+    if (process.argv.includes('--transcript') && c.transcript) {
+      console.log(`\n  ── transcript ──\n${c.transcript.split('\n').map((l) => `  ${l}`).join('\n')}`);
+    }
   }
   console.log('');
 }
