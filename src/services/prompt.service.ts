@@ -659,12 +659,6 @@ const FLOWS: Record<string, FlowFn> = {
       ctx.comm_preference === 'TEXTS'
         ? `5b. THE CHANNEL, asked once and honestly (20s): they picked text over calls at signup, before they had ever spoken to you. Now they have. Ask plainly which they actually want — "you said text when you signed up; having spoken, do you want me to call in the evenings or keep it to messages?" Take the answer at face value and do NOT sell the call. If they keep text, say what changes: the check-in lands in the app each evening instead, same time, same questions. If they switch to calls, confirm the time out loud.`
         : '',
-      // Nothing in the product has ever told anyone where the app IS. There is
-      // no download link in any SMS, any email, or this script — the install
-      // banner only appears once you are already inside the web app. For a
-      // text-preferred member that is worse than a gap: their entire daily loop
-      // lives somewhere nobody told them to open.
-      `5c. WHERE THE APP LIVES (15s): "One more practical thing - ${ctx.app_url ?? 'the app'} on your phone. That's where your day lives: the morning voice note, your ivy, everything I've just described. Open it in your browser and add it to your home screen so it's one tap - it behaves like any other app once you do."${ctx.comm_preference === 'TEXTS' ? ` They are on text check-ins, so this matters MORE for them, not less — the evening check-in lands in that app, so if they never open it they never hear from you at all. Make sure it lands.` : ''}`,
       // THE ROOM. Nothing in this flow ever introduced the circle, so the only
       // time it came up was when an improvised call invented it — a one-member
       // room described as "doing sprints together this season". Say what is
@@ -690,6 +684,21 @@ const FLOWS: Record<string, FlowFn> = {
       ctx.buddy_name ? '' : `7. A HUMAN WITNESS (30s): "Last thing — some people give me a human to answer to. A partner, a mate, your sister — someone who hears about it when you go quiet. Being witnessed changes what you do; it's the strongest lever I have. You can add them in Settings — worth doing today." Invite once, no pressure.`,
       '',
       `8. SCHEDULE (2 min): Evening ${ctx.comm_preference === 'TEXTS' ? 'check-in' : 'call'} time? Which days? (Morning arming is async — they record a voice note, not a call.)`,
+      '',
+      // THE APP, DONE NOT MENTIONED. Telling someone "it's at this address" is
+      // not getting them installed, and for a member whose evening check-in
+      // lands in the app it is the difference between having a product and
+      // having nothing. Last, because it is a task: everything before it is
+      // conversation, and you do not interrupt a conversation to do admin.
+      `8a. GET THE APP ON HER PHONE — do NOT end the call before this (2-3 min):`,
+      `   Open it plainly: "One last thing, and then I'll let you go — do you have the app on your phone yet?"`,
+      `   If she does: ask her to open it while you are on the line and confirm she can see it. That is all.`,
+      `   If she does not, WALK HER THROUGH IT, one step at a time, waiting for her to actually do each one before you give the next. Do not read the whole list out at once — she is holding the phone you are talking on, so give her a moment for each step.`,
+      `   First ask which phone: "iPhone or Android?"`,
+      `   iPhone — the ONE thing that matters is Safari, so say it first: "open Safari — it has to be Safari, not Chrome, or the option won't be there" → "go to ${ctx.app_url ?? 'the site'}" → "tap the Share button at the bottom, the square with the arrow" → "scroll down and tap Add to Home Screen" → "tap Add".`,
+      `   Android: "open Chrome" → "go to ${ctx.app_url ?? 'the site'}" → "tap the three dots, top right" → "tap Install app, or Add to Home screen".`,
+      `   Then CONFIRM: "can you see the Ivy icon on your home screen?" Do not take "I'll do it later" as done — if she genuinely cannot do it now, say plainly that you will check tomorrow, and mean it.`,
+      `   WHY, if she asks or hesitates: that is where the morning voice note lives, and it is the only place it can be recorded.${ctx.comm_preference === 'TEXTS' ? ` And for her it matters more than for most — her evening check-in lands in that app, so without it she hears nothing from you at all.` : ''}`,
       '',
       `8b. ONE LAST OPENING (10s): "Anything else you want to ask before I let you go?" Ask it even if she has already asked things — the real question often arrives last, once someone has decided you are safe to ask.`,
       `9. CLOSE with an open loop: name the SPECIFIC thing you'll be listening for tomorrow — "Tomorrow morning, drop your voice note about [their first session]. I'll be listening for whether you [their specific plan]." End with energy.`,

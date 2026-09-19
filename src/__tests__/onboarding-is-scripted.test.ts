@@ -45,7 +45,7 @@ describe('the onboarding script actually reaches the model', () => {
     const prompt = promptService.buildSystemPrompt('ONBOARDING', ctx, false)
     expect(prompt).toContain('HOW IT ALL WORKS')
     expect(prompt).toContain('SAVE MY NUMBER')
-    expect(prompt).toContain('WHERE THE APP LIVES')
+    expect(prompt).toContain('GET THE APP ON HER PHONE')
     expect(prompt).toContain('www.ivykeeps.life')
   })
 
@@ -70,6 +70,34 @@ describe('the onboarding script actually reaches the model', () => {
     expect(withBrief).toContain('Brief: keep it warm and short.')
     expect(withBrief).not.toContain('HOW IT ALL WORKS')
     expect(withBrief).not.toContain('WHERE THE APP LIVES')
+  })
+})
+
+describe('the app gets installed, not mentioned', () => {
+  const ctx = { first_name: 'Sam', coach_name: 'Joseph', app_url: 'www.ivykeeps.life' }
+
+  it('is a guided task at the END, and the call does not close without it', () => {
+    // Telling someone "it's at this address" is not getting them installed,
+    // and it is last because everything before it is conversation — you do not
+    // interrupt a conversation to do admin.
+    const prompt = promptService.buildSystemPrompt('ONBOARDING', ctx, false)
+    expect(prompt).toContain('do NOT end the call before this')
+    expect(prompt).toContain('do you have the app on your phone yet?')
+    expect(prompt).toContain('one step at a time')
+    expect(prompt).toContain('Do not take "I\'ll do it later" as done')
+  })
+
+  it('asks which phone, and leads with Safari on iPhone', () => {
+    // iOS has no Add to Home Screen outside Safari. Everything else is detail.
+    const prompt = promptService.buildSystemPrompt('ONBOARDING', ctx, false)
+    expect(prompt).toContain('iPhone or Android?')
+    expect(prompt).toContain('it has to be Safari, not Chrome')
+    expect(prompt).toContain('Add to Home Screen')
+  })
+
+  it('tells a text-preferred member why it matters more for them', () => {
+    const prompt = promptService.buildSystemPrompt('ONBOARDING', { ...ctx, comm_preference: 'TEXTS' }, false)
+    expect(prompt).toContain('she hears nothing from you at all')
   })
 })
 
