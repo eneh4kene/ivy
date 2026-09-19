@@ -234,9 +234,15 @@ class InsightService {
         });
         const patch: Record<string, string> = {};
         const name = insights.stated_name?.trim();
-        if (name && (!current?.firstName || current.firstName === 'Friend')) {
-          patch.firstName = name.slice(0, 60);
-        }
+        // Replaceable when there is no name, when it is the old "Friend" stub,
+        // or when it is the email-derived placeholder — anything they have not
+        // actually told us is theirs.
+        const current2 = await prisma.user.findUnique({ where: { id: userId }, select: { email: true } });
+        const { stubNameFromEmail } = await import('./coach.service');
+        const isStub = !current?.firstName
+          || current.firstName === 'Friend'
+          || (current2?.email ? current.firstName === stubNameFromEmail(current2.email) : false);
+        if (name && isStub) patch.firstName = name.slice(0, 60);
         const goal = insights.stated_goal?.trim();
         if (goal && !current?.goal?.trim()) patch.goal = goal.slice(0, 300);
 

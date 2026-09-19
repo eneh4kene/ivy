@@ -22,7 +22,7 @@ const when = (d: Date | null | undefined) => (d ? d.toISOString().slice(0, 16).r
 
 async function main() {
   const email = process.argv[2]?.toLowerCase().trim();
-  if (!email) { console.error('Usage: node dist/scripts/call-watch.js <email>'); process.exit(1); }
+  if (!email) { console.error('Usage: node dist/scripts/call-watch.js <email> [--transcript] [--messages]'); process.exit(1); }
 
   const user = await prisma.user.findUnique({
     where: { email },
@@ -65,6 +65,24 @@ async function main() {
       console.log(`\n  ── transcript ──\n${c.transcript.split('\n').map((l) => `  ${l}`).join('\n')}`);
     }
   }
+  // --messages answers the question a screenshot cannot: did the backend
+  // actually reply, or did the client just fail to receive it? A missing reply
+  // row means the server failed; a present one means it succeeded and the app
+  // showed its fallback anyway, which is a completely different bug.
+  if (process.argv.includes('--messages')) {
+    const msgs = await prisma.message.findMany({
+      where: { userId: user.id, channel: 'IN_APP' },
+      orderBy: { createdAt: 'desc' },
+      take: 12,
+      select: { createdAt: true, direction: true, messageType: true, content: true },
+    });
+    console.log(`${'─'.repeat(60)}\nlast ${msgs.length} in-app message(s), newest first:\n`);
+    for (const m of msgs) {
+      const who = m.direction === 'INBOUND' ? 'THEM' : 'IVY ';
+      console.log(`  ${when(m.createdAt)}  ${who}  [${m.messageType ?? '-'}]  ${m.content.replace(/\n/g, ' ').slice(0, 150)}`);
+    }
+  }
+
   console.log('');
 }
 

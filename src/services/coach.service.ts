@@ -65,6 +65,22 @@ function compedClientFields(): { subscriptionTier: typeof BETA_CLIENT_TIER } | R
   return config.beta.compCoachClients ? { subscriptionTier: BETA_CLIENT_TIER } : {};
 }
 
+/**
+ * A placeholder that identifies nobody is worse than no placeholder.
+ *
+ * Invited clients were created as "Friend", so a coach's console listed two
+ * different people as "Friend" with no way to tell them apart — and Ivy opened
+ * a real call with "Hey Friend". The email local part is not a name, but it is
+ * at least THIS person: "flourishejoh" tells a coach who they are looking at.
+ * Replaced the moment they say their actual name on the onboarding call.
+ */
+export function stubNameFromEmail(email: string): string {
+  const local = (email.split('@')[0] ?? '').replace(/[._-]+/g, ' ').trim();
+  if (!local) return 'Friend';
+  // Keep it short and title-cased; a 30-character address is not a name either.
+  return local.slice(0, 24).replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
 const VALID_DAYS = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
 
 class CoachService {
@@ -241,6 +257,52 @@ class CoachService {
     }
 
     return { missing, stale };
+  }
+
+  /**
+   * Rewrite Retell's call summary as Ivy talking TO the coach.
+   *
+   * Retell writes its summary as a third-party observer: "The agent informed
+   * Joseph that both Friends have had no calls... The agent agreed to update
+   * the programme." Posting that into the coach's own chat thread with Ivy
+   * reads as a transcript of someone else's meeting — the coach's reaction was
+   * "why are you talking like you're reading to someone else, are we not in
+   * this together?", which is exactly right. They were on the call. She was on
+   * the call. Nobody should be called "the agent".
+   *
+   * Falls back to the raw summary rather than to nothing: a clumsy summary
+   * beats silence after a call the coach just gave fifteen minutes to.
+   */
+  async ponderSummaryInIvysVoice(coachId: string, rawSummary: string): Promise<string> {
+    if (!this.anthropic || !rawSummary.trim()) return rawSummary;
+
+    const coach = await prisma.user.findUnique({ where: { id: coachId }, select: { firstName: true } });
+    const name = coach?.firstName ?? 'the coach';
+
+    try {
+      const msg = await this.anthropic.messages.create({
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 400,
+        messages: [{
+          role: 'user',
+          content: `Rewrite this call summary as Ivy — the AI accountability partner who was ON the call — recapping it TO ${name}, who was the other person on it.
+
+Rules:
+- First person, second person. "We talked about..." / "You said..." Never "the agent", never "${name}" in the third person, never "the coach".
+- Same facts, nothing added, nothing invented.
+- Warm and brief, the way a colleague recaps a call you were both in. 3-4 sentences.
+- No greeting, no sign-off, no headings. Just the recap.
+
+Summary to rewrite:
+${rawSummary}`,
+        }],
+      });
+      const out = msg.content[0].type === 'text' ? msg.content[0].text.trim() : '';
+      return out || rawSummary;
+    } catch (err) {
+      logger.warn(`Ponder summary rewrite failed for ${coachId}:`, err);
+      return rawSummary;
+    }
   }
 
   /**
@@ -456,7 +518,7 @@ class CoachService {
     await prisma.user.create({
       data: {
         email,
-        firstName: 'Friend',
+        firstName: stubNameFromEmail(email),
         lastName: '',
         track: 'fitness',
         goal: '',
@@ -525,7 +587,7 @@ class CoachService {
     await prisma.user.create({
       data: {
         email,
-        firstName: 'Friend', // placeholder — overwritten when client completes onboarding
+        firstName: stubNameFromEmail(email), // placeholder — replaced when they say their name on the onboarding call
         lastName: '',
         track: 'fitness',
         goal: '',

@@ -308,7 +308,11 @@ class WebhookController {
                   const appliedBlock = applied.length > 0
                     ? `\n\nApplied:\n${applied.map(describe).join('\n')}${touchesProgramme ? `\nYour clients will see the programme changes in their Plan tab (and get a nudge within the hour).` : ''}`
                     : `\n\nNothing was changed on this call.`;
-                  const content = `Ponder summary:\n\n${summary.slice(0, 600)}${appliedBlock}`;
+                  // In her voice, to him — not a transcript of a meeting he
+                  // was actually in, narrated about "the agent".
+                  const spoken = await coachService.ponderSummaryInIvysVoice(dbUserId, summary.slice(0, 1200))
+                    .catch(() => summary.slice(0, 600));
+                  const content = `${spoken}${appliedBlock}`;
 
                   const chatService = (await import('../../services/chat.service')).default;
                   await chatService.postIvyMessage(dbUserId, content, { messageType: 'ponder_summary' })
