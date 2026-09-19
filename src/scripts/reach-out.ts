@@ -21,6 +21,11 @@
  */
 import prisma from '../utils/prisma';
 
+const arg = (name: string): string | null => {
+  const i = process.argv.indexOf(`--${name}`);
+  return i !== -1 ? process.argv[i + 1] ?? null : null;
+};
+
 const GSM7 = "@£$¥èéùìòÇØøÅåΔ_ΦΓΛΩΠΨΣΘΞÆæßÉ !\"#¤%&'()*+,-./0123456789:;<=>?¡ABCDEFGHIJKLMNOPQRSTUVWXYZÄÖÑÜ§¿abcdefghijklmnopqrstuvwxyzäöñüà\n\r^{}\\[~]|€";
 function describe(sms: string) {
   const offenders = [...new Set([...sms].filter((c) => !GSM7.includes(c)))];
@@ -99,17 +104,57 @@ async function resendInvite(email: string, send: boolean) {
   console.log(`  ✔ sent\n`);
 }
 
+/**
+ * Put a member on calls at a chosen weekly cadence.
+ *
+ * Someone can pick "just text" at signup before they have any idea what a call
+ * with Ivy is, and be stuck with that choice because nothing revisits it. This
+ * moves them onto calls deliberately; the onboarding flow asks them again once
+ * they have actually spoken to her.
+ */
+async function setCadence(email: string, freq: number, send: boolean) {
+  const user = await prisma.user.findUnique({
+    where: { email },
+    select: { id: true, firstName: true, commStyle: true, callFrequency: true, eveningCallTime: true, timezone: true },
+  });
+  if (!user) { console.error(`No account for ${email}`); process.exit(1); }
+
+  const DAYS: Record<number, string> = {
+    1: 'Sunday', 2: 'Wed, Sun', 3: 'Tue, Thu, Sun',
+    4: 'Mon, Wed, Fri, Sun', 5: 'Mon, Tue, Wed, Fri, Sun', 6: 'Mon-Fri, Sun', 7: 'every day',
+  };
+
+  console.log(`\n${send ? 'APPLYING' : 'DRY RUN —'} cadence for ${email}`);
+  console.log(`  from: ${user.commStyle ?? '—'} · ${user.callFrequency}/week · evening ${user.eveningCallTime ?? 'NONE'}`);
+  console.log(`  to:   CALLS · ${freq}/week (${DAYS[freq] ?? '?'}) · evening ${user.eveningCallTime ?? '20:00'} ${user.timezone ?? 'Europe/London'}`);
+  if (!send) { console.log(`\nNothing changed. --send to apply.\n`); return; }
+
+  await prisma.user.update({
+    where: { id: user.id },
+    data: {
+      commStyle: 'CALLS',
+      callFrequency: freq,
+      ...(user.eveningCallTime ? {} : { eveningCallTime: '20:00' }),
+      // Cleared so the frequency map drives the days rather than a stale
+      // explicit list overriding it.
+      preferredDays: null,
+    },
+  });
+  console.log(`  ✔ applied — next scheduler run picks it up\n`);
+}
+
 async function main() {
   const [cmd, rawEmail] = process.argv.slice(2);
   const send = process.argv.includes('--send');
   const email = rawEmail?.toLowerCase().trim();
 
-  if (!email || !['app-link', 'resend-invite'].includes(cmd)) {
-    console.error('Usage: node dist/scripts/reach-out.js <app-link|resend-invite> <email> [--send]');
+  if (!email || !['app-link', 'resend-invite', 'cadence'].includes(cmd)) {
+    console.error('Usage: node dist/scripts/reach-out.js <app-link|resend-invite|cadence> <email> [--freq N] [--send]');
     process.exit(1);
   }
 
   if (cmd === 'app-link') await appLink(email, send);
+  else if (cmd === 'cadence') await setCadence(email, Number(arg('freq') ?? 3), send);
   else await resendInvite(email, send);
 }
 
