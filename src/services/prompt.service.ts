@@ -1003,11 +1003,26 @@ class PromptService {
    * has no call scheduled is a promise the scheduler will not keep.
    */
   private cadence(ctx: Record<string, any>): string {
-    if (!ctx.call_days || ctx.call_days === 'every day') return '';
-    return [
-      `YOUR CALL DAYS: ${ctx.call_days}.`,
-      ctx.off_day_channel,
-    ].filter(Boolean).join(' ');
+    const lines: string[] = [];
+
+    // A text-preferred member gets the evening ritual as a message, never a
+    // ring — and she was told "I'll call you Tuesday evening" on her first
+    // call. Saying "call" to someone who will only ever be messaged is the
+    // same broken promise as the timezone and cadence bugs: the words and the
+    // scheduler disagree, and the words are the ones that get believed.
+    if (ctx.comm_preference === 'TEXTS') {
+      lines.push(
+        `HOW YOU REACH THEM: they are on MESSAGES, not calls — the evening check-in lands in the app, it does not ring. ` +
+        `Never say you will "call" them or "speak to you tomorrow". Say you will message them, and say where it lands. ` +
+        `The only exception is a call you have actually booked and can name.`,
+      );
+    }
+
+    if (ctx.call_days && ctx.call_days !== 'every day') {
+      lines.push([`YOUR CALL DAYS: ${ctx.call_days}.`, ctx.off_day_channel].filter(Boolean).join(' '));
+    }
+
+    return lines.join('\n');
   }
 
   private gameStanding(ctx: Record<string, any>, callType?: string): string {

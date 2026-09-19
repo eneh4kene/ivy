@@ -547,7 +547,7 @@ router.post(
       const callService = (await import('../../services/call.service')).default;
       const outboundCallService = (await import('../../services/outbound-call.service')).default;
       const promptService = (await import('../../services/prompt.service')).default;
-      const briefService = (await import('../../services/brief.service')).default;
+      const { default: briefService, shouldUseBrief } = await import('../../services/brief.service');
       const { getTrackConfig } = await import('../../config/tracks');
       const { flattenContext } = await import('../../utils/retell');
       const { config } = await import('../../config');
@@ -560,9 +560,9 @@ router.post(
         : (config.retell.agentIds.b2c || '');
 
       const trackConfig = getTrackConfig(ctx.track);
-      const brief = (callType === 'ONBOARDING' && ctx.subscription_tier === 'COACH')
-        ? null // coach partner briefing stays on its static flow
-        : await briefService.generateCallBrief(callType, ctx, trackConfig!);
+      // Same rule as the live path, from the same place — this route carried
+      // its own copy and drifted.
+      const brief = shouldUseBrief(callType) ? await briefService.generateCallBrief(callType, ctx, trackConfig!) : null;
       const systemPrompt = promptService.buildSystemPrompt(callType, ctx, isB2B, brief ?? undefined);
 
       const fromNumber = fromOverride

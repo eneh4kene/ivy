@@ -11,7 +11,7 @@ import { inngest } from './client';
 import callService from '../services/call.service';
 import outboundCallService from '../services/outbound-call.service';
 import promptService, { buildPonderPrompt } from '../services/prompt.service';
-import briefService from '../services/brief.service';
+import briefService, { shouldUseBrief } from '../services/brief.service';
 import { getTrackConfig } from '../config/tracks';
 import { flattenContext } from '../utils/retell';
 import prisma from '../utils/prisma';
@@ -96,11 +96,24 @@ export async function initiateCallHandler({ event, step }: { event: any; step: S
         // Generate a call-specific brief via Haiku — falls back to static flow if unavailable
         const isPonder = callType === 'COACH_PONDER';
         const trackConfig = isPonder ? null : getTrackConfig(ctx.track);
-        // Coach onboarding keeps its static partner-briefing flow — the Haiku
-        // director is tuned for consumer accountability calls and would drift
-        // this rare, high-stakes call back toward streak/stake talk.
-        const isCoachOnboarding = callType === 'ONBOARDING' && ctx.subscription_tier === 'COACH';
-        const brief = (isPonder || isCoachOnboarding) ? null : await briefService.generateCallBrief(callType, ctx, trackConfig!);
+        // ALL onboarding keeps its static flow, not just the coach's.
+        //
+        // The reasoning below was right and was applied to one of the two
+        // onboarding calls. The consumer one kept the Haiku brief — and the
+        // brief REPLACES the flow slot entirely, so the whole onboarding script
+        // never reached the model: no name capture, no how-it-works, no
+        // save-my-number, no app, no channel question. A 12-15 minute call ran
+        // in 2m43s because there was nothing in it to run.
+        //
+        // And the drift this comment predicted happened exactly: with the
+        // flow's stake guard gone ("your word is the stake here", do NOT pitch
+        // money), the director invented a £1 stake and told a real client with
+        // no stake cycle that her money was at risk.
+        //
+        // Onboarding is a scripted set piece. It is the one call where the
+        // script IS the product, and it is the one call that must not be
+        // improvised.
+        const brief = shouldUseBrief(callType) ? await briefService.generateCallBrief(callType, ctx, trackConfig!) : null;
         const systemPrompt = isPonder
           ? buildPonderPrompt(ctx)
           : promptService.buildSystemPrompt(callType, ctx, isB2B, brief ?? undefined);

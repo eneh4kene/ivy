@@ -60,6 +60,10 @@ jest.mock('../services/call.service', () => ({
 jest.mock('../services/brief.service', () => ({
   __esModule: true,
   default: { generateCallBrief: jest.fn().mockResolvedValue(null) },
+  // The one place that decides whether a call gets an improvised brief or its
+  // written flow. It was re-decided at each call site until a real onboarding
+  // call was improvised; mocking it out here would hide that regression again.
+  shouldUseBrief: (callType: string) => callType !== 'ONBOARDING' && callType !== 'COACH_PONDER',
 }));
 
 jest.mock('../services/prompt.service', () => ({

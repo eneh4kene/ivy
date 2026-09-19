@@ -59,6 +59,29 @@ WHAT TO AVOID:
 - Inventing details not in the context — if a field is null, omit it
 - Writing a script — Ivy speaks naturally, give her direction`;
 
+/**
+ * Does this call get an improvised Haiku brief, or its written flow?
+ *
+ * Lives here, once, because it was previously re-decided at every call site —
+ * inngest/calls.ts and the test-call route each carried their own copy, one
+ * guard was added to only one of them, and the divergence was invisible until
+ * a real client got the wrong prompt.
+ *
+ * A brief REPLACES the flow slot entirely. That is right for the daily
+ * accountability calls, where the flow is a shape and Haiku tunes the approach.
+ * It is wrong for a SET PIECE, where the script is the product:
+ *
+ *   ONBOARDING    — the one call that introduces Ivy, takes a name and a goal,
+ *                   explains the daily rhythm, says where the app is, and
+ *                   carries the stake guard ("your word is the stake here", do
+ *                   NOT pitch money). Improvised, it invented a stake for a
+ *                   client who had none and ran 2m43s instead of 12-15 minutes.
+ *   COACH_PONDER  — has its own prompt builder entirely.
+ */
+export function shouldUseBrief(callType: string): boolean {
+  return callType !== 'ONBOARDING' && callType !== 'COACH_PONDER';
+}
+
 class BriefService {
   private client: Anthropic | null = null;
 

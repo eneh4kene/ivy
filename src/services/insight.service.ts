@@ -25,6 +25,11 @@ export interface CallInsights {
   travel_ahead: boolean;             // they mentioned an upcoming trip, being away, or an event elsewhere
   // Hers, not theirs — see the IvyTheory model. Rides this extraction rather
   // than costing a second model call: the transcript is already being read.
+  // Onboarding only. Nothing in the product ever wrote these back, so a member
+  // who completed onboarding stayed "Friend" with an empty goal forever — and
+  // Ivy then greeted them by the stub name on every subsequent call.
+  stated_name?: string | null;
+  stated_goal?: string | null;
   ivy_theory?: {
     content: string;                 // the hypothesis she stated, in her voice
     basis?: string | null;           // what she formed it from
@@ -117,6 +122,12 @@ travel_ahead
 
 next_season_goal
   SEASON_CLOSE calls only: the user's stated goal for the next season, in their own words. Extract verbatim or close paraphrase. null for all other call types, or if the user did not state a goal.
+
+stated_name
+  ONBOARDING calls only. The name the person gave for themselves, or the name they were clearly called throughout. First name only, as they said it. null if they never gave one or you are unsure — a wrong name is worse than a missing one.
+
+stated_goal
+  ONBOARDING calls only. What they said they are actually trying to do, in their own words, one short line ("get back to three gym sessions a week", "sleep before midnight"). Not the single next session, and not your summary of the call. null if they never said.
 
 ivy_theory
   A hypothesis IVY stated about this person's pattern — her own working theory, not a fact about them. She might be wrong about it; that is allowed and is the point.
@@ -212,6 +223,28 @@ class InsightService {
         },
         select: { endedAt: true, scheduledAt: true },
       });
+
+      // Onboarding is the one call that establishes who someone IS. Written
+      // back only when the field is still empty or still the "Friend" stub, so
+      // a later call can never overwrite a name or goal they set deliberately.
+      if (insights.stated_name?.trim() || insights.stated_goal?.trim()) {
+        const current = await prisma.user.findUnique({
+          where: { id: userId },
+          select: { firstName: true, goal: true },
+        });
+        const patch: Record<string, string> = {};
+        const name = insights.stated_name?.trim();
+        if (name && (!current?.firstName || current.firstName === 'Friend')) {
+          patch.firstName = name.slice(0, 60);
+        }
+        const goal = insights.stated_goal?.trim();
+        if (goal && !current?.goal?.trim()) patch.goal = goal.slice(0, 300);
+
+        if (Object.keys(patch).length) {
+          await prisma.user.update({ where: { id: userId }, data: patch });
+          logger.info(`Onboarding captured for ${userId}: ${Object.keys(patch).join(', ')}`);
+        }
+      }
 
       // A verdict comes FIRST: if she settled a standing theory in this call it
       // must close before a new one opens, or the next call is handed two.
