@@ -45,10 +45,6 @@ async function appLink(email: string, send: boolean) {
   if (!host) { console.error('FRONTEND_URL is not set'); process.exit(1); }
 
   const name = user.firstName && user.firstName !== 'Friend' ? ` ${user.firstName}` : '';
-  // "at 20:00" is how a scheduler talks. Nobody says it out loud, and this
-  // message is trying to sound like a person who is sorry.
-  const [hh, mm] = at.split(':').map(Number);
-  const spoken = `${hh % 12 === 0 ? 12 : hh % 12}${mm ? `:${String(mm).padStart(2, '0')}` : ''}${hh < 12 ? 'am' : 'pm'}`;
   // Plain ASCII, and no magic link: those expire in 15 minutes, so texting one
   // ahead of an evening call would hand someone a dead link by the time they
   // opened it. Their existing session (7 day JWT) should carry them straight in.
@@ -170,6 +166,10 @@ async function recall(email: string, at: string, send: boolean) {
   const callAt = fromZonedTime(`${today}T${at}:00`, tz);
 
   const name = user.firstName && user.firstName !== 'Friend' ? ` ${user.firstName}` : '';
+  // "at 20:00" is how a scheduler talks. Nobody says it out loud, and this
+  // message is trying to sound like a person who is sorry.
+  const [hh, mm] = at.split(':').map(Number);
+  const spoken = `${hh % 12 === 0 ? 12 : hh % 12}${mm ? `:${String(mm).padStart(2, '0')}` : ''}${hh < 12 ? 'am' : 'pm'}`;
   // Owns it plainly, does not explain the machinery, and does not ask a
   // question whose answer we would need to chase. Booked, with the way out
   // offered on the call itself — where she can actually take it.
