@@ -972,6 +972,10 @@ class CallService {
       circle_season_theme: circleContext?.seasonTheme ?? null,
       circle_sprint_pledge: circleContext?.sprintPledge ?? null,
       circle_consistency_rate: circleContext?.groupConsistencyRate ?? null,
+      // Already computed and never surfaced. Without it Ivy cannot tell a full
+      // room from an empty one, and an improvised first call described a
+      // one-member circle as a group doing sprints together this season.
+      circle_size: circleContext?.memberCount ?? null,
 
       // Circle game (null when no active game)
       ...((await circleGameService.getGameContextForUser(userId).catch(() => null)) ?? {

@@ -73,6 +73,34 @@ describe('the onboarding script actually reaches the model', () => {
   })
 })
 
+describe('the room is described as it IS, never as it might be', () => {
+  const base = { first_name: 'Sam', coach_name: 'Joseph', app_url: 'www.ivykeeps.life' }
+
+  it('says a one-person room is still filling, and forbids inventing anyone', () => {
+    // The improvised call told her "Dawn Runners — they'll be doing sprints
+    // together this season". One member, no game. Both invented.
+    const prompt = promptService.buildSystemPrompt('ONBOARDING', {
+      ...base, circle_name: 'Dawn Runners', circle_size: 1,
+    }, false)
+    expect(prompt).toContain('still filling')
+    expect(prompt).toContain('Do NOT describe a game, a season, a challenge')
+    expect(prompt).toContain('inventing them is the fastest way to lose their trust')
+  })
+
+  it('names a game only when one is actually running', () => {
+    const prompt = promptService.buildSystemPrompt('ONBOARDING', {
+      ...base, circle_name: 'Dawn Runners', circle_size: 5, circle_game_name: 'The Baton',
+    }, false)
+    expect(prompt).toContain('The Baton')
+    expect(prompt).not.toContain('still filling')
+  })
+
+  it('says nothing at all when they are in no circle', () => {
+    const prompt = promptService.buildSystemPrompt('ONBOARDING', base, false)
+    expect(prompt).not.toContain('THE ROOM')
+  })
+})
+
 describe('never promise a channel you do not use', () => {
   it('forbids saying "call" to a messages-only member', () => {
     // She was told "I'll call you Tuesday evening" while on text check-ins.

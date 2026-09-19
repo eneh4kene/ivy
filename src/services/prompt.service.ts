@@ -657,6 +657,20 @@ const FLOWS: Record<string, FlowFn> = {
       // text-preferred member that is worse than a gap: their entire daily loop
       // lives somewhere nobody told them to open.
       `5c. WHERE THE APP LIVES (15s): "One more practical thing - ${ctx.app_url ?? 'the app'} on your phone. That's where your day lives: the morning voice note, your ivy, everything I've just described. Open it in your browser and add it to your home screen so it's one tap - it behaves like any other app once you do."${ctx.comm_preference === 'TEXTS' ? ` They are on text check-ins, so this matters MORE for them, not less — the evening check-in lands in that app, so if they never open it they never hear from you at all. Make sure it lands.` : ''}`,
+      // THE ROOM. Nothing in this flow ever introduced the circle, so the only
+      // time it came up was when an improvised call invented it — a one-member
+      // room described as "doing sprints together this season". Say what is
+      // true NOW and never promise a game: games need three members, and a
+      // promise the system cannot keep is how every other failure here started.
+      ctx.circle_name
+        ? `5d. THE ROOM (20s): they are in a circle called ${ctx.circle_name}${ctx.circle_size != null ? ` — currently ${ctx.circle_size} ${ctx.circle_size === 1 ? 'person' : 'people'}` : ''}. ${
+            ctx.circle_game_name
+              ? `Something is running in it right now: ${ctx.circle_game_name}. Mention it in one line as a thing they have joined, not as homework.`
+              : (ctx.circle_size ?? 0) < 3
+                ? `It is still filling, so say exactly that and NOTHING more: "you're in a small group called ${ctx.circle_name} — it's still filling up, and once there are a few of you there'll be things running between you." Do NOT describe a game, a season, a challenge or anything the others are doing. There is nobody else in there yet and inventing them is the fastest way to lose their trust.`
+                : `No game is running yet. Say the room exists and that things run in it, without naming one.`
+          }`
+        : '',
       `6. SAVE MY NUMBER (15s): "One practical thing — save this number you're on right now. I'm the only one who'll ever call or text you from it. When it rings in the evening, that's your day calling to be closed. And if I ever catch you at a bad moment, just say 'call me back in an hour' — I actually will."`,
       '',
       ctx.buddy_name ? '' : `7. A HUMAN WITNESS (30s): "Last thing — some people give me a human to answer to. A partner, a mate, your sister — someone who hears about it when you go quiet. Being witnessed changes what you do; it's the strongest lever I have. You can add them in Settings — worth doing today." Invite once, no pressure.`,
