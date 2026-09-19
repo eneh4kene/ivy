@@ -26,6 +26,20 @@ const arg = (name: string): string | null => {
   return i !== -1 ? process.argv[i + 1] ?? null : null;
 };
 
+/**
+ * Accept an email OR a user id. Support hands you whichever it has — the
+ * doctor and phone-owner both print ids, and requiring an email meant copying
+ * one out of a different tool first.
+ */
+async function resolveUserId(idOrEmail: string): Promise<string | null> {
+  if (/^[0-9a-f]{8}-[0-9a-f]{4}-/i.test(idOrEmail)) {
+    const byId = await prisma.user.findUnique({ where: { id: idOrEmail }, select: { id: true } });
+    return byId?.id ?? null;
+  }
+  const byEmail = await prisma.user.findUnique({ where: { email: idOrEmail }, select: { id: true } });
+  return byEmail?.id ?? null;
+}
+
 const GSM7 = "@£$¥èéùìòÇØøÅåΔ_ΦΓΛΩΠΨΣΘΞÆæßÉ !\"#¤%&'()*+,-./0123456789:;<=>?¡ABCDEFGHIJKLMNOPQRSTUVWXYZÄÖÑÜ§¿abcdefghijklmnopqrstuvwxyzäöñüà\n\r^{}\\[~]|€";
 function describe(sms: string) {
   const offenders = [...new Set([...sms].filter((c) => !GSM7.includes(c)))];
@@ -34,8 +48,10 @@ function describe(sms: string) {
 }
 
 async function appLink(email: string, send: boolean) {
+  const uid = await resolveUserId(email);
+  if (!uid) { console.error(`No account for ${email}`); process.exit(1); }
   const user = await prisma.user.findUnique({
-    where: { email },
+    where: { id: uid },
     select: { id: true, firstName: true, phone: true, commStyle: true, coachId: true },
   });
   if (!user) { console.error(`No account for ${email}`); process.exit(1); }
@@ -79,11 +95,14 @@ async function appLink(email: string, send: boolean) {
 }
 
 async function resendInvite(email: string, send: boolean) {
+  const uid = await resolveUserId(email);
+  if (!uid) { console.error(`No account for ${email}`); process.exit(1); }
   const user = await prisma.user.findUnique({
-    where: { email },
-    select: { id: true, coachId: true, pendingCoachId: true, isOnboarded: true },
+    where: { id: uid },
+    select: { id: true, email: true, coachId: true, pendingCoachId: true, isOnboarded: true },
   });
   if (!user) { console.error(`No account for ${email}`); process.exit(1); }
+  const realEmail = user.email;
 
   const coachId = user.coachId ?? user.pendingCoachId;
   if (!coachId) { console.error(`${email} is not attached to a coach — nothing to resend.`); process.exit(1); }
@@ -111,9 +130,9 @@ async function resendInvite(email: string, send: boolean) {
 
   const authService = (await import('../services/auth.service')).default;
   const { emailService } = await import('../services/email.service');
-  const magicUrl = await authService.createMagicLinkUrl(email);
+  const magicUrl = await authService.createMagicLinkUrl(realEmail);
   await emailService.sendClientMagicLink({
-    clientEmail: email, magicUrl, brand, coachName: brand ? undefined : coach?.firstName,
+    clientEmail: realEmail, magicUrl, brand, coachName: brand ? undefined : coach?.firstName,
   });
   console.log(`  ✔ sent\n`);
 }
@@ -127,8 +146,10 @@ async function resendInvite(email: string, send: boolean) {
  * they have actually spoken to her.
  */
 async function setCadence(email: string, freq: number, send: boolean) {
+  const uid = await resolveUserId(email);
+  if (!uid) { console.error(`No account for ${email}`); process.exit(1); }
   const user = await prisma.user.findUnique({
-    where: { email },
+    where: { id: uid },
     select: { id: true, firstName: true, commStyle: true, callFrequency: true, eveningCallTime: true, timezone: true },
   });
   if (!user) { console.error(`No account for ${email}`); process.exit(1); }
@@ -167,8 +188,10 @@ async function setCadence(email: string, freq: number, send: boolean) {
  * not chase you for a second attempt.
  */
 async function recall(email: string, at: string, send: boolean) {
+  const uid = await resolveUserId(email);
+  if (!uid) { console.error(`No account for ${email}`); process.exit(1); }
   const user = await prisma.user.findUnique({
-    where: { email },
+    where: { id: uid },
     select: { id: true, firstName: true, phone: true, timezone: true, coachId: true },
   });
   if (!user) { console.error(`No account for ${email}`); process.exit(1); }
@@ -210,7 +233,7 @@ async function recall(email: string, at: string, send: boolean) {
 async function main() {
   const [cmd, rawEmail] = process.argv.slice(2);
   const send = process.argv.includes('--send');
-  const email = rawEmail?.toLowerCase().trim();
+  const email = rawEmail?.trim().includes('@') ? rawEmail.toLowerCase().trim() : rawEmail?.trim();
 
   if (!email || !['app-link', 'resend-invite', 'cadence', 'recall'].includes(cmd)) {
     console.error('Usage: node dist/scripts/reach-out.js <app-link|resend-invite|cadence|recall> <email> [--freq N] [--at HH:MM] [--send]');
