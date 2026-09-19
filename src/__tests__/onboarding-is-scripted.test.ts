@@ -73,6 +73,38 @@ describe('the onboarding script actually reaches the model', () => {
   })
 })
 
+describe('she gets room to ask', () => {
+  const ctx = { first_name: 'Sam', coach_name: 'Joseph', app_url: 'www.ivykeeps.life' }
+
+  it('frames the beats as a conversation, not a checklist', () => {
+    // The COACH onboarding flow has always said this; the client one never
+    // did, so the client call read as a list being worked through.
+    const prompt = promptService.buildSystemPrompt('ONBOARDING', ctx, false)
+    expect(prompt).toContain('THESE ARE BEATS, NOT A SCRIPT')
+    expect(prompt).toContain('ticking boxes is how this call dies')
+  })
+
+  it('stops and asks what she wants to know', () => {
+    const prompt = promptService.buildSystemPrompt('ONBOARDING', ctx, false)
+    expect(prompt).toContain('what do you want to ask me?')
+    expect(prompt).toContain('SHE IS ALLOWED TO NOT UNDERSTAND')
+  })
+
+  it('asks again at the end, because the real question arrives last', () => {
+    const prompt = promptService.buildSystemPrompt('ONBOARDING', ctx, false)
+    expect(prompt).toContain('Anything else you want to ask before I let you go?')
+  })
+
+  it('is ready for the two questions people actually ask', () => {
+    const prompt = promptService.buildSystemPrompt('ONBOARDING', ctx, false)
+    expect(prompt).toContain('Are you a real person?')
+    // A privacy question she is entitled to a straight answer on.
+    expect(prompt).toContain('What does Joseph see?')
+    expect(prompt).toContain('theirs')
+    expect(prompt).toContain('Never bluff an answer')
+  })
+})
+
 describe('the room is described as it IS, never as it might be', () => {
   const base = { first_name: 'Sam', coach_name: 'Joseph', app_url: 'www.ivykeeps.life' }
 

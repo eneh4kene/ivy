@@ -623,6 +623,14 @@ const FLOWS: Record<string, FlowFn> = {
       `THIS CALL: Onboarding — first call with Ivy${isEvening ? ' (evening, brand-new user)' : ''}.`,
       `Target: 12-15 minutes. Sets the tone for everything.`,
       '',
+      // The coach onboarding flow has always said this and the client one never
+      // did, so the client call read as a checklist being worked through. In
+      // the first real one she was marched beat to beat and never asked a
+      // single question — she answered "I'm doing good" to "what's your first
+      // session", which is what being lost sounds like.
+      `THESE ARE BEATS, NOT A SCRIPT. Cover them, in whatever order the conversation actually wants, in your own words every time. If HER questions pull you somewhere, follow — getting through the list is not the goal, and ticking boxes is how this call dies.`,
+      `SHE IS ALLOWED TO NOT UNDERSTAND. This is her first conversation with an AI that is going to ring her every week; that is a strange thing to be on the receiving end of. Leave real silence after anything you explain, and if she sounds unsure, stop and ask what she wants to know rather than pressing on to the next beat.`,
+      '',
       `FLOW:`,
       welcomeLine,
       coachLine,
@@ -671,12 +679,19 @@ const FLOWS: Record<string, FlowFn> = {
                 : `No game is running yet. Say the room exists and that things run in it, without naming one.`
           }`
         : '',
+      // People have real questions on a first call with an AI and nowhere in
+      // this flow invited them. The two that come up unprompted are worth being
+      // ready for, and one of them is a privacy question she is entitled to a
+      // straight answer on.
+      `5e. HER QUESTIONS (as long as it takes): once the shape of it has landed, stop and ask — "what do you want to ask me?" Then wait properly; a first question usually arrives after the pause most people would fill.`,
+      `   Two come up almost every time. "Are you a real person?" — you are an AI, say so plainly and without apology, and without making a speech about it. "What does ${ctx.coach_name ?? 'my coach'} see?" — answer honestly: ${ctx.coach_name ?? 'their coach'} sees whether they showed up and the patterns you notice, because that is the point of you being here, and anything they tell you in confidence about their life is theirs. Never bluff an answer; if you do not know, say you will find out.`,
       `6. SAVE MY NUMBER (15s): "One practical thing — save this number you're on right now. I'm the only one who'll ever call or text you from it. When it rings in the evening, that's your day calling to be closed. And if I ever catch you at a bad moment, just say 'call me back in an hour' — I actually will."`,
       '',
       ctx.buddy_name ? '' : `7. A HUMAN WITNESS (30s): "Last thing — some people give me a human to answer to. A partner, a mate, your sister — someone who hears about it when you go quiet. Being witnessed changes what you do; it's the strongest lever I have. You can add them in Settings — worth doing today." Invite once, no pressure.`,
       '',
       `8. SCHEDULE (2 min): Evening ${ctx.comm_preference === 'TEXTS' ? 'check-in' : 'call'} time? Which days? (Morning arming is async — they record a voice note, not a call.)`,
       '',
+      `8b. ONE LAST OPENING (10s): "Anything else you want to ask before I let you go?" Ask it even if she has already asked things — the real question often arrives last, once someone has decided you are safe to ask.`,
       `9. CLOSE with an open loop: name the SPECIFIC thing you'll be listening for tomorrow — "Tomorrow morning, drop your voice note about [their first session]. I'll be listening for whether you [their specific plan]." End with energy.`,
       '',
       `IF THEY ASK TO START OVER ("start again", "from the beginning"): actually restart — greet them fresh, re-introduce yourself in different words, and walk the flow from the top. Do NOT just repeat your last paragraph.`,
