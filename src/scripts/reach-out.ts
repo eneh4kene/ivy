@@ -45,13 +45,27 @@ async function appLink(email: string, send: boolean) {
   if (!host) { console.error('FRONTEND_URL is not set'); process.exit(1); }
 
   const name = user.firstName && user.firstName !== 'Friend' ? ` ${user.firstName}` : '';
-  // Plain ASCII, and no magic link: those expire in 15 minutes, so texting one
-  // ahead of an evening call would hand someone a dead link by the time they
-  // opened it. Their existing session (7 day JWT) should carry them straight in.
-  const sms =
-    `Hi${name} - Ivy again. Your app is at ${host}. ` +
-    `Open it on your phone and add it to your home screen, and everything lives there: ` +
-    `your morning voice note, your ivy, and my evening check-in.`;
+  const ios = process.argv.includes('--ios');
+  const android = process.argv.includes('--android');
+
+  // Plain ASCII, and no magic link: those expire quickly, so texting one ahead
+  // of an evening call would hand someone a dead link by the time they opened
+  // it. Their existing session carries them straight in.
+  //
+  // The iOS steps name Safari FIRST because that is the single reason this
+  // fails: iPhone has no Add to Home Screen outside Safari, so anyone who
+  // opens the link from a message thread in Chrome simply cannot install it
+  // and has no way of knowing why.
+  const sms = ios
+    ? `Hi${name} - Ivy here. To get the app on your iPhone: open ${host} in SAFARI (it only works in Safari, not Chrome), ` +
+      `tap the Share button at the bottom, scroll down and tap Add to Home Screen, then Add. ` +
+      `It opens like a normal app after that.`
+    : android
+      ? `Hi${name} - Ivy here. To get the app: open ${host} in Chrome, tap the three dots at the top right, ` +
+        `and tap Install app (or Add to Home screen). It opens like a normal app after that.`
+      : `Hi${name} - Ivy again. Your app is at ${host}. ` +
+        `Open it on your phone and add it to your home screen, and everything lives there: ` +
+        `your morning voice note, your ivy, and my evening check-in.`;
 
   console.log(`\n${send ? 'SENDING' : 'DRY RUN —'} app link to ${email}`);
   console.log(`  comms:  ${user.commStyle ?? '—'}${user.commStyle === 'TEXTS' ? '  (text-preferred: the app IS their only channel)' : ''}`);
