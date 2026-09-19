@@ -45,6 +45,10 @@ async function appLink(email: string, send: boolean) {
   if (!host) { console.error('FRONTEND_URL is not set'); process.exit(1); }
 
   const name = user.firstName && user.firstName !== 'Friend' ? ` ${user.firstName}` : '';
+  // "at 20:00" is how a scheduler talks. Nobody says it out loud, and this
+  // message is trying to sound like a person who is sorry.
+  const [hh, mm] = at.split(':').map(Number);
+  const spoken = `${hh % 12 === 0 ? 12 : hh % 12}${mm ? `:${String(mm).padStart(2, '0')}` : ''}${hh < 12 ? 'am' : 'pm'}`;
   // Plain ASCII, and no magic link: those expire in 15 minutes, so texting one
   // ahead of an evening call would hand someone a dead link by the time they
   // opened it. Their existing session (7 day JWT) should carry them straight in.
@@ -171,7 +175,7 @@ async function recall(email: string, at: string, send: boolean) {
   // offered on the call itself — where she can actually take it.
   const sms =
     `Hi${name} - Ivy again. I'm sorry about earlier; that call was rushed and I didn't set you up properly. ` +
-    `My fault, not yours. I'd like to do it right: I'll call you at ${at} this evening. ` +
+    `My fault, not yours. I'd like to do it right: I'll call you at ${spoken} this evening. ` +
     `About ten minutes, and if it's a bad moment just tell me when I ring and we'll find another.`;
 
   console.log(`\n${send ? 'RECALLING' : 'DRY RUN —'} ${email}`);
