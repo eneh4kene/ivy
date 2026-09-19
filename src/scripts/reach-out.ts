@@ -143,18 +143,65 @@ async function setCadence(email: string, freq: number, send: boolean) {
   console.log(`  ✔ applied — next scheduler run picks it up\n`);
 }
 
+/**
+ * Apologise for a call that went badly and do it again properly.
+ *
+ * Distinct from welcome-rescue, which is for someone who was never contacted at
+ * all. This is for a call that HAPPENED and was poor — where the apology has to
+ * name the fault as ours without explaining the internals, and the re-call has
+ * to be booked rather than merely offered, because someone let down once does
+ * not chase you for a second attempt.
+ */
+async function recall(email: string, at: string, send: boolean) {
+  const user = await prisma.user.findUnique({
+    where: { email },
+    select: { id: true, firstName: true, phone: true, timezone: true, coachId: true },
+  });
+  if (!user) { console.error(`No account for ${email}`); process.exit(1); }
+  if (!user.phone) { console.error(`${email} has no phone.`); process.exit(1); }
+
+  const tz = user.timezone || 'Europe/London';
+  const { fromZonedTime } = await import('date-fns-tz');
+  const today = new Date().toLocaleDateString('en-CA', { timeZone: tz });
+  const callAt = fromZonedTime(`${today}T${at}:00`, tz);
+
+  const name = user.firstName && user.firstName !== 'Friend' ? ` ${user.firstName}` : '';
+  // Owns it plainly, does not explain the machinery, and does not ask a
+  // question whose answer we would need to chase. Booked, with the way out
+  // offered on the call itself — where she can actually take it.
+  const sms =
+    `Hi${name} - Ivy again. I'm sorry about earlier; that call was rushed and I didn't set you up properly. ` +
+    `My fault, not yours. I'd like to do it right: I'll call you at ${at} this evening. ` +
+    `About ten minutes, and if it's a bad moment just tell me when I ring and we'll find another.`;
+
+  console.log(`\n${send ? 'RECALLING' : 'DRY RUN —'} ${email}`);
+  console.log(`  call:   ONBOARDING at ${at} ${tz} (${callAt.toISOString()})`);
+  console.log(`  sms:    "${sms}"`);
+  console.log(`  ${describe(sms)}`);
+  if (!send) { console.log(`\nNothing booked, nothing sent. --send to do it.\n`); return; }
+
+  const callService = (await import('../services/call.service')).default;
+  const call = await callService.scheduleCall(user.id, 'ONBOARDING', callAt, await callService.getUserContext(user.id, 'ONBOARDING'));
+  console.log(`  ✔ call booked (${call.id})`);
+
+  const messagingService = (await import('../services/messaging.service')).default;
+  await messagingService.sendMessage(user.id, sms, 'nudge');
+  console.log(`  ✔ SMS sent\n`);
+}
+
 async function main() {
   const [cmd, rawEmail] = process.argv.slice(2);
   const send = process.argv.includes('--send');
   const email = rawEmail?.toLowerCase().trim();
 
-  if (!email || !['app-link', 'resend-invite', 'cadence'].includes(cmd)) {
-    console.error('Usage: node dist/scripts/reach-out.js <app-link|resend-invite|cadence> <email> [--freq N] [--send]');
+  if (!email || !['app-link', 'resend-invite', 'cadence', 'recall'].includes(cmd)) {
+    console.error('Usage: node dist/scripts/reach-out.js <app-link|resend-invite|cadence|recall> <email> [--freq N] [--at HH:MM] [--send]');
     process.exit(1);
   }
 
   if (cmd === 'app-link') await appLink(email, send);
   else if (cmd === 'cadence') await setCadence(email, Number(arg('freq') ?? 3), send);
+  else if (cmd === 'recall') await recall(email, arg('at') ?? '20:00', send);
   else await resendInvite(email, send);
 }
 
